@@ -10,6 +10,9 @@ interface AudioNodeData {
   wetMix?: number;
   volume?: number;
   muted?: boolean;
+  // Synth params
+  preset?: string; attack?: number; decay?: number; sustain?: number; release?: number;
+  cutoff?: number; resonance?: number; glide?: number; gain?: number; maxVoices?: number;
 }
 
 export class AudioManager {
@@ -71,8 +74,9 @@ export class AudioManager {
       }
 
       this.sampleRate = this.audioContext.sampleRate;
-      // Load the AudioWorklet module
-      await this.audioContext.audioWorklet.addModule('/worklets/audio-engine-processor.js');
+      // Load the AudioWorklet module with cache-busting
+      const v = Date.now();
+      await this.audioContext.audioWorklet.addModule(`/worklets/audio-engine-processor.js?v=${v}`);
 
       // Create the node
       const workletNode = new AudioWorkletNode(this.audioContext, 'audio-engine-processor', {
@@ -90,6 +94,12 @@ export class AudioManager {
             this.wasmReady = true;
             // Push current graph state
             this.flushGraphToWorklet();
+            // Send timebase sync
+            try {
+              const perfNowMs = performance.now();
+              const audioCurrentTimeSec = this.audioContext ? this.audioContext.currentTime : 0;
+              workletNode.port.postMessage({ type: 'timebase', perfNowMs, audioCurrentTimeSec });
+            } catch {}
             break;
           case 'needBootstrap':
             this.bootstrapWasmToWorklet();
@@ -166,6 +176,17 @@ export class AudioManager {
     }
   }
 
+  sendMIDI(sourceId: string, events: Array<{ data: [number, number, number]; atFrame?: number; atTimeMs?: number }>) {
+    if (!this.audioWorklet) return;
+    // Sanitize events
+    const cleanEvents = (Array.isArray(events) ? events : []).map((e) => ({
+      data: [Number(e.data?.[0] || 0) & 0xff, Number(e.data?.[1] || 0) & 0x7f, Number(e.data?.[2] || 0) & 0x7f] as [number, number, number],
+      atFrame: typeof e.atFrame === 'number' ? Math.max(0, Math.floor(e.atFrame)) : undefined,
+      atTimeMs: typeof e.atTimeMs === 'number' ? e.atTimeMs : undefined,
+    }));
+    this.audioWorklet.port.postMessage({ type: 'midi', sourceId, events: cleanEvents });
+  }
+
   isReady(): boolean {
     return this.wasmReady;
   }
@@ -173,9 +194,10 @@ export class AudioManager {
   private async bootstrapWasmToWorklet() {
     if (!this.audioWorklet) return;
     try {
+      const cacheBust = Date.now();
       const [glueRes, wasmRes] = await Promise.all([
-        fetch('/audio-engine-wasm/audio_engine.js'),
-        fetch('/audio-engine-wasm/audio_engine_bg.wasm'),
+        fetch(`/audio-engine-wasm/audio_engine.js?v=${cacheBust}`),
+        fetch(`/audio-engine-wasm/audio_engine_bg.wasm?v=${cacheBust}`),
       ]);
       const glue = await glueRes.text();
       const wasm = await wasmRes.arrayBuffer();

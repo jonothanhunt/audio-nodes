@@ -18,6 +18,10 @@ interface SequencerNodeProps {
       parameter: string,
       value: string | number | boolean
     ) => void;
+    onEmitMidi?: (
+      sourceId: string,
+      events: Array<{ data: [number, number, number]; atFrame?: number; atTimeMs?: number }>
+    ) => void;
   };
 }
 
@@ -99,6 +103,7 @@ export default function SequencerNode({
   // Playhead state
   const [currentStep, setCurrentStep] = React.useState(0);
   const timerRef = React.useRef<number | null>(null);
+  const prevStepRef = React.useRef<number>(0);
 
   React.useEffect(() => {
     // Clear any existing timer
@@ -121,6 +126,54 @@ export default function SequencerNode({
       }
     };
   }, [playingProp, bpmClamped, lengthClamped]);
+
+  // Emit MIDI on step change
+  React.useEffect(() => {
+    if (!data || typeof data.onEmitMidi !== 'function') return;
+    const emit = data.onEmitMidi as (sourceId: string, events: Array<{ data: [number, number, number]; atFrame?: number; atTimeMs?: number }>) => void;
+    if (!playingProp) return;
+
+    const prev = prevStepRef.current;
+    const curr = currentStep;
+
+    const events: Array<{ data: [number, number, number] }> = [];
+    const channel = 0; // default MIDI channel 1
+    const NOTE_ON = 0x90 | channel;
+    const NOTE_OFF = 0x80 | channel;
+
+    for (let noteIdx = 0; noteIdx < noteCount; noteIdx++) {
+      const wasOn = steps[prev]?.[noteIdx] || false;
+      const isOn = steps[curr]?.[noteIdx] || false;
+      const midiNote = bottomMidi + noteIdx;
+      if (isOn && !wasOn) {
+        events.push({ data: [NOTE_ON, midiNote, 100] });
+      } else if (wasOn && !isOn) {
+        events.push({ data: [NOTE_OFF, midiNote, 0] });
+      }
+    }
+
+    if (events.length) emit(id, events);
+    prevStepRef.current = curr;
+  }, [currentStep, playingProp, bottomMidi, noteCount, steps, id, data]);
+
+  // When stopping, send note-offs to avoid hanging notes
+  React.useEffect(() => {
+    if (!playingProp) {
+      if (!data || typeof data.onEmitMidi !== 'function') return;
+      const emit = data.onEmitMidi as (sourceId: string, events: Array<{ data: [number, number, number]; atFrame?: number; atTimeMs?: number }>) => void;
+      const channel = 0;
+      const NOTE_OFF = 0x80 | channel;
+      const events: Array<{ data: [number, number, number] }> = [];
+      const s = steps[currentStep] || [];
+      for (let noteIdx = 0; noteIdx < noteCount; noteIdx++) {
+        if (s[noteIdx]) {
+          const midiNote = bottomMidi + noteIdx;
+          events.push({ data: [NOTE_OFF, midiNote, 0] });
+        }
+      }
+      if (events.length) emit(id, events);
+    }
+  }, [playingProp, data, steps, currentStep, noteCount, bottomMidi, id]);
 
   const rootRef = React.useRef<HTMLDivElement | null>(null);
   const cardRef = React.useRef<HTMLDivElement | null>(null);

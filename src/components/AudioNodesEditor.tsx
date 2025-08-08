@@ -21,9 +21,10 @@ import ReverbNode from '@/components/nodes/ReverbNode';
 import SpeakerNode from '@/components/nodes/SpeakerNode';
 import SequencerNode from '@/components/nodes/SequencerNode';
 import { AudioManager } from '@/lib/audioManager';
+import SynthesizerNode from './nodes/SynthesizerNode';
 
 // Map handle ids to semantic roles so we can validate connections
-function getHandleRole(nodeType: string | undefined, handleId: string | undefined): 'audio-in' | 'audio-out' | 'param-in' | 'midi-out' | 'unknown' {
+function getHandleRole(nodeType: string | undefined, handleId: string | undefined): 'audio-in' | 'audio-out' | 'param-in' | 'midi-out' | 'midi-in' | 'unknown' {
   switch (nodeType) {
     case 'oscillator':
       if (handleId === 'output') return 'audio-out';
@@ -40,8 +41,11 @@ function getHandleRole(nodeType: string | undefined, handleId: string | undefine
       return 'unknown';
     case 'sequencer':
       if (handleId === 'midi') return 'midi-out';
-      if (handleId === 'play') return 'param-in';
-      if (handleId === 'bpm') return 'param-in';
+      if (handleId === 'play' || handleId === 'bpm') return 'param-in';
+      return 'unknown';
+    case 'synth':
+      if (handleId === 'midi') return 'midi-in';
+      if (handleId === 'output') return 'audio-out';
       return 'unknown';
     default:
       return 'unknown';
@@ -54,6 +58,7 @@ const nodeTypes = {
   reverb: ReverbNode,
   speaker: SpeakerNode,
   sequencer: SequencerNode,
+  synth: SynthesizerNode,
 };
 
 // Initial node configurations
@@ -95,8 +100,12 @@ const initialNodes: Node[] = [
     position: { x: 100, y: 300 },
     data: {
       length: 16,
-      octaves: 1,
+      fromNote: 'C4',
+      toNote: 'C5',
+      bpm: 120,
+      playing: false,
       onParameterChange: () => {},
+      onEmitMidi: () => {},
     },
   },
 ];
@@ -109,6 +118,11 @@ export default function AudioNodesEditor() {
   const [audioInitialized, setAudioInitialized] = useState(false);
   const [wasmReady, setWasmReady] = useState(false);
   const [audioManager] = useState(() => new AudioManager());
+
+  // Expose a MIDI emit function to nodes (e.g., Sequencer)
+  const handleEmitMidi = useCallback((sourceId: string, events: Array<{ data: [number, number, number]; atFrame?: number; atTimeMs?: number }>) => {
+    audioManager.sendMIDI(sourceId, events);
+  }, [audioManager]);
 
   // Poll for WASM readiness
   React.useEffect(() => {
@@ -186,6 +200,7 @@ export default function AudioNodesEditor() {
         data: {
           ...node.data,
           onParameterChange: handleParameterChange,
+          onEmitMidi: handleEmitMidi,
         },
       }))
     );
@@ -197,9 +212,9 @@ export default function AudioNodesEditor() {
         ...node.data,
       });
     });
-  }, [handleParameterChange, setNodes, audioManager]);
+  }, [handleParameterChange, handleEmitMidi, setNodes, audioManager]);
 
-  // Validate that only audio-out -> audio-in connections are allowed (and reserve midi/event for future)
+  // Validate connections: allow audio-out -> audio-in and midi-out -> midi-in
   const isValidConnection = useCallback((connection: Connection) => {
     const sourceNode = nodes.find((n) => n.id === connection.source);
     const targetNode = nodes.find((n) => n.id === connection.target);
@@ -208,7 +223,9 @@ export default function AudioNodesEditor() {
     const fromRole = getHandleRole(sourceNode.type, connection.sourceHandle || undefined);
     const toRole = getHandleRole(targetNode.type, connection.targetHandle || undefined);
 
-    return fromRole === 'audio-out' && toRole === 'audio-in';
+    const audioOk = fromRole === 'audio-out' && toRole === 'audio-in';
+    const midiOk = fromRole === 'midi-out' && toRole === 'midi-in';
+    return audioOk || midiOk;
   }, [nodes]);
 
   const onConnect = useCallback(
@@ -221,10 +238,10 @@ export default function AudioNodesEditor() {
       id: `${nodes.length + 1}`,
       type,
       position: { x: Math.random() * 400, y: Math.random() * 400 },
-      data: getDefaultNodeData(type, handleParameterChange),
+      data: getDefaultNodeData(type, handleParameterChange, handleEmitMidi),
     };
     setNodes((nds) => [...nds, newNode]);
-  }, [nodes.length, setNodes, handleParameterChange]);
+  }, [nodes.length, setNodes, handleParameterChange, handleEmitMidi]);
 
   const handleInitializeAudio = useCallback(async () => {
     try {
@@ -312,31 +329,24 @@ export default function AudioNodesEditor() {
 }
 
 // Helper function to get default data for new nodes
-function getDefaultNodeData(type: string, onParameterChange: (nodeId: string, parameter: string, value: string | number | boolean) => void) {
+function getDefaultNodeData(
+  type: string,
+  onParameterChange: (nodeId: string, parameter: string, value: string | number | boolean) => void,
+  onEmitMidi?: (sourceId: string, events: Array<{ data: [number, number, number]; atFrame?: number; atTimeMs?: number }>) => void,
+) {
   switch (type) {
     case 'oscillator':
-      return {
-        frequency: 440,
-        amplitude: 0.5,
-        waveform: 'sine',
-        onParameterChange,
-      };
+      return { frequency: 440, amplitude: 0.5, waveform: 'sine', onParameterChange };
     case 'reverb':
-      return {
-        feedback: 0.3,
-        wetMix: 0.3,
-        onParameterChange,
-      };
+      return { feedback: 0.3, wetMix: 0.3, onParameterChange };
     case 'speaker':
-      return {
-        volume: 0.8,
-        muted: false,
-        onParameterChange,
-      };
+      return { volume: 0.8, muted: false, onParameterChange };
     case 'sequencer':
+      return { length: 16, fromNote: 'C4', toNote: 'C5', bpm: 120, playing: false, onParameterChange, onEmitMidi };
+    case 'synth':
       return {
-        length: 16,
-        octaves: 1,
+        preset: 'Init', waveform: 'sawtooth', attack: 0.005, decay: 0.12, sustain: 0.7, release: 0.12,
+        cutoff: 10000, resonance: 0.2, glide: 0, gain: 0.5, maxVoices: 8,
         onParameterChange,
       };
     default:

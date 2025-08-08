@@ -30,6 +30,14 @@ const nodeCategories: {
         icon: Volume2 as unknown as IconType,
         color: 'purple',
         tag: 'synthesis'
+      },
+      {
+        type: 'synth',
+        name: 'Synth',
+        description: 'Poly synth (MIDI in → audio out)',
+        icon: Volume2 as unknown as IconType,
+        color: 'purple',
+        tag: 'synthesis'
       }
     ]
   },

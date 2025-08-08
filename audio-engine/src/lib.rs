@@ -50,3 +50,5 @@ impl AudioEngine {
         }
     }
 }
+
+// SynthNode is defined in nodes/mod.rs
