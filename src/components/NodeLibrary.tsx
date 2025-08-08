@@ -89,13 +89,11 @@ export default function NodeLibrary({ onAddNode }: NodeLibraryProps) {
   const categories = ['All', 'Synthesis', 'Effects', 'Sequencing', 'Utility'];
 
   return (
-    <div className="w-64 bg-gray-900 border-r border-gray-700 h-screen flex flex-col">
-      {/* Header */}
-      <div className="p-4 border-b border-gray-700">
-        <h2 className="text-lg font-semibold text-white mb-4">Node Library</h2>
-        
+    <div className="w-full h-full flex flex-col">
+      {/* Header: search + filters */}
+      <div className="mb-3">
         {/* Search */}
-        <div className="relative mb-4">
+        <div className="relative mb-3">
           <Music className="hidden" />
           <Speaker className="hidden" />
           <Waves className="hidden" />
@@ -129,7 +127,7 @@ export default function NodeLibrary({ onAddNode }: NodeLibraryProps) {
       </div>
 
       {/* Node Categories */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto space-y-3">
         {nodeCategories.map(category => {
           const categoryNodes = category.nodes.filter(node => 
             node.name.toLowerCase().includes(searchTerm.toLowerCase()) &&

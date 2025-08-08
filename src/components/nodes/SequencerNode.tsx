@@ -13,10 +13,11 @@ interface SequencerNodeProps {
     toNote?: string; // e.g., 'C5'
     bpm?: number;
     playing?: boolean;
+    steps?: boolean[][]; // persisted grid [step][noteIdx]
     onParameterChange: (
       nodeId: string,
       parameter: string,
-      value: string | number | boolean
+      value: string | number | boolean | boolean[][]
     ) => void;
     onEmitMidi?: (
       sourceId: string,
@@ -83,22 +84,39 @@ export default function SequencerNode({
   const topMidi = Math.max(fromMidiRaw, toMidiRaw);
   const noteCount = topMidi - bottomMidi + 1; // inclusive
 
-  // Persist defaults if missing
-  React.useEffect(() => {
-    if (data.length == null) onParameterChange(id, "length", 16);
-    if (data.fromNote == null) onParameterChange(id, "fromNote", "C4");
-    if (data.toNote == null) onParameterChange(id, "toNote", "C5");
-    if (data.bpm == null) onParameterChange(id, "bpm", 120);
-    if (data.playing == null) onParameterChange(id, "playing", false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Helpers to build/normalize grids
+  const makeGrid = React.useCallback((cols: number, rows: number, val = false): boolean[][] => (
+    Array.from({ length: cols }, () => Array.from({ length: rows }, () => val))
+  ), []);
 
-  // Steps grid state
-  const [steps, setSteps] = React.useState<boolean[][]>(() => {
-    return Array.from({ length: lengthClamped }, () =>
-      Array.from({ length: noteCount }, () => false)
-    );
-  });
+  const normalizeGrid = React.useCallback((cols: number, rows: number, src?: boolean[][]): boolean[][] => {
+    if (!Array.isArray(src)) return makeGrid(cols, rows, false);
+    const out = makeGrid(cols, rows, false);
+    for (let c = 0; c < cols; c++) {
+      for (let r = 0; r < rows; r++) {
+        out[c][r] = !!(src[c]?.[r]);
+      }
+    }
+    return out;
+  }, [makeGrid]);
+
+  // Steps grid state initialized from data.steps if present
+  const [steps, setSteps] = React.useState<boolean[][]>(() => (
+    normalizeGrid(lengthClamped, noteCount, Array.isArray(data.steps) ? data.steps : undefined)
+  ));
+
+  // On first mount, if steps were absent, persist a default grid once after paint
+  const didPersistRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!didPersistRef.current) {
+      if (!Array.isArray(data.steps)) {
+        const def = normalizeGrid(lengthClamped, noteCount, undefined);
+        onParameterChange(id, "steps", def);
+      }
+      didPersistRef.current = true;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Playhead state
   const [currentStep, setCurrentStep] = React.useState(0);
@@ -145,9 +163,11 @@ export default function SequencerNode({
       const wasOn = steps[prev]?.[noteIdx] || false;
       const isOn = steps[curr]?.[noteIdx] || false;
       const midiNote = bottomMidi + noteIdx;
-      if (isOn && !wasOn) {
+      if (isOn) {
+        // Retrigger even if it was already on in the previous step
         events.push({ data: [NOTE_ON, midiNote, 100] });
-      } else if (wasOn && !isOn) {
+      }
+      if (wasOn && !isOn) {
         events.push({ data: [NOTE_OFF, midiNote, 0] });
       }
     }
@@ -219,29 +239,24 @@ export default function SequencerNode({
     return () => window.removeEventListener("resize", onResize);
   }, [compute]);
 
-  // Adjust steps when length or note range change
+  // Adjust steps when length or note range change (preserve where possible)
   React.useEffect(() => {
-    setSteps((prev) => {
-      const next = Array.from({ length: lengthClamped }, (_, s) =>
-        Array.from({ length: noteCount }, (_, n) => prev[s]?.[n] ?? false)
-      );
-      return next;
-    });
+    setSteps((prev) => normalizeGrid(lengthClamped, noteCount, prev));
     setCurrentStep(0);
-  }, [lengthClamped, noteCount]);
+  }, [lengthClamped, noteCount, normalizeGrid]);
 
   const toggleStep = (stepIdx: number, noteIdx: number) => {
-    setSteps((prev) => {
-      const next = prev.map((col) => col.slice());
-      if (!next[stepIdx] || next[stepIdx].length !== noteCount) {
-        next[stepIdx] = Array.from(
-          { length: noteCount },
-          (_, n) => prev[stepIdx]?.[n] ?? false
-        );
+    const next = (() => {
+      const draft = steps.map((col) => col.slice());
+      if (!draft[stepIdx] || draft[stepIdx].length !== noteCount) {
+        draft[stepIdx] = Array.from({ length: noteCount }, (_, n) => steps[stepIdx]?.[n] ?? false);
       }
-      next[stepIdx][noteIdx] = !next[stepIdx][noteIdx];
-      return next;
-    });
+      draft[stepIdx][noteIdx] = !draft[stepIdx][noteIdx];
+      return draft;
+    })();
+    setSteps(next);
+    // Persist after render to avoid updating parent during child render
+    setTimeout(() => onParameterChange(id, "steps", next), 0);
   };
 
   return (

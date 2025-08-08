@@ -12,6 +12,8 @@ import ReactFlow, {
   Connection,
   Edge,
   Node,
+  ReactFlowInstance,
+  Viewport,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -22,6 +24,32 @@ import SpeakerNode from '@/components/nodes/SpeakerNode';
 import SequencerNode from '@/components/nodes/SequencerNode';
 import { AudioManager } from '@/lib/audioManager';
 import SynthesizerNode from './nodes/SynthesizerNode';
+
+// Save file schema
+interface SavedNode {
+  id: string;
+  type?: string;
+  position: { x: number; y: number };
+  data?: Record<string, unknown>;
+}
+interface SavedEdge {
+  id?: string;
+  source: string;
+  target: string;
+  sourceHandle?: string;
+  targetHandle?: string;
+}
+interface ProjectSaveFile {
+  version: number;
+  createdAt?: string;
+  nodes: SavedNode[];
+  edges: SavedEdge[];
+  viewport?: Viewport;
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null;
+}
 
 // Map handle ids to semantic roles so we can validate connections
 function getHandleRole(nodeType: string | undefined, handleId: string | undefined): 'audio-in' | 'audio-out' | 'param-in' | 'midi-out' | 'midi-in' | 'unknown' {
@@ -46,6 +74,10 @@ function getHandleRole(nodeType: string | undefined, handleId: string | undefine
     case 'synth':
       if (handleId === 'midi') return 'midi-in';
       if (handleId === 'output') return 'audio-out';
+      if ([
+        'preset', 'waveform', 'attack', 'decay', 'sustain', 'release',
+        'cutoff', 'resonance', 'glide', 'gain', 'maxVoices'
+      ].includes(handleId || '')) return 'param-in';
       return 'unknown';
     default:
       return 'unknown';
@@ -62,53 +94,7 @@ const nodeTypes = {
 };
 
 // Initial node configurations
-const initialNodes: Node[] = [
-  {
-    id: '1',
-    type: 'oscillator',
-    position: { x: 100, y: 100 },
-    data: {
-      frequency: 440,
-      amplitude: 0.5,
-      waveform: 'sine',
-      onParameterChange: () => {},
-    },
-  },
-  {
-    id: '2',
-    type: 'reverb',
-    position: { x: 400, y: 100 },
-    data: {
-      feedback: 0.3,
-      wetMix: 0.3,
-      onParameterChange: () => {},
-    },
-  },
-  {
-    id: '3',
-    type: 'speaker',
-    position: { x: 700, y: 100 },
-    data: {
-      volume: 0.8,
-      muted: false,
-      onParameterChange: () => {},
-    },
-  },
-  {
-    id: '4',
-    type: 'sequencer',
-    position: { x: 100, y: 300 },
-    data: {
-      length: 16,
-      fromNote: 'C4',
-      toNote: 'C5',
-      bpm: 120,
-      playing: false,
-      onParameterChange: () => {},
-      onEmitMidi: () => {},
-    },
-  },
-];
+const initialNodes: Node[] = [];
 
 const initialEdges: Edge[] = [];
 
@@ -118,6 +104,8 @@ export default function AudioNodesEditor() {
   const [audioInitialized, setAudioInitialized] = useState(false);
   const [wasmReady, setWasmReady] = useState(false);
   const [audioManager] = useState(() => new AudioManager());
+  const rfInstanceRef = React.useRef<ReactFlowInstance | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   // Expose a MIDI emit function to nodes (e.g., Sequencer)
   const handleEmitMidi = useCallback((sourceId: string, events: Array<{ data: [number, number, number]; atFrame?: number; atTimeMs?: number }>) => {
@@ -205,14 +193,8 @@ export default function AudioNodesEditor() {
       }))
     );
 
-    // Register initial nodes with audio manager
-    initialNodes.forEach((node) => {
-      audioManager.updateNode(node.id, {
-        type: node.type || 'unknown',
-        ...node.data,
-      });
-    });
-  }, [handleParameterChange, handleEmitMidi, setNodes, audioManager]);
+    // removed initial registration into audio manager; nodes effect below handles syncing
+  }, [handleParameterChange, handleEmitMidi, setNodes]);
 
   // Validate connections: allow audio-out -> audio-in and midi-out -> midi-in
   const isValidConnection = useCallback((connection: Connection) => {
@@ -227,6 +209,146 @@ export default function AudioNodesEditor() {
     const midiOk = fromRole === 'midi-out' && toRole === 'midi-in';
     return audioOk || midiOk;
   }, [nodes]);
+
+  // -------- Save/Load Helpers --------
+  const stripNodeData = React.useCallback((data: Record<string, unknown> | undefined): Record<string, unknown> => {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(data || {})) {
+      if (typeof v === 'function') continue;
+      if (k.startsWith('on')) continue;
+      out[k] = v as unknown;
+    }
+    return out;
+  }, []);
+
+  const makeSaveObject = React.useCallback((): ProjectSaveFile => {
+    const viewport = rfInstanceRef.current?.getViewport();
+    return {
+      version: 1,
+      createdAt: new Date().toISOString(),
+      nodes: nodes.map(n => ({
+        id: n.id,
+        type: n.type,
+        position: n.position,
+        data: stripNodeData(n.data as Record<string, unknown>),
+      })),
+      edges: edges.map(e => ({
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        sourceHandle: e.sourceHandle || undefined,
+        targetHandle: e.targetHandle || undefined,
+      })),
+      viewport,
+    };
+  }, [nodes, edges, stripNodeData]);
+
+  const downloadJSON = React.useCallback((obj: unknown, filename: string) => {
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const handleSaveClick = React.useCallback(() => {
+    const save = makeSaveObject();
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    downloadJSON(save, `audionodes-${ts}.json`);
+  }, [makeSaveObject, downloadJSON]);
+
+  const reattachHandlers = React.useCallback((data: Record<string, unknown> | undefined): Record<string, unknown> => ({
+    ...(data || {}),
+    onParameterChange: handleParameterChange,
+    onEmitMidi: handleEmitMidi,
+  }), [handleParameterChange, handleEmitMidi]);
+
+  const handleLoadFromObject = React.useCallback((obj: unknown) => {
+    if (!isRecord(obj)) return;
+    const maybe = obj as Partial<ProjectSaveFile>;
+    const rawNodes = Array.isArray(maybe.nodes) ? maybe.nodes : [];
+    const rawEdges = Array.isArray(maybe.edges) ? maybe.edges : [];
+
+    const loadedNodes: Node[] = rawNodes.map((n) => ({
+      id: String(n.id),
+      type: n.type,
+      position: n.position || { x: 0, y: 0 },
+      data: reattachHandlers(n.data as Record<string, unknown> | undefined),
+    }));
+
+    const loadedEdges: Edge[] = rawEdges.map((e) => ({
+      id: e.id || `${e.source}-${e.sourceHandle || 'out'}->${e.target}-${e.targetHandle || 'in'}`,
+      source: String(e.source),
+      target: String(e.target),
+      sourceHandle: e.sourceHandle,
+      targetHandle: e.targetHandle,
+    }));
+
+    setNodes(loadedNodes);
+    setEdges(loadedEdges);
+
+    // Restore viewport if present
+    if (maybe.viewport && rfInstanceRef.current) {
+      const v = maybe.viewport as Viewport;
+      rfInstanceRef.current.setViewport({ x: v.x || 0, y: v.y || 0, zoom: v.zoom || 1 }, { duration: 0 });
+    }
+  }, [setNodes, setEdges, reattachHandlers]);
+
+  const handleLoadFile = React.useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const obj = JSON.parse(String(reader.result || '{}')) as unknown;
+        handleLoadFromObject(obj);
+      } catch (err) {
+        console.error('Failed to parse project file:', err);
+      }
+    };
+    reader.readAsText(file);
+  }, [handleLoadFromObject]);
+
+  const onPickLoadFile = React.useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const onDropProjectFile: React.DragEventHandler<HTMLDivElement> = React.useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer?.files?.[0];
+    if (file && (file.type === 'application/json' || file.name.endsWith('.json'))) {
+      handleLoadFile(file);
+    }
+  }, [handleLoadFile]);
+
+  const onDragOverProjectFile: React.DragEventHandler<HTMLDivElement> = React.useCallback((e) => {
+    e.preventDefault();
+  }, []);
+
+  // Attempt to load a default project on startup from /default-project.json or /projects/default-project.json
+  // moved below handleLoadFromObject to avoid use-before-declare
+  React.useEffect(() => {
+    const loadDefault = async () => {
+      const candidates = ['/default-project.json', '/projects/default-project.json'];
+      for (const url of candidates) {
+        try {
+          const res = await fetch(`${url}?v=${Date.now()}`);
+          if (!res.ok) continue;
+          const json = await res.json();
+          handleLoadFromObject(json as unknown);
+          break;
+        } catch {
+          // ignore and try next
+        }
+      }
+    };
+    loadDefault();
+  }, [handleLoadFromObject]);
+
+  // -------- End Save/Load Helpers --------
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => (isValidConnection(params) ? addEdge(params, eds) : eds)),
@@ -258,54 +380,32 @@ export default function AudioNodesEditor() {
   }, [audioManager]);
 
   return (
-    <div className="h-screen flex bg-gray-900">
-      {/* Node Library Sidebar */}
-      <NodeLibrary onAddNode={onAddNode} />
-
-      {/* Main Editor Area */}
-      <div className="flex-1 flex flex-col">
-        {/* Top Bar */}
-        <div className="bg-gray-800 border-b border-gray-700 p-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold text-white">AudioNodes</h1>
-            <span className="text-sm text-gray-400">Visual Audio Programming</span>
-          </div>
-          
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${
-                audioInitialized 
-                  ? 'bg-green-500' 
-                  : wasmReady 
-                    ? 'bg-blue-500' 
-                    : 'bg-yellow-500'
-              }`}></div>
-              <span className="text-xs text-gray-400">
-                {audioInitialized 
-                  ? 'Audio Ready' 
-                  : wasmReady 
-                    ? 'Engine Ready' 
-                    : 'Idle'}
-              </span>
-            </div>
-            
-            {!audioInitialized && (
-              <button
-                onClick={handleInitializeAudio}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white`}
-              >
-                Initialize Audio
-              </button>
-            )}
-            
-            <div className="text-sm text-gray-400">
-              BPM: <span className="text-white">120</span>
-            </div>
+    <div
+      className="h-screen relative bg-gray-900"
+      onDrop={onDropProjectFile}
+      onDragOver={onDragOverProjectFile}
+    >
+      {/* Overlay start screen */}
+      {!audioInitialized && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm">
+          <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-xl max-w-sm w-[90%] text-center">
+            <h2 className="text-lg font-semibold text-white mb-2">Enable Audio</h2>
+            <p className="text-sm text-gray-300 mb-4">Click to initialize the audio engine. You can still load/save projects from the menu.</p>
+            <button
+              onClick={handleInitializeAudio}
+              className="px-4 py-2 rounded-lg font-medium bg-blue-600 hover:bg-blue-700 text-white w-full"
+            >
+              Initialize Audio
+            </button>
+            <div className="mt-3 text-xs text-gray-400">Sample Rate: auto • Engine: {wasmReady ? 'Ready' : 'Loading...'}</div>
           </div>
         </div>
+      )}
 
-        {/* React Flow Canvas */}
-        <div className="flex-1 bg-gray-900">
+      {/* Fullscreen canvas and overlayed left panels */}
+      <div className={`absolute inset-0`}>
+        {/* React Flow full-screen surface */}
+        <div className="absolute inset-0">
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -315,13 +415,52 @@ export default function AudioNodesEditor() {
             nodeTypes={nodeTypes}
             proOptions={{ hideAttribution: true }}
             fitView
-            className="react-flow-dark"
+            className="react-flow-dark h-full w-full"
             isValidConnection={isValidConnection}
+            onInit={(instance) => { rfInstanceRef.current = instance; }}
           >
-            <Controls className="react-flow-controls-dark" />
+            <Controls className="react-flow-controls-dark !left-80 !bottom-4" />
             <MiniMap className="react-flow-minimap-dark" />
             <Background variant={BackgroundVariant.Dots} gap={12} size={1} className="bg-gray-900" />
           </ReactFlow>
+        </div>
+
+        {/* Left overlay column: Title, Save/Load, Library panel */}
+        <div className="absolute top-4 left-4 bottom-4 z-30 w-72 flex flex-col pointer-events-auto gap-4">
+          {/* App Title */}
+          <h1 className="text-2xl font-bold text-white drop-shadow">Audio Nodes</h1>
+
+          {/* Save/Load panel */}
+          <div className="bg-gray-800/80 backdrop-blur-md rounded-xl p-3 shadow">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleLoadFile(f); }}
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={handleSaveClick}
+                className="px-3 py-2 rounded-md bg-gray-700 hover:bg-gray-600 text-white text-sm w-full"
+                title="Download project (.json)"
+              >
+                Save
+              </button>
+              <button
+                onClick={onPickLoadFile}
+                className="px-3 py-2 rounded-md bg-gray-700 hover:bg-gray-600 text-white text-sm w-full"
+                title="Load project from file"
+              >
+                Load
+              </button>
+            </div>
+          </div>
+
+          {/* Library panel */}
+          <div className="bg-gray-800/80 backdrop-blur-md rounded-xl p-3 shadow flex-1 overflow-y-auto">
+            <NodeLibrary onAddNode={onAddNode} />
+          </div>
         </div>
       </div>
     </div>

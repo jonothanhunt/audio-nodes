@@ -66,8 +66,10 @@ export default function SynthesizerNode({ id, data, selected }: SynthNodeProps) 
   const cardRef = React.useRef<HTMLDivElement | null>(null);
   const midiRef = React.useRef<HTMLDivElement | null>(null);
   const outRef = React.useRef<HTMLDivElement | null>(null);
+  const paramRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
   const [midiTop, setMidiTop] = React.useState(0);
   const [outTop, setOutTop] = React.useState(0);
+  const [paramTops, setParamTops] = React.useState<Record<string, number>>({});
 
   const compute = React.useCallback(() => {
     const rootEl = rootRef.current as HTMLElement | null;
@@ -84,6 +86,11 @@ export default function SynthesizerNode({ id, data, selected }: SynthNodeProps) 
     };
     setMidiTop(centerFromRoot(midiRef.current));
     setOutTop(centerFromRoot(outRef.current));
+    const tops: Record<string, number> = {};
+    Object.keys(paramRefs.current).forEach((k) => {
+      tops[k] = centerFromRoot(paramRefs.current[k]);
+    });
+    setParamTops(tops);
   }, []);
 
   React.useLayoutEffect(() => {
@@ -123,14 +130,15 @@ export default function SynthesizerNode({ id, data, selected }: SynthNodeProps) 
           <span className="text-purple-400 text-sm font-medium">Synth</span>
         </div>
 
-        <div className="grid grid-cols-[minmax(14rem,_auto)_auto] gap-x-8 gap-y-2">
+        <div className="grid grid-cols-[minmax(16rem,_auto)] gap-y-2">
+          {/* One vertical column of controls */}
           <div className="space-y-2">
             <div className="relative flex items-center" ref={midiRef}>
               <label className={labelCls}>MIDI In</label>
               <span className="text-xs text-gray-400">Connect a sequencer or MIDI In</span>
             </div>
 
-            <div className="relative flex items-center">
+            <div className="relative flex items-center" ref={(el) => { paramRefs.current.preset = el; }}>
               <label className={labelCls}>Preset</label>
               <select
                 value={preset}
@@ -144,7 +152,7 @@ export default function SynthesizerNode({ id, data, selected }: SynthNodeProps) 
               </select>
             </div>
 
-            <div className="relative flex items-center">
+            <div className="relative flex items-center" ref={(el) => { paramRefs.current.waveform = el; }}>
               <label className={labelCls}>Waveform</label>
               <select
                 value={waveform}
@@ -158,61 +166,120 @@ export default function SynthesizerNode({ id, data, selected }: SynthNodeProps) 
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div className="relative flex items-center">
-                <label className={labelCls}>Attack</label>
-                <input type="number" value={attack} min={0} step={0.001} onChange={(e)=> onParameterChange(id, "attack", Math.max(0, Number(e.target.value)))} className={`${inputCls} w-24 text-center`} />
-              </div>
-              <div className="relative flex items-center">
-                <label className={labelCls}>Decay</label>
-                <input type="number" value={decay} min={0} step={0.001} onChange={(e)=> onParameterChange(id, "decay", Math.max(0, Number(e.target.value)))} className={`${inputCls} w-24 text-center`} />
-              </div>
-              <div className="relative flex items-center">
-                <label className={labelCls}>Sustain</label>
-                <input type="number" value={sustain} min={0} max={1} step={0.01} onChange={(e)=> onParameterChange(id, "sustain", Math.max(0, Math.min(1, Number(e.target.value))))} className={`${inputCls} w-24 text-center`} />
-              </div>
-              <div className="relative flex items-center">
-                <label className={labelCls}>Release</label>
-                <input type="number" value={release} min={0} step={0.001} onChange={(e)=> onParameterChange(id, "release", Math.max(0, Number(e.target.value)))} className={`${inputCls} w-24 text-center`} />
-              </div>
+            <div className="relative flex items-center" ref={(el) => { paramRefs.current.attack = el; }}>
+              <label className={labelCls}>Attack</label>
+              <input
+                type="number"
+                value={attack}
+                min={0}
+                step={0.001}
+                onChange={(e) => onParameterChange(id, "attack", Math.max(0, Number(e.target.value)))}
+                className={`${inputCls} w-24 text-center`}
+              />
+            </div>
+            <div className="relative flex items-center" ref={(el) => { paramRefs.current.decay = el; }}>
+              <label className={labelCls}>Decay</label>
+              <input
+                type="number"
+                value={decay}
+                min={0}
+                step={0.001}
+                onChange={(e) => onParameterChange(id, "decay", Math.max(0, Number(e.target.value)))}
+                className={`${inputCls} w-24 text-center`}
+              />
+            </div>
+            <div className="relative flex items-center" ref={(el) => { paramRefs.current.sustain = el; }}>
+              <label className={labelCls}>Sustain</label>
+              <input
+                type="number"
+                value={sustain}
+                min={0}
+                max={1}
+                step={0.01}
+                onChange={(e) => onParameterChange(id, "sustain", Math.max(0, Math.min(1, Number(e.target.value))))}
+                className={`${inputCls} w-24 text-center`}
+              />
+            </div>
+            <div className="relative flex items-center" ref={(el) => { paramRefs.current.release = el; }}>
+              <label className={labelCls}>Release</label>
+              <input
+                type="number"
+                value={release}
+                min={0}
+                step={0.001}
+                onChange={(e) => onParameterChange(id, "release", Math.max(0, Number(e.target.value)))}
+                className={`${inputCls} w-24 text-center`}
+              />
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div className="relative flex items-center">
-                <label className={labelCls}>Cutoff</label>
-                <input type="number" value={cutoff} min={20} max={20000} step={1} onChange={(e)=> onParameterChange(id, "cutoff", Math.max(20, Math.min(20000, Number(e.target.value))))} className={`${inputCls} w-24 text-center`} />
-              </div>
-              <div className="relative flex items-center">
-                <label className={labelCls}>Resonance</label>
-                <input type="number" value={resonance} min={0} max={1} step={0.01} onChange={(e)=> onParameterChange(id, "resonance", Math.max(0, Math.min(1, Number(e.target.value))))} className={`${inputCls} w-24 text-center`} />
-              </div>
+            <div className="relative flex items-center" ref={(el) => { paramRefs.current.cutoff = el; }}>
+              <label className={labelCls}>Cutoff</label>
+              <input
+                type="number"
+                value={cutoff}
+                min={20}
+                max={20000}
+                step={1}
+                onChange={(e) => onParameterChange(id, "cutoff", Math.max(20, Math.min(20000, Number(e.target.value))))}
+                className={`${inputCls} w-24 text-center`}
+              />
             </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="relative flex items-center">
-                <label className={labelCls}>Glide</label>
-                <input type="number" value={glide} min={0} step={1} onChange={(e)=> onParameterChange(id, "glide", Math.max(0, Number(e.target.value)))} className={`${inputCls} w-24 text-center`} />
-              </div>
-              <div className="relative flex items-center">
-                <label className={labelCls}>Gain</label>
-                <input type="number" value={gain} min={0} max={1} step={0.01} onChange={(e)=> onParameterChange(id, "gain", Math.max(0, Math.min(1, Number(e.target.value))))} className={`${inputCls} w-24 text-center`} />
-              </div>
+            <div className="relative flex items-center" ref={(el) => { paramRefs.current.resonance = el; }}>
+              <label className={labelCls}>Resonance</label>
+              <input
+                type="number"
+                value={resonance}
+                min={0}
+                max={1}
+                step={0.01}
+                onChange={(e) => onParameterChange(id, "resonance", Math.max(0, Math.min(1, Number(e.target.value))))}
+                className={`${inputCls} w-24 text-center`}
+              />
             </div>
-
-            <div className="relative flex items-center">
+            <div className="relative flex items-center" ref={(el) => { paramRefs.current.glide = el; }}>
+              <label className={labelCls}>Glide</label>
+              <input
+                type="number"
+                value={glide}
+                min={0}
+                step={1}
+                onChange={(e) => onParameterChange(id, "glide", Math.max(0, Number(e.target.value)))}
+                className={`${inputCls} w-24 text-center`}
+              />
+            </div>
+            <div className="relative flex items-center" ref={(el) => { paramRefs.current.gain = el; }}>
+              <label className={labelCls}>Gain</label>
+              <input
+                type="number"
+                value={gain}
+                min={0}
+                max={1}
+                step={0.01}
+                onChange={(e) => onParameterChange(id, "gain", Math.max(0, Math.min(1, Number(e.target.value))))}
+                className={`${inputCls} w-24 text-center`}
+              />
+            </div>
+            <div className="relative flex items-center" ref={(el) => { paramRefs.current.maxVoices = el; }}>
               <label className={labelCls}>Voices</label>
-              <input type="number" value={maxVoices} min={1} max={32} step={1} onChange={(e)=> onParameterChange(id, "maxVoices", Math.max(1, Math.min(32, Number(e.target.value))))} className={`${inputCls} w-24 text-center`} />
+              <input
+                type="number"
+                value={maxVoices}
+                min={1}
+                max={32}
+                step={1}
+                onChange={(e) => onParameterChange(id, "maxVoices", Math.max(1, Math.min(32, Number(e.target.value))))}
+                className={`${inputCls} w-24 text-center`}
+              />
             </div>
-          </div>
 
-          {/* Output label to align audio handle */}
-          <div ref={outRef} className="flex items-center justify-end">
-            <span className="text-xs text-gray-300 mr-2">Audio Out</span>
+            <div className="relative flex items-center justify-end" ref={outRef}>
+              <span className="text-xs text-gray-300 mr-2">Audio Out</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Left-side input: MIDI = square */}
+      {/* Left-side target handles for all params */}
       <Handle
         type="target"
         position={Position.Left}
@@ -220,6 +287,21 @@ export default function SynthesizerNode({ id, data, selected }: SynthNodeProps) 
         className="!w-3 !h-3 !bg-gray-200 !border !border-gray-300 !rounded-none"
         style={{ top: midiTop, transform: "translateY(-50%)", left: -6 }}
       />
+      {Object.entries(paramTops).map(([idKey, top]) => {
+        const isNumeric = [
+          'attack','decay','sustain','release','cutoff','resonance','glide','gain','maxVoices'
+        ].includes(idKey);
+        return (
+          <Handle
+            key={idKey}
+            type="target"
+            position={Position.Left}
+            id={idKey}
+            className="!w-3 !h-3 !bg-gray-200 !border !border-gray-300 !rounded-none"
+            style={{ top, left: -6, transform: `translateY(-50%)${isNumeric ? ' rotate(45deg)' : ''}` }}
+          />
+        );
+      })}
 
       {/* Right-side output: audio = circle */}
       <Handle

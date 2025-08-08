@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "createdAt": "2025-08-08T15:58:20.733Z",
+  "nodes": [
+    {
+      "id": "5",
+      "type": "reverb",
+      "position": {
+        "x": 820.6366374338318,
+        "y": 634.479417324243
+      },
+      "data": {
+        "feedback": 0.3,
+        "wetMix": 0.3
+      }
+    },
+    {
+      "id": "6",
+      "type": "speaker",
+      "position": {
+        "x": 1234.4048972493558,
+        "y": 635.1678032550707
+      },
+      "data": {
+        "volume": 0.8,
+        "muted": false
+      }
+    },
+    {
+      "id": "7",
+      "type": "synth",
+      "position": {
+        "x": 444.71475872932535,
+        "y": 623.5017250833754
+      },
+      "data": {
+        "preset": "Init",
+        "waveform": "sine",
+        "attack": 0.096,
+        "decay": 0.005,
+        "sustain": 0,
+        "release": 0.001,
+        "cutoff": 20,
+        "resonance": 0,
+        "glide": 3,
+        "gain": 0.31,
+        "maxVoices": 8
+      }
+    },
+    {
+      "id": "8",
+      "type": "sequencer",
+      "position": {
+        "x": -100.35360943609015,
+        "y": 621.3488115884522
+      },
+      "data": {
+        "length": 17,
+        "fromNote": "C4",
+        "toNote": "C5",
+        "bpm": 120,
+        "playing": true
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "reactflow__edge-8midi-7midi",
+      "source": "8",
+      "target": "7",
+      "sourceHandle": "midi",
+      "targetHandle": "midi"
+    },
+    {
+      "id": "reactflow__edge-7output-5input",
+      "source": "7",
+      "target": "5",
+      "sourceHandle": "output",
+      "targetHandle": "input"
+    },
+    {
+      "id": "reactflow__edge-5output-6input",
+      "source": "5",
+      "target": "6",
+      "sourceHandle": "output",
+      "targetHandle": "input"
+    }
+  ],
+  "viewport": {
+    "x": 179.85331263829733,
+    "y": -0.5385641103151784,
+    "zoom": 0.5285090202806909
+  }
+}
