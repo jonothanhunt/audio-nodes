@@ -239,11 +239,41 @@ export default function SequencerNode({
     return () => window.removeEventListener("resize", onResize);
   }, [compute]);
 
-  // Adjust steps when length or note range change (preserve where possible)
+  // Adjust steps when length or note range change (preserve absolute MIDI notes)
+  const prevRangeRef = React.useRef<{ bottomMidi: number; topMidi: number }>({ bottomMidi, topMidi });
+  const lastMappedRef = React.useRef<boolean[][] | null>(null);
+
   React.useEffect(() => {
-    setSteps((prev) => normalizeGrid(lengthClamped, noteCount, prev));
+    setSteps((prev) => {
+      const prevBottom = prevRangeRef.current.bottomMidi;
+      const newCols = lengthClamped;
+      const newRows = noteCount;
+      const next = makeGrid(newCols, newRows, false);
+      const colsToCopy = Math.min(prev.length, newCols);
+      for (let c = 0; c < colsToCopy; c++) {
+        const prevCol = prev[c] || [];
+        for (let r = 0; r < prevCol.length; r++) {
+          if (!prevCol[r]) continue;
+          const midi = prevBottom + r; // absolute MIDI of this cell in old grid
+          const newRow = midi - bottomMidi; // map to new grid row index
+          if (newRow >= 0 && newRow < newRows) {
+            next[c][newRow] = true;
+          }
+        }
+      }
+      lastMappedRef.current = next;
+      return next;
+    });
     setCurrentStep(0);
-  }, [lengthClamped, noteCount, normalizeGrid]);
+    // update prev range refs for next remap
+    prevRangeRef.current = { bottomMidi, topMidi };
+    // persist mapped steps to parent after paint
+    setTimeout(() => {
+      if (lastMappedRef.current) {
+        onParameterChange(id, "steps", lastMappedRef.current);
+      }
+    }, 0);
+  }, [lengthClamped, bottomMidi, topMidi, noteCount, makeGrid, onParameterChange, id]);
 
   const toggleStep = (stepIdx: number, noteIdx: number) => {
     const next = (() => {

@@ -43,29 +43,50 @@ body {
   stroke: #6b7280;
 }
 
-.react-flow-dark .react-flow__controls {
-  background: #1f2937;
-  border: 1px solid #374151;
-}
-
+.react-flow-dark .react-flow__controls,
 .react-flow-controls-dark {
-  background: #1f2937 !important;
+  background: rgba(31, 41, 55, 0.85) !important; /* #1f2937 with opacity */
   border: 1px solid #374151 !important;
+  border-radius: 0.75rem !important; /* match rounded panels */
+  backdrop-filter: blur(8px);
+  box-shadow: 0 10px 15px -3px rgba(0,0,0,0.2), 0 4px 6px -4px rgba(0,0,0,0.2);
+  overflow: hidden; /* clip inner button corners */
 }
 
 .react-flow-controls-dark button {
-  background: #1f2937 !important;
-  color: #ffffff !important;
-  border-bottom: 1px solid #374151 !important;
+  background: transparent !important;
+  color: #ffffff !important; /* icon color via currentColor */
+  border: none !important; /* remove default separators */
+  padding: 0.5rem !important; /* match panel control padding */
+}
+
+/* subtle dividers between stacked buttons */
+.react-flow-controls-dark button + button {
+  border-top: 1px solid rgba(55, 65, 81, 0.6) !important;
 }
 
 .react-flow-controls-dark button:hover {
-  background: #374151 !important;
+  background: rgba(55, 65, 81, 0.8) !important; /* #374151 */
+}
+
+/* Force SVG icons to white for higher contrast */
+.react-flow-controls-dark button svg,
+.react-flow-controls-dark button svg * {
+  stroke: #ffffff !important;
+  fill: none !important;
 }
 
 .react-flow-minimap-dark {
-  background: #1f2937 !important;
+  background: rgba(31, 41, 55, 0.85) !important;
   border: 1px solid #374151 !important;
+  border-radius: 0.75rem !important; /* match rounded panels */
+  backdrop-filter: blur(8px);
+  box-shadow: 0 10px 15px -3px rgba(0,0,0,0.2), 0 4px 6px -4px rgba(0,0,0,0.2);
+  overflow: hidden;
+}
+
+.react-flow-minimap-dark svg {
+  border-radius: 0.75rem !important;
 }
 
 .react-flow-minimap-dark .react-flow__minimap-mask {
@@ -74,6 +95,6 @@ body {
 }
 
 .react-flow-minimap-dark .react-flow__minimap-node {
-  fill: #6b7280 !important;
-  stroke: #9ca3af !important;
+  fill: #9ca3af !important; /* slightly brighter */
+  stroke: #e5e7eb !important; /* light border for contrast */
 }
