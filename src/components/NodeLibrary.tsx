@@ -1,13 +1,25 @@
 'use client';
 
 import React from 'react';
-import { Volume2, Waves, Speaker, Search } from 'lucide-react';
+import { Volume2, Waves, Speaker, Search, Music } from 'lucide-react';
 
 interface NodeLibraryProps {
   onAddNode: (type: string) => void;
 }
 
-const nodeCategories = [
+type IconType = (props: { className?: string }) => React.ReactElement;
+
+const nodeCategories: {
+  name: string;
+  nodes: Array<{
+    type: string;
+    name: string;
+    description: string;
+    icon: IconType;
+    color: 'purple' | 'blue' | 'green' | 'amber';
+    tag: string;
+  }>;
+}[] = [
   {
     name: 'Synthesis',
     nodes: [
@@ -15,7 +27,7 @@ const nodeCategories = [
         type: 'oscillator',
         name: 'Oscillator',
         description: 'Basic waveform generator',
-        icon: Volume2,
+        icon: Volume2 as unknown as IconType,
         color: 'purple',
         tag: 'synthesis'
       }
@@ -28,9 +40,22 @@ const nodeCategories = [
         type: 'reverb',
         name: 'Reverb',
         description: 'Spatial reverberation',
-        icon: Waves,
+        icon: Waves as unknown as IconType,
         color: 'blue',
         tag: 'effect'
+      }
+    ]
+  },
+  {
+    name: 'Sequencing',
+    nodes: [
+      {
+        type: 'sequencer',
+        name: 'Sequencer',
+        description: 'Step sequencer (MIDI out)',
+        icon: Music as unknown as IconType,
+        color: 'amber',
+        tag: 'midi'
       }
     ]
   },
@@ -41,7 +66,7 @@ const nodeCategories = [
         type: 'speaker',
         name: 'Speaker',
         description: 'Audio output',
-        icon: Speaker,
+        icon: Speaker as unknown as IconType,
         color: 'green',
         tag: 'utility'
       }
@@ -53,7 +78,7 @@ export default function NodeLibrary({ onAddNode }: NodeLibraryProps) {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [selectedCategory, setSelectedCategory] = React.useState('All');
 
-  const categories = ['All', 'Synthesis', 'Effects', 'Utility'];
+  const categories = ['All', 'Synthesis', 'Effects', 'Sequencing', 'Utility'];
 
   return (
     <div className="w-64 bg-gray-900 border-r border-gray-700 h-screen flex flex-col">
@@ -63,6 +88,10 @@ export default function NodeLibrary({ onAddNode }: NodeLibraryProps) {
         
         {/* Search */}
         <div className="relative mb-4">
+          <Music className="hidden" />
+          <Speaker className="hidden" />
+          <Waves className="hidden" />
+          <Volume2 className="hidden" />
           <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-500" />
           <input
             type="text"
@@ -112,7 +141,8 @@ export default function NodeLibrary({ onAddNode }: NodeLibraryProps) {
                   const colorClasses: Record<string, string> = {
                     purple: 'bg-purple-600 hover:bg-purple-700 border-purple-500',
                     blue: 'bg-blue-600 hover:bg-blue-700 border-blue-500',
-                    green: 'bg-green-600 hover:bg-green-700 border-green-500'
+                    green: 'bg-green-600 hover:bg-green-700 border-green-500',
+                    amber: 'bg-amber-600 hover:bg-amber-700 border-amber-500',
                   };
                   const nodeColorClass = colorClasses[node.color] || colorClasses['purple'];
 

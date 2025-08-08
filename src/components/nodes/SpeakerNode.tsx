@@ -2,10 +2,11 @@
 
 import React from 'react';
 import { Handle, Position } from 'reactflow';
-import { Speaker } from 'lucide-react';
+import { Speaker as SpeakerIcon } from 'lucide-react';
 
 interface SpeakerNodeProps {
   id: string;
+  selected?: boolean;
   data: {
     volume: number;
     muted: boolean;
@@ -13,84 +14,117 @@ interface SpeakerNodeProps {
   };
 }
 
-export default function SpeakerNode({ id, data }: SpeakerNodeProps) {
+export default function SpeakerNode({ id, data, selected }: SpeakerNodeProps) {
   const { volume, muted, onParameterChange } = data;
 
+  // Refs for measured alignment
+  const rootRef = React.useRef<HTMLDivElement | null>(null);
+  const cardRef = React.useRef<HTMLDivElement | null>(null);
+  const inRef = React.useRef<HTMLDivElement | null>(null);
+  const volRef = React.useRef<HTMLDivElement | null>(null);
+
+  const [inTop, setInTop] = React.useState(0);
+  const [volTop, setVolTop] = React.useState(0);
+
+  const compute = React.useCallback(() => {
+    const rootEl = rootRef.current as HTMLElement | null;
+    if (!rootEl) return;
+    const centerFromRoot = (el: HTMLElement | null) => {
+      if (!el) return 0;
+      let top = 0;
+      let curr: HTMLElement | null = el;
+      while (curr && curr !== rootEl) {
+        top += curr.offsetTop || 0;
+        curr = (curr.offsetParent as HTMLElement) || null;
+      }
+      return top + (el.offsetHeight || 0) / 2;
+    };
+    setInTop(centerFromRoot(inRef.current));
+    setVolTop(centerFromRoot(volRef.current));
+  }, []);
+
+  React.useLayoutEffect(() => {
+    compute();
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(() => compute());
+      if (rootRef.current) ro.observe(rootRef.current);
+      if (cardRef.current) ro.observe(cardRef.current);
+      if (inRef.current) ro.observe(inRef.current);
+      if (volRef.current) ro.observe(volRef.current);
+      return () => ro.disconnect();
+    }
+    const onResize = () => compute();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [compute]);
+
   return (
-    <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 min-w-48 shadow-lg">
-      {/* Node Header */}
-      <div className="flex items-center gap-2 mb-4">
-        <div className="w-3 h-3 rounded-full bg-green-500"></div>
-        <Speaker className="w-4 h-4 text-green-400" />
-        <span className="text-green-300 text-sm font-medium">Speaker</span>
-        <div className="ml-auto">
-          <span className="text-xs text-gray-500 bg-green-900/30 px-2 py-1 rounded">
-            utility
-          </span>
+    <div className="relative" ref={rootRef}>
+      {selected && (
+        <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-xs text-gray-500">ID: {id}</div>
+      )}
+
+      <div ref={cardRef} className={`relative bg-gray-900 rounded-lg p-4 shadow-lg border ${selected ? 'border-green-500' : 'border-green-500/30'}`}>
+        {/* Subtle top-left gradient (Utility = green) */}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-green-500/10 via-green-500/0 to-transparent rounded-lg" />
+        {/* Header full color */}
+        <div className="flex items-center gap-2 mb-3 relative">
+          <SpeakerIcon className="w-4 h-4 text-green-400" />
+          <span className="text-green-400 text-sm font-medium">Speaker</span>
         </div>
-      </div>
 
-      {/* Node ID */}
-      <div className="text-xs text-gray-500 mb-3">ID: {id}</div>
+        {/* Two-column grid */}
+        <div className="grid grid-cols-[minmax(12rem,_auto)_auto] gap-x-8 gap-y-2">
+          {/* Inputs column */}
+          <div className="space-y-2">
+            {/* Audio In label */}
+            <div ref={inRef} className="relative flex items-center">
+              <span className="text-xs text-gray-300">Audio In</span>
+            </div>
 
-      {/* Parameters */}
-      <div className="space-y-3">
-        {/* Volume */}
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Volume</label>
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              value={volume}
-              onChange={(e) =>
-                onParameterChange(id, 'volume', parseFloat(e.target.value))
-              }
-              className="bg-gray-800 border-l-4 border-l-blue-500 border-r border-t border-b border-gray-600 rounded px-2 py-1 text-sm text-white w-20 text-center"
-              min="0"
-              max="1"
-              step="0.1"
-            />
+            {/* Volume param */}
+            <div ref={volRef} className="relative flex items-center">
+              <label className="block text-xs text-gray-300 w-20">Volume</label>
+              <input
+                type="number"
+                value={volume}
+                onChange={(e) => onParameterChange(id, 'volume', parseFloat(e.target.value))}
+                className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm text-white w-24 text-center"
+                min="0"
+                max="1"
+                step="0.1"
+              />
+              <label className="flex items-center gap-2 text-xs text-gray-300 ml-3">
+                <input
+                  type="checkbox"
+                  checked={muted}
+                  onChange={(e) => onParameterChange(id, 'muted', e.target.checked)}
+                  className="bg-gray-800 border border-gray-600 rounded"
+                />
+                Muted
+              </label>
+            </div>
           </div>
-        </div>
 
-        {/* Muted */}
-        <div>
-          <label className="flex items-center gap-2 text-xs text-gray-400">
-            <input
-              type="checkbox"
-              checked={muted}
-              onChange={(e) =>
-                onParameterChange(id, 'muted', e.target.checked)
-              }
-              className="bg-gray-800 border border-gray-600 rounded"
-            />
-            Muted
-          </label>
+          {/* Outputs column (speaker has no audio out) */}
+          <div />
         </div>
       </div>
 
-      {/* Input indicator */}
-      <div className="mt-4 flex justify-start">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-purple-500 border-2 border-purple-300"></div>
-          <span className="text-xs text-gray-400">Audio In → Speakers</span>
-        </div>
-      </div>
-
-      {/* React Flow Handles - only inputs for speaker */}
+      {/* Handles */}
       <Handle
         type="target"
         position={Position.Left}
         id="input"
-        className="!w-3 !h-3 !bg-purple-500 !border-2 !border-purple-300"
-        style={{ top: '50%' }}
+        className="!w-3 !h-3 !rounded-full !bg-gray-200 !border !border-gray-300"
+        style={{ top: inTop, transform: 'translateY(-50%)', left: -6 }}
       />
       <Handle
         type="target"
         position={Position.Left}
         id="volume"
-        className="!w-3 !h-3 !bg-blue-500 !border-2 !border-blue-300"
-        style={{ top: '75%' }}
+        className="!w-3 !h-3 !bg-gray-200 !border !border-gray-300 !rounded-none"
+        style={{ top: volTop, transform: 'translateY(-50%) rotate(45deg)', left: -6 }}
       />
     </div>
   );

@@ -16,11 +16,8 @@ export class AudioManager {
   private audioContext: AudioContext | null = null;
   private audioWorklet: AudioWorkletNode | null = null;
   private isInitialized = false;
-  private isAudioEnabled = false;
   private wasmReady = false; // set true when worklet reports ready
   private sampleRate = 44100;
-  private bufferSize = 512; // not used by worklet (quantum = 128), kept for compatibility
-  private wasmModule: unknown | null = null; // no longer used on main thread
   private audioNodes: Map<string, AudioNodeData> = new Map();
   private nodeConnections: Array<{ from: string; to: string; fromOutput: string; toInput: string }> = [];
 
@@ -97,21 +94,6 @@ export class AudioManager {
           case 'needBootstrap':
             this.bootstrapWasmToWorklet();
             break;
-          case 'ackBootstrap':
-            console.log('[AudioWorklet] bootstrap ack');
-            break;
-          case 'ackNode':
-            console.log('[AudioWorklet] node ack', msg.nodeId);
-            break;
-          case 'ackRemove':
-            console.log('[AudioWorklet] remove ack', msg.nodeId);
-            break;
-          case 'ackConnections':
-            console.log('[AudioWorklet] connections ack', msg.count);
-            break;
-          case 'ackClear':
-            console.log('[AudioWorklet] clear ack');
-            break;
           case 'error':
             console.error('[AudioWorklet]', msg.message);
             break;
@@ -128,7 +110,6 @@ export class AudioManager {
 
       this.audioWorklet = workletNode;
       this.isInitialized = true;
-      this.isAudioEnabled = true;
       console.log('AudioWorklet initialized at sampleRate', this.sampleRate);
       return true;
     } catch (error) {
@@ -159,9 +140,7 @@ export class AudioManager {
       }
     } finally {
       this.isInitialized = false;
-      this.isAudioEnabled = false;
       this.wasmReady = false;
-      console.log('Audio system stopped');
     }
   }
 
@@ -189,14 +168,6 @@ export class AudioManager {
 
   isReady(): boolean {
     return this.wasmReady;
-  }
-
-  isAudioInitialized(): boolean {
-    return this.isInitialized && this.isAudioEnabled;
-  }
-
-  getAudioContext(): AudioContext | null {
-    return this.audioContext;
   }
 
   private async bootstrapWasmToWorklet() {

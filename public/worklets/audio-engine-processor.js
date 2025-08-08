@@ -3,8 +3,6 @@
 // It mirrors the processing previously done in AudioManager ScriptProcessorNode.
 
 /* global registerProcessor, AudioWorkletProcessor, sampleRate */
-// import initAudioEngine, * as AudioEngineWasm from '/audio-engine-wasm/audio_engine.js';
-// ESM import removed; the main thread will bootstrap the WASM glue and bytes.
 
 class EngineProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -169,7 +167,10 @@ class EngineProcessor extends AudioWorkletProcessor {
   _processSpeaker(speakerId, speakerData, outL, outR) {
     if (!this._wasm || speakerData?.muted) return;
 
-    const inputs = this._connections.filter((c) => c.to === speakerId);
+    // Only accept audio connections: from 'output' -> to 'input'
+    const inputs = this._connections.filter(
+      (c) => c.to === speakerId && c.toInput === 'input' && (c.fromOutput === 'output' || !c.fromOutput)
+    );
     if (inputs.length === 0) return;
 
     const N = outL.length;
@@ -249,8 +250,10 @@ class EngineProcessor extends AudioWorkletProcessor {
   }
 
   _processReverb(nodeId, data, outL, outR) {
-    // Gather inputs into a mono buffer, run reverb, mix to stereo
-    const inputs = this._connections.filter((c) => c.to === nodeId);
+    // Only treat audio edges into main audio input
+    const inputs = this._connections.filter(
+      (c) => c.to === nodeId && c.toInput === 'input' && (c.fromOutput === 'output' || !c.fromOutput)
+    );
     if (inputs.length === 0) return;
 
     const N = outL.length;

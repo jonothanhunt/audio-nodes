@@ -6,6 +6,7 @@ import { Waves } from 'lucide-react';
 
 interface ReverbNodeProps {
   id: string;
+  selected?: boolean;
   data: {
     feedback: number;
     wetMix: number;
@@ -13,105 +14,153 @@ interface ReverbNodeProps {
   };
 }
 
-export default function ReverbNode({ id, data }: ReverbNodeProps) {
+export default function ReverbNode({ id, data, selected }: ReverbNodeProps) {
   const { feedback, wetMix, onParameterChange } = data;
 
+  // Refs for measured alignment
+  const rootRef = React.useRef<HTMLDivElement | null>(null);
+  const cardRef = React.useRef<HTMLDivElement | null>(null);
+  const inRef = React.useRef<HTMLDivElement | null>(null);
+  const fbRef = React.useRef<HTMLDivElement | null>(null);
+  const wetRef = React.useRef<HTMLDivElement | null>(null);
+  const outRef = React.useRef<HTMLDivElement | null>(null);
+
+  const [inTop, setInTop] = React.useState(0);
+  const [fbTop, setFbTop] = React.useState(0);
+  const [wetTop, setWetTop] = React.useState(0);
+  const [outTop, setOutTop] = React.useState(0);
+
+  const compute = React.useCallback(() => {
+    const rootEl = rootRef.current as HTMLElement | null;
+    if (!rootEl) return;
+    const centerFromRoot = (el: HTMLElement | null) => {
+      if (!el) return 0;
+      let top = 0;
+      let curr: HTMLElement | null = el;
+      while (curr && curr !== rootEl) {
+        top += curr.offsetTop || 0;
+        curr = (curr.offsetParent as HTMLElement) || null;
+      }
+      return top + (el.offsetHeight || 0) / 2;
+    };
+    setInTop(centerFromRoot(inRef.current));
+    setFbTop(centerFromRoot(fbRef.current));
+    setWetTop(centerFromRoot(wetRef.current));
+    setOutTop(centerFromRoot(outRef.current));
+  }, []);
+
+  React.useLayoutEffect(() => {
+    compute();
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(() => compute());
+      if (rootRef.current) ro.observe(rootRef.current);
+      if (cardRef.current) ro.observe(cardRef.current);
+      if (inRef.current) ro.observe(inRef.current);
+      if (fbRef.current) ro.observe(fbRef.current);
+      if (wetRef.current) ro.observe(wetRef.current);
+      if (outRef.current) ro.observe(outRef.current);
+      return () => ro.disconnect();
+    }
+    const onResize = () => compute();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [compute]);
+
   return (
-    <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 min-w-48 shadow-lg">
-      {/* Node Header */}
-      <div className="flex items-center gap-2 mb-4">
-        <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-        <Waves className="w-4 h-4 text-blue-400" />
-        <span className="text-blue-300 text-sm font-medium">Reverb</span>
-        <div className="ml-auto">
-          <span className="text-xs text-gray-500 bg-blue-900/30 px-2 py-1 rounded">
-            effect
-          </span>
+    <div className="relative" ref={rootRef}>
+      {/* Floating ID when selected */}
+      {selected && (
+        <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-xs text-gray-500">ID: {id}</div>
+      )}
+
+      <div ref={cardRef} className={`relative bg-gray-900 rounded-lg p-4 shadow-lg border ${selected ? 'border-blue-500' : 'border-blue-500/30'}`}>
+        {/* Subtle top-left gradient (Effects = blue) */}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-blue-500/10 via-blue-500/0 to-transparent rounded-lg" />
+        {/* Header full color */}
+        <div className="flex items-center gap-2 mb-3 relative">
+          <Waves className="w-4 h-4 text-blue-400" />
+          <span className="text-blue-400 text-sm font-medium">Reverb</span>
         </div>
-      </div>
 
-      {/* Node ID */}
-      <div className="text-xs text-gray-500 mb-3">ID: {id}</div>
+        {/* Two-column grid */}
+        <div className="grid grid-cols-[minmax(12rem,_auto)_auto] gap-x-8 gap-y-2">
+          {/* Inputs column */}
+          <div className="space-y-2">
+            {/* Audio In label row */}
+            <div ref={inRef} className="relative flex items-center">
+              <span className="text-xs text-gray-300">Audio In</span>
+            </div>
 
-      {/* Parameters */}
-      <div className="space-y-3">
-        {/* Feedback */}
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Feedback</label>
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              value={feedback}
-              onChange={(e) =>
-                onParameterChange(id, 'feedback', parseFloat(e.target.value))
-              }
-              className="bg-gray-800 border-l-4 border-l-blue-500 border-r border-t border-b border-gray-600 rounded px-2 py-1 text-sm text-white w-20 text-center"
-              min="0"
-              max="0.95"
-              step="0.05"
-            />
+            {/* Feedback */}
+            <div ref={fbRef} className="relative flex items-center">
+              <label className="block text-xs text-gray-300 w-20">Feedback</label>
+              <input
+                type="number"
+                value={feedback}
+                onChange={(e) => onParameterChange(id, 'feedback', parseFloat(e.target.value))}
+                className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm text-white w-24 text-center"
+                min="0"
+                max="0.95"
+                step="0.05"
+              />
+            </div>
+
+            {/* Wet Mix */}
+            <div ref={wetRef} className="relative flex items-center">
+              <label className="block text-xs text-gray-300 w-20">Wet Mix</label>
+              <input
+                type="number"
+                value={wetMix}
+                onChange={(e) => onParameterChange(id, 'wetMix', parseFloat(e.target.value))}
+                className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm text-white w-24 text-center"
+                min="0"
+                max="1"
+                step="0.1"
+              />
+            </div>
+          </div>
+
+          {/* Outputs column */}
+          <div className="space-y-2">
+            {/* Audio Out */}
+            <div ref={outRef} className="relative flex items-center justify-end">
+              <span className="text-xs text-gray-300 mr-2">Audio Out</span>
+            </div>
           </div>
         </div>
-
-        {/* Wet Mix */}
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Wet Mix</label>
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              value={wetMix}
-              onChange={(e) =>
-                onParameterChange(id, 'wetMix', parseFloat(e.target.value))
-              }
-              className="bg-gray-800 border-l-4 border-l-blue-500 border-r border-t border-b border-gray-600 rounded px-2 py-1 text-sm text-white w-20 text-center"
-              min="0"
-              max="1"
-              step="0.1"
-            />
-          </div>
-        </div>
       </div>
 
-      {/* Input/Output indicators */}
-      <div className="mt-4 flex justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-purple-500 border-2 border-purple-300"></div>
-          <span className="text-xs text-gray-400">Input</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400">Output</span>
-          <div className="w-3 h-3 rounded-full bg-purple-500 border-2 border-purple-300"></div>
-        </div>
-      </div>
-
-      {/* React Flow Handles - evenly distributed */}
+      {/* Absolute handles aligned */}
+      {/* Audio In (circle) */}
       <Handle
         type="target"
         position={Position.Left}
         id="input"
-        className="!w-3 !h-3 !bg-purple-500 !border-2 !border-purple-300"
-        style={{ top: '25%' }}
+        className="!w-3 !h-3 !rounded-full !bg-gray-200 !border !border-gray-300"
+        style={{ top: inTop, transform: 'translateY(-50%)', left: -6 }}
       />
+      {/* Params (diamonds) */}
       <Handle
         type="target"
         position={Position.Left}
         id="feedback"
-        className="!w-3 !h-3 !bg-blue-500 !border-2 !border-blue-300"
-        style={{ top: '50%' }}
+        className="!w-3 !h-3 !bg-gray-200 !border !border-gray-300 !rounded-none"
+        style={{ top: fbTop, transform: 'translateY(-50%) rotate(45deg)', left: -6 }}
       />
       <Handle
         type="target"
         position={Position.Left}
         id="wetMix"
-        className="!w-3 !h-3 !bg-blue-500 !border-2 !border-blue-300"
-        style={{ top: '75%' }}
+        className="!w-3 !h-3 !bg-gray-200 !border !border-gray-300 !rounded-none"
+        style={{ top: wetTop, transform: 'translateY(-50%) rotate(45deg)', left: -6 }}
       />
+      {/* Audio Out (circle) */}
       <Handle
         type="source"
         position={Position.Right}
         id="output"
-        className="!w-3 !h-3 !bg-purple-500 !border-2 !border-purple-300"
-        style={{ top: '50%' }}
+        className="!w-3 !h-3 !rounded-full !bg-gray-200 !border !border-gray-300"
+        style={{ top: outTop, transform: 'translateY(-50%)', right: -6 }}
       />
     </div>
   );

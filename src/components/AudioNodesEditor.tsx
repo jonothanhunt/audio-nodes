@@ -19,13 +19,41 @@ import NodeLibrary from '@/components/NodeLibrary';
 import OscillatorNode from '@/components/nodes/OscillatorNode';
 import ReverbNode from '@/components/nodes/ReverbNode';
 import SpeakerNode from '@/components/nodes/SpeakerNode';
+import SequencerNode from '@/components/nodes/SequencerNode';
 import { AudioManager } from '@/lib/audioManager';
+
+// Map handle ids to semantic roles so we can validate connections
+function getHandleRole(nodeType: string | undefined, handleId: string | undefined): 'audio-in' | 'audio-out' | 'param-in' | 'midi-out' | 'unknown' {
+  switch (nodeType) {
+    case 'oscillator':
+      if (handleId === 'output') return 'audio-out';
+      if (handleId === 'frequency' || handleId === 'amplitude') return 'param-in';
+      return 'unknown';
+    case 'reverb':
+      if (handleId === 'input') return 'audio-in';
+      if (handleId === 'output') return 'audio-out';
+      if (handleId === 'feedback' || handleId === 'wetMix') return 'param-in';
+      return 'unknown';
+    case 'speaker':
+      if (handleId === 'input') return 'audio-in';
+      if (handleId === 'volume') return 'param-in';
+      return 'unknown';
+    case 'sequencer':
+      if (handleId === 'midi') return 'midi-out';
+      if (handleId === 'play') return 'param-in';
+      if (handleId === 'bpm') return 'param-in';
+      return 'unknown';
+    default:
+      return 'unknown';
+  }
+}
 
 // Define custom node types outside component to avoid React Flow warning
 const nodeTypes = {
   oscillator: OscillatorNode,
   reverb: ReverbNode,
   speaker: SpeakerNode,
+  sequencer: SequencerNode,
 };
 
 // Initial node configurations
@@ -58,6 +86,16 @@ const initialNodes: Node[] = [
     data: {
       volume: 0.8,
       muted: false,
+      onParameterChange: () => {},
+    },
+  },
+  {
+    id: '4',
+    type: 'sequencer',
+    position: { x: 100, y: 300 },
+    data: {
+      length: 16,
+      octaves: 1,
       onParameterChange: () => {},
     },
   },
@@ -161,9 +199,21 @@ export default function AudioNodesEditor() {
     });
   }, [handleParameterChange, setNodes, audioManager]);
 
+  // Validate that only audio-out -> audio-in connections are allowed (and reserve midi/event for future)
+  const isValidConnection = useCallback((connection: Connection) => {
+    const sourceNode = nodes.find((n) => n.id === connection.source);
+    const targetNode = nodes.find((n) => n.id === connection.target);
+    if (!sourceNode || !targetNode) return false;
+
+    const fromRole = getHandleRole(sourceNode.type, connection.sourceHandle || undefined);
+    const toRole = getHandleRole(targetNode.type, connection.targetHandle || undefined);
+
+    return fromRole === 'audio-out' && toRole === 'audio-in';
+  }, [nodes]);
+
   const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
-    [setEdges]
+    (params: Connection) => setEdges((eds) => (isValidConnection(params) ? addEdge(params, eds) : eds)),
+    [setEdges, isValidConnection]
   );
 
   const onAddNode = useCallback((type: string) => {
@@ -246,8 +296,10 @@ export default function AudioNodesEditor() {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             nodeTypes={nodeTypes}
+            proOptions={{ hideAttribution: true }}
             fitView
             className="react-flow-dark"
+            isValidConnection={isValidConnection}
           >
             <Controls className="react-flow-controls-dark" />
             <MiniMap className="react-flow-minimap-dark" />
@@ -279,6 +331,12 @@ function getDefaultNodeData(type: string, onParameterChange: (nodeId: string, pa
       return {
         volume: 0.8,
         muted: false,
+        onParameterChange,
+      };
+    case 'sequencer':
+      return {
+        length: 16,
+        octaves: 1,
         onParameterChange,
       };
     default:
