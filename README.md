@@ -1,36 +1,151 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AudioNodes V3
 
-## Getting Started
+A Next.js-based visual audio programming environment using Rust/WebAssembly for audio processing.
 
-First, run the development server:
+## 🎵 Features
 
+- **Node-based audio editor** with visual programming interface
+- **Rust/WASM audio engine** for high-performance audio processing
+- **Real-time parameter control** with live audio updates
+- **Three core nodes**: Oscillator, Reverb, and Speaker
+- **Dark theme UI** matching professional audio software
+
+## 🛠️ Tech Stack
+
+- **Frontend**: Next.js 15, TypeScript, Tailwind CSS, React Flow
+- **Audio Engine**: Rust with wasm-bindgen
+- **Build Tools**: wasm-pack, Turbopack
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Node.js 18+ 
+- Rust with wasm-pack installed
+
+### Installation
+
+1. Clone the repository:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone <repository-url>
+cd audio-nodes-v3
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Install dependencies:
+```bash
+npm install
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Build the Rust/WASM audio engine:
+```bash
+cd audio-engine
+wasm-pack build --target web
+cd ..
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4. Start the development server:
+```bash
+npm run dev
+```
 
-## Learn More
+5. Open [http://localhost:3000](http://localhost:3000) to view the application.
 
-To learn more about Next.js, take a look at the following resources:
+## 📁 Project Structure
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
+audio-nodes-v3/
+├── src/
+│   ├── app/                    # Next.js App Router
+│   ├── components/             # React components
+│   │   ├── nodes/             # Node UI components
+│   │   │   ├── OscillatorNode.tsx
+│   │   │   ├── ReverbNode.tsx
+│   │   │   └── SpeakerNode.tsx
+│   │   ├── AudioNodesEditor.tsx
+│   │   └── NodeLibrary.tsx
+│   ├── hooks/
+│   │   └── useWasm.ts         # WASM integration hook
+│   └── audio-engine-wasm/     # Generated WASM package
+├── audio-engine/              # Rust audio processing
+│   ├── src/
+│   │   ├── nodes/             # Audio processing nodes
+│   │   │   ├── oscillator.rs
+│   │   │   ├── reverb.rs
+│   │   │   └── speaker.rs
+│   │   ├── lib.rs
+│   │   └── nodes/mod.rs
+│   └── Cargo.toml
+└── README.md
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🎛️ Available Nodes
 
-## Deploy on Vercel
+### Oscillator Node
+- **Type**: Synthesis
+- **Parameters**: Frequency, Amplitude, Waveform
+- **Waveforms**: Sine, Square, Sawtooth, Triangle
+- **Outputs**: Audio signal
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Reverb Node  
+- **Type**: Effect
+- **Parameters**: Feedback, Wet Mix
+- **Inputs**: Audio signal
+- **Outputs**: Processed audio with reverb
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Speaker Node
+- **Type**: Utility  
+- **Parameters**: Volume, Mute
+- **Inputs**: Audio signal
+- **Outputs**: Final audio output
+
+## 🔧 Adding New Nodes
+
+To add a new audio node:
+
+1. Create the Rust implementation in `audio-engine/src/nodes/new_node.rs`
+2. Create the UI component in `src/components/nodes/NewNode.tsx`
+3. Update `audio-engine/src/nodes/mod.rs` to export the new node
+4. Add the node to the node library in `src/components/NodeLibrary.tsx`
+5. Register the node type in `src/components/AudioNodesEditor.tsx`
+6. Rebuild the WASM package
+
+## 🎯 Architecture
+
+### Audio Processing
+- All audio processing happens in Rust/WASM
+- No Web Audio API usage (except for final output)
+- Real-time parameter updates from UI to audio engine
+- Fixed buffer size processing (512 samples)
+
+### UI Layer
+- React Flow for node-based editing
+- TypeScript for type safety
+- Tailwind CSS for consistent styling
+- Real-time parameter binding
+
+## 📝 Scripts
+
+- `npm run dev` - Start development server with Turbopack
+- `npm run build` - Build for production
+- `npm run build:wasm` - Build Rust/WASM audio engine
+- `npm run wasm:watch` - Auto-rebuild WASM when Rust files change (requires `watchexec`)
+- `npm run start` - Start production server
+- `npm run lint` - Run ESLint
+
+### WASM Development Workflow
+
+1. **Quick rebuild**: `npm run build:wasm`
+2. **Auto-rebuild during development**: `npm run wasm:watch` (install `watchexec` first: `cargo install watchexec-cli`)
+3. **Manual rebuild**: `./build-wasm.sh`
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Add your node implementations (both Rust and TypeScript)
+4. Test the audio processing
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License.

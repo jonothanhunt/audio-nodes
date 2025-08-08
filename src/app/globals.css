@@ -24,3 +24,56 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* React Flow Dark Theme */
+.react-flow-dark {
+  background: #111827;
+  color: #ffffff;
+}
+
+.react-flow-dark .react-flow__edge-path {
+  stroke: #6b7280;
+}
+
+.react-flow-dark .react-flow__edge.selected .react-flow__edge-path {
+  stroke: #8b5cf6;
+}
+
+.react-flow-dark .react-flow__connection-line {
+  stroke: #6b7280;
+}
+
+.react-flow-dark .react-flow__controls {
+  background: #1f2937;
+  border: 1px solid #374151;
+}
+
+.react-flow-controls-dark {
+  background: #1f2937 !important;
+  border: 1px solid #374151 !important;
+}
+
+.react-flow-controls-dark button {
+  background: #1f2937 !important;
+  color: #ffffff !important;
+  border-bottom: 1px solid #374151 !important;
+}
+
+.react-flow-controls-dark button:hover {
+  background: #374151 !important;
+}
+
+.react-flow-minimap-dark {
+  background: #1f2937 !important;
+  border: 1px solid #374151 !important;
+}
+
+.react-flow-minimap-dark .react-flow__minimap-mask {
+  fill: #111827 !important;
+  fill-opacity: 0.6 !important;
+}
+
+.react-flow-minimap-dark .react-flow__minimap-node {
+  fill: #6b7280 !important;
+  stroke: #9ca3af !important;
+}

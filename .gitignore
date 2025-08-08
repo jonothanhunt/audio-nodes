@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# rust/wasm build artifacts
+/audio-engine/target/
+/audio-engine/pkg/
+/audio-engine/Cargo.lock
+/src/audio-engine-wasm/*.wasm
+/src/audio-engine-wasm/*.js
+/src/audio-engine-wasm/*.d.ts
+/src/audio-engine-wasm/package.json
+/src/audio-engine-wasm/.gitignore
