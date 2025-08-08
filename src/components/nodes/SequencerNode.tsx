@@ -308,7 +308,7 @@ export default function SequencerNode({
         {/* Header */}
         <div className="flex items-center gap-2 mb-3 relative">
           <Music className="w-4 h-4 text-amber-400" />
-          <span className="text-amber-400 text-sm font-medium">Sequencer</span>
+          <span className="title-font font-w-70 text-amber-400 text-sm">Sequencer</span>
         </div>
 
         {/* Controls + Output label */}

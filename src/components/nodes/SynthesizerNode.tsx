@@ -127,7 +127,7 @@ export default function SynthesizerNode({ id, data, selected }: SynthNodeProps) 
 
         <div className="flex items-center gap-2 mb-3 relative">
           <Volume2 className="w-4 h-4 text-purple-400" />
-          <span className="text-purple-400 text-sm font-medium">Synth</span>
+          <span className="title-font font-w-70 text-purple-400 text-sm">Synth</span>
         </div>
 
         <div className="grid grid-cols-[minmax(16rem,_auto)] gap-y-2">

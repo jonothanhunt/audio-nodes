@@ -70,7 +70,7 @@ export default function SpeakerNode({ id, data, selected }: SpeakerNodeProps) {
         {/* Header full color */}
         <div className="flex items-center gap-2 mb-3 relative">
           <SpeakerIcon className="w-4 h-4 text-green-400" />
-          <span className="text-green-400 text-sm font-medium">Speaker</span>
+          <span className="title-font font-w-70 text-green-400 text-sm">Speaker</span>
         </div>
 
         {/* Two-column grid */}

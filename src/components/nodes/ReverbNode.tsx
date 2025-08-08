@@ -79,7 +79,7 @@ export default function ReverbNode({ id, data, selected }: ReverbNodeProps) {
         {/* Header full color */}
         <div className="flex items-center gap-2 mb-3 relative">
           <Waves className="w-4 h-4 text-blue-400" />
-          <span className="text-blue-400 text-sm font-medium">Reverb</span>
+          <span className="title-font font-w-70 text-blue-400 text-sm">Reverb</span>
         </div>
 
         {/* Two-column grid */}

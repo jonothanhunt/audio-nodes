@@ -144,25 +144,52 @@ export default function NodeLibrary({ onAddNode }: NodeLibraryProps) {
               <div className="space-y-2">
                 {categoryNodes.map(node => {
                   const Icon = node.icon;
-                  const colorClasses: Record<string, string> = {
-                    purple: 'bg-purple-600 hover:bg-purple-700 border-purple-500',
-                    blue: 'bg-blue-600 hover:bg-blue-700 border-blue-500',
-                    green: 'bg-green-600 hover:bg-green-700 border-green-500',
-                    amber: 'bg-amber-600 hover:bg-amber-700 border-amber-500',
+                  const styles: Record<string, { border: string; hoverBorder: string; title: string; icon: string; gradientFrom: string }>= {
+                    purple: {
+                      border: 'border-purple-500/30',
+                      hoverBorder: 'hover:border-purple-500',
+                      title: 'text-purple-400',
+                      icon: 'text-purple-400',
+                      gradientFrom: 'from-purple-500/10',
+                    },
+                    blue: {
+                      border: 'border-blue-500/30',
+                      hoverBorder: 'hover:border-blue-500',
+                      title: 'text-blue-400',
+                      icon: 'text-blue-400',
+                      gradientFrom: 'from-blue-500/10',
+                    },
+                    green: {
+                      border: 'border-green-500/30',
+                      hoverBorder: 'hover:border-green-500',
+                      title: 'text-green-400',
+                      icon: 'text-green-400',
+                      gradientFrom: 'from-green-500/10',
+                    },
+                    amber: {
+                      border: 'border-amber-500/30',
+                      hoverBorder: 'hover:border-amber-500',
+                      title: 'text-amber-400',
+                      icon: 'text-amber-400',
+                      gradientFrom: 'from-amber-500/10',
+                    },
                   };
-                  const nodeColorClass = colorClasses[node.color] || colorClasses['purple'];
+                  const s = styles[node.color] ?? styles.purple;
 
                   return (
                     <button
                       key={node.type}
                       onClick={() => onAddNode(node.type)}
-                      className={`w-full p-3 rounded-lg border ${nodeColorClass} transition-colors group`}
+                      className={`relative w-full p-3 rounded-lg border ${s.border} ${s.hoverBorder} bg-gray-900 shadow-lg transition-colors`}
                     >
-                      <div className="flex items-start gap-3">
-                        <Icon className="w-4 h-4 text-white flex-shrink-0 mt-0.5" />
+                      {/* subtle gradient overlay to match nodes */}
+                      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${s.gradientFrom} via-transparent to-transparent rounded-lg`} />
+
+                      <div className="relative flex items-start gap-3">
+                        <Icon className={`w-4 h-4 ${s.icon} flex-shrink-0 mt-0.5`} />
                         <div className="flex-1 text-left">
                           <div className="flex items-center justify-between mb-1">
-                            <span className="text-sm font-medium text-white">
+                            <span className={`title-font font-w-70 ${s.title} text-sm`}>
                               {node.name}
                             </span>
                             <span className="text-xs text-gray-300 bg-black/20 px-1.5 py-0.5 rounded">

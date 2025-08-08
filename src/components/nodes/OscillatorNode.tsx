@@ -93,7 +93,7 @@ export default function OscillatorNode({ id, data, selected }: OscillatorNodePro
         {/* Header with full color */}
         <div className="flex items-center gap-2 mb-3 relative">
           <Volume2 className="w-4 h-4 text-purple-400" />
-          <span className="text-purple-400 text-sm font-medium">Oscillator</span>
+          <span className="title-font font-w-70 text-purple-400 text-sm">Oscillator</span>
         </div>
 
         {/* Grid: inputs (left) | outputs (right) */}
