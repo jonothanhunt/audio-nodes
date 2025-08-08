@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useState, useMemo } from 'react';
+import React, { useCallback, useState } from 'react';
 import ReactFlow, {
   MiniMap,
   Controls,
@@ -19,7 +19,6 @@ import NodeLibrary from '@/components/NodeLibrary';
 import OscillatorNode from '@/components/nodes/OscillatorNode';
 import ReverbNode from '@/components/nodes/ReverbNode';
 import SpeakerNode from '@/components/nodes/SpeakerNode';
-import useWasm from '@/hooks/useWasm';
 import { AudioManager } from '@/lib/audioManager';
 
 // Define custom node types outside component to avoid React Flow warning
@@ -72,7 +71,6 @@ export default function AudioNodesEditor() {
   const [audioInitialized, setAudioInitialized] = useState(false);
   const [wasmReady, setWasmReady] = useState(false);
   const [audioManager] = useState(() => new AudioManager());
-  const { loading, error } = useWasm();
 
   // Poll for WASM readiness
   React.useEffect(() => {
@@ -179,11 +177,6 @@ export default function AudioNodesEditor() {
   }, [nodes.length, setNodes, handleParameterChange]);
 
   const handleInitializeAudio = useCallback(async () => {
-    if (!wasmReady) {
-      console.error('WASM not ready yet');
-      return;
-    }
-    
     try {
       const success = await audioManager.initializeAudio();
       if (success) {
@@ -195,18 +188,7 @@ export default function AudioNodesEditor() {
     } catch (error) {
       console.error('Error initializing audio:', error);
     }
-  }, [audioManager, wasmReady]);
-
-  if (error) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-gray-900 text-white">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Error Loading Audio Engine</h1>
-          <p className="text-gray-400">{error}</p>
-        </div>
-      </div>
-    );
-  }
+  }, [audioManager]);
 
   return (
     <div className="h-screen flex bg-gray-900">
@@ -228,27 +210,24 @@ export default function AudioNodesEditor() {
                 audioInitialized 
                   ? 'bg-green-500' 
                   : wasmReady 
-                    ? 'bg-yellow-500' 
-                    : 'bg-red-500'
+                    ? 'bg-blue-500' 
+                    : 'bg-yellow-500'
               }`}></div>
               <span className="text-xs text-gray-400">
                 {audioInitialized 
                   ? 'Audio Ready' 
                   : wasmReady 
-                    ? 'Click to Initialize' 
-                    : 'Loading WASM...'}
+                    ? 'Engine Ready' 
+                    : 'Idle'}
               </span>
             </div>
             
             {!audioInitialized && (
               <button
                 onClick={handleInitializeAudio}
-                disabled={loading || !wasmReady}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white ${
-                  loading || !wasmReady ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white`}
               >
-                {loading ? 'Loading...' : wasmReady ? 'Initialize Audio' : 'Loading WASM...'}
+                Initialize Audio
               </button>
             )}
             
