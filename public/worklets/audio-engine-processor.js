@@ -276,6 +276,7 @@ class EngineProcessor extends AudioWorkletProcessor {
     try {
       const wf = this._getWaveformIndex(data.waveform || 'sawtooth');
       synth.set_waveform?.(wf);
+      if (typeof data.maxVoices === 'number') synth.set_max_voices?.(Math.max(1, Math.min(32, data.maxVoices|0)));
       if (
         typeof data.attack === 'number' ||
         typeof data.decay === 'number' ||
