@@ -48,6 +48,8 @@ pub struct SynthNode {
     // Polyphony
     max_voices: usize,
     voices: Vec<Voice>,
+    // Smoothed mix gain to avoid clicks when voice count changes
+    mix_gain: f32,
 }
 
 #[wasm_bindgen]
@@ -66,6 +68,7 @@ impl SynthNode {
             glide_time_sec: 0.0,
             max_voices,
             voices: vec![Voice::new(); max_voices],
+            mix_gain: 1.0,
         }
     }
 
@@ -158,9 +161,11 @@ impl SynthNode {
     #[wasm_bindgen]
     pub fn process(&mut self, output: &mut [f32]) {
         let dt = 1.0 / self.sample_rate;
+        let tau = 0.005; // 5 ms smoothing for mix gain
+        let a = dt / (tau + dt); // one-pole smoothing coefficient
         for sample in output.iter_mut() {
             let mut acc = 0.0f32;
-            let mut active_count = 0usize;
+            let mut voices_on = 0usize;
             for v in self.voices.iter_mut() {
                 if !v.active && v.env <= 0.0 { continue; }
                 // Glide
@@ -195,10 +200,13 @@ impl SynthNode {
                 acc += osc * v.env;
                 v.phase += phase_inc;
                 if v.phase >= 2.0 * std::f32::consts::PI { v.phase -= 2.0 * std::f32::consts::PI; }
-                if v.active || v.env > 0.0 { active_count += 1; }
+                if v.active || v.env > 0.0 { voices_on += 1; }
             }
-            let norm = if active_count > 0 { 1.0 / active_count as f32 } else { 1.0 };
-            let s = acc * self.gain * norm;
+            // Smoothly approach target normalization to avoid clicks on voice-count changes
+            let target = if voices_on > 0 { 1.0 / voices_on as f32 } else { 1.0 };
+            self.mix_gain += (target - self.mix_gain) * a;
+
+            let s = acc * self.gain * self.mix_gain;
             *sample = if s.is_finite() { s } else { 0.0 };
         }
     }
