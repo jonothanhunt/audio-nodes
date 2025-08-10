@@ -44,8 +44,19 @@ next-env.d.ts
 /audio-engine/target/
 /audio-engine/pkg/
 /audio-engine/Cargo.lock
-/src/audio-engine-wasm/*.wasm
-/src/audio-engine-wasm/*.js
-/src/audio-engine-wasm/*.d.ts
-/src/audio-engine-wasm/package.json
-/src/audio-engine-wasm/.gitignore
+# (Allow committing generated wasm-bindgen JS/types so Vercel serves them)
+# Previously ignored (commented out so they are now tracked):
+# /src/audio-engine-wasm/*.wasm
+# /src/audio-engine-wasm/*.js
+# /src/audio-engine-wasm/*.d.ts
+# /src/audio-engine-wasm/package.json
+# /src/audio-engine-wasm/.gitignore
+
+# Explicitly include wasm-bindgen artifacts (in case of broader patterns elsewhere)
+!public/audio-engine-wasm/
+!public/audio-engine-wasm/**
+!src/audio-engine-wasm/
+!src/audio-engine-wasm/**
+
+# personal learning notes (do not commit)
+LEARNING-RUST-WASM.md

@@ -32,8 +32,9 @@ export class SpeakerNode {
 export class SynthNode {
   free(): void;
   constructor(sample_rate: number);
-  note_on(note: number, _velocity: number): void;
+  note_on(note: number, velocity: number): void;
   note_off(note: number): void;
+  sustain_pedal(down: boolean): void;
   set_waveform(waveform: number): void;
   set_adsr(attack: number, decay: number, sustain: number, release: number): void;
   set_glide(time_ms: number): void;
@@ -57,6 +58,7 @@ export interface InitOutput {
   readonly synthnode_new: (a: number) => number;
   readonly synthnode_note_on: (a: number, b: number, c: number) => void;
   readonly synthnode_note_off: (a: number, b: number) => void;
+  readonly synthnode_sustain_pedal: (a: number, b: number) => void;
   readonly synthnode_set_waveform: (a: number, b: number) => void;
   readonly synthnode_set_adsr: (a: number, b: number, c: number, d: number, e: number) => void;
   readonly synthnode_set_glide: (a: number, b: number) => void;

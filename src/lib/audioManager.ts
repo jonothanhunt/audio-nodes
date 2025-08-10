@@ -199,7 +199,26 @@ export class AudioManager {
         fetch(`/audio-engine-wasm/audio_engine.js?v=${cacheBust}`),
         fetch(`/audio-engine-wasm/audio_engine_bg.wasm?v=${cacheBust}`),
       ]);
+
+      if (!glueRes.ok || !wasmRes.ok) {
+        console.error('[AudioManager] WASM asset fetch failed', { glueStatus: glueRes.status, wasmStatus: wasmRes.status });
+        const sample = await glueRes.text().catch(() => '');
+        if (sample.startsWith('<')) {
+          console.error('[AudioManager] Glue request returned HTML (likely 404) – did you commit public/audio-engine-wasm/* or run build:wasm?');
+        }
+        this.audioWorklet.port.postMessage({
+          type: 'error',
+          message: `WASM assets missing (glue ${glueRes.status}, wasm ${wasmRes.status}). Ensure public/audio-engine-wasm is present in deployment.`,
+        });
+        return;
+      }
+
       const glue = await glueRes.text();
+      if (glue.trim().startsWith('<')) {
+        console.error('[AudioManager] Received HTML instead of JS for glue file (probably 404).');
+        this.audioWorklet.port.postMessage({ type: 'error', message: 'Received HTML instead of wasm-bindgen glue (missing build?)' });
+        return;
+      }
       const wasm = await wasmRes.arrayBuffer();
       this.audioWorklet.port.postMessage({ type: 'bootstrapWasm', glue, wasm });
     } catch (err) {

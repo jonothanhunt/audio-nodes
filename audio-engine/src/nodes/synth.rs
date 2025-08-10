@@ -12,11 +12,13 @@ pub enum Waveform {
 struct Voice {
     note: u8,
     active: bool,
-    gate: bool,
+    key_down: bool,        // physical key state
+    gate: bool,            // envelope gate (may remain true while sustain pedal held)
     freq_target: f32,
     freq_current: f32,
     env: f32,
     phase: f32,
+    velocity: f32,         // 0..1
 }
 
 impl Voice {
@@ -24,11 +26,13 @@ impl Voice {
         Self {
             note: 0,
             active: false,
+            key_down: false,
             gate: false,
             freq_target: 0.0,
             freq_current: 0.0,
             env: 0.0,
             phase: 0.0,
+            velocity: 0.0,
         }
     }
 }
@@ -50,6 +54,8 @@ pub struct SynthNode {
     voices: Vec<Voice>,
     // Smoothed mix gain to avoid clicks when voice count changes
     mix_gain: f32,
+    // Sustain pedal state
+    sustain_pedal: bool,
 }
 
 #[wasm_bindgen]
@@ -69,31 +75,35 @@ impl SynthNode {
             max_voices,
             voices: vec![Voice::new(); max_voices],
             mix_gain: 1.0,
+            sustain_pedal: false,
         }
     }
 
     #[wasm_bindgen]
-    pub fn note_on(&mut self, note: u8, _velocity: u8) {
+    pub fn note_on(&mut self, note: u8, velocity: u8) {
         let freq = midi_to_freq(note);
+        let vel = (velocity as f32 / 127.0).clamp(0.0, 1.0);
         // Reuse voice with same note if present
         if let Some(v) = self.voices.iter_mut().find(|v| v.active && v.note == note) {
-            v.gate = true;
+            v.key_down = true;
+            v.gate = true; // ensure envelope gate high
             v.freq_target = freq;
-            if self.glide_time_sec <= 0.0 {
-                v.freq_current = freq;
-            }
-            v.env = 0.0; // retrigger
+            if self.glide_time_sec <= 0.0 { v.freq_current = freq; }
+            v.env = 0.0; // retrigger envelope
+            v.velocity = vel;
             return;
         }
         // Find free voice
         if let Some(v) = self.voices.iter_mut().find(|v| !v.active) {
             v.note = note;
             v.active = true;
+            v.key_down = true;
             v.gate = true;
             v.freq_target = freq;
             v.freq_current = if self.glide_time_sec <= 0.0 { freq } else { v.freq_current.max(20.0) };
             v.env = 0.0;
             v.phase = 0.0;
+            v.velocity = vel;
             return;
         }
         // Steal the quietest voice (lowest env)
@@ -105,18 +115,33 @@ impl SynthNode {
             let v = &mut self.voices[idx];
             v.note = note;
             v.active = true;
+            v.key_down = true;
             v.gate = true;
             v.freq_target = freq;
             v.freq_current = if self.glide_time_sec <= 0.0 { freq } else { v.freq_current.max(20.0) };
             v.env = 0.0;
             v.phase = 0.0;
+            v.velocity = vel;
         }
     }
 
     #[wasm_bindgen]
     pub fn note_off(&mut self, note: u8) {
         for v in self.voices.iter_mut().filter(|v| v.active && v.note == note) {
-            v.gate = false;
+            v.key_down = false;
+            if !self.sustain_pedal { v.gate = false; }
+        }
+    }
+
+    #[wasm_bindgen]
+    pub fn sustain_pedal(&mut self, down: bool) {
+        if self.sustain_pedal == down { return; }
+        self.sustain_pedal = down;
+        if !down {
+            // Pedal released: any voices with key up should release now
+            for v in self.voices.iter_mut() {
+                if !v.key_down { v.gate = false; }
+            }
         }
     }
 
@@ -186,7 +211,7 @@ impl SynthNode {
                     if self.release <= 0.0 { v.env = 0.0; } else { v.env -= dt * (1.0 / self.release); if v.env < 0.0 { v.env = 0.0; } }
                     if v.env <= 0.0 { v.active = false; }
                 }
-                // Osc
+                // Oscillator
                 let phase_inc = 2.0 * std::f32::consts::PI * v.freq_current / self.sample_rate;
                 let osc = match self.waveform {
                     Waveform::Sine => v.phase.sin(),
@@ -197,15 +222,14 @@ impl SynthNode {
                         if t < 0.5 { 4.0 * t - 1.0 } else { 3.0 - 4.0 * t }
                     }
                 };
-                acc += osc * v.env;
+                acc += osc * v.env * v.velocity; // velocity applied here
                 v.phase += phase_inc;
                 if v.phase >= 2.0 * std::f32::consts::PI { v.phase -= 2.0 * std::f32::consts::PI; }
                 if v.active || v.env > 0.0 { voices_on += 1; }
             }
-            // Smoothly approach target normalization to avoid clicks on voice-count changes
+            // Smooth mix gain (normalize by active voices)
             let target = if voices_on > 0 { 1.0 / voices_on as f32 } else { 1.0 };
             self.mix_gain += (target - self.mix_gain) * a;
-
             let s = acc * self.gain * self.mix_gain;
             *sample = if s.is_finite() { s } else { 0.0 };
         }

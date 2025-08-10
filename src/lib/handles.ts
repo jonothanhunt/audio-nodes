@@ -50,6 +50,9 @@ export function getHandleRole(
       )
         return "param-in";
       return "unknown";
+    case "midi-input":
+      if (handleId === "midi") return "midi-out"; // expose hardware MIDI as source
+      return "unknown";
     default:
       return "unknown";
   }

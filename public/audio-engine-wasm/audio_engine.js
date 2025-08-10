@@ -314,16 +314,22 @@ export class SynthNode {
     }
     /**
      * @param {number} note
-     * @param {number} _velocity
+     * @param {number} velocity
      */
-    note_on(note, _velocity) {
-        wasm.synthnode_note_on(this.__wbg_ptr, note, _velocity);
+    note_on(note, velocity) {
+        wasm.synthnode_note_on(this.__wbg_ptr, note, velocity);
     }
     /**
      * @param {number} note
      */
     note_off(note) {
         wasm.synthnode_note_off(this.__wbg_ptr, note);
+    }
+    /**
+     * @param {boolean} down
+     */
+    sustain_pedal(down) {
+        wasm.synthnode_sustain_pedal(this.__wbg_ptr, down);
     }
     /**
      * @param {number} waveform

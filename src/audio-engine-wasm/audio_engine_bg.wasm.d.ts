@@ -12,6 +12,7 @@ export const __wbg_synthnode_free: (a: number, b: number) => void;
 export const synthnode_new: (a: number) => number;
 export const synthnode_note_on: (a: number, b: number, c: number) => void;
 export const synthnode_note_off: (a: number, b: number) => void;
+export const synthnode_sustain_pedal: (a: number, b: number) => void;
 export const synthnode_set_waveform: (a: number, b: number) => void;
 export const synthnode_set_adsr: (a: number, b: number, c: number, d: number, e: number) => void;
 export const synthnode_set_glide: (a: number, b: number) => void;

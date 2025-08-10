@@ -64,6 +64,14 @@ const nodeCategories: {
         icon: Music as unknown as IconType,
         color: 'amber',
         tag: 'midi'
+      },
+      {
+        type: 'midi-input',
+        name: 'MIDI In',
+        description: 'Hardware MIDI input',
+        icon: Music as unknown as IconType,
+        color: 'amber',
+        tag: 'midi'
       }
     ]
   },

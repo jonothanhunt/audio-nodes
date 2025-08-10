@@ -53,6 +53,15 @@ export function getDefaultNodeData(
         maxVoices: 8,
         onParameterChange,
       };
+    case "midi-input":
+      return {
+        deviceId: "",
+        channel: "all",
+        status: "idle",
+        devices: [],
+        onParameterChange,
+        onEmitMidi,
+      };
     default:
       return { onParameterChange };
   }

@@ -147,6 +147,9 @@ class EngineProcessor extends AudioWorkletProcessor {
       }
       case 'midi': {
         const { sourceId, events } = msg;
+        if (events && events.length) {
+          try { console.log('[Worklet MIDI] recv', sourceId, events.map(e=>e.data)); } catch {}
+        }
         const midiEdges = this._connections.filter((c) => c.from === sourceId && (c.fromOutput === 'midi' || c.fromOutput === undefined || c.fromOutput === null));
         for (const edge of midiEdges) {
           const q = this._midiQueues.get(edge.to) || [];
@@ -310,19 +313,30 @@ class EngineProcessor extends AudioWorkletProcessor {
     for (const ev of events) {
       const [status, d1, d2] = ev.data;
       const cmd = status & 0xF0;
+      if (cmd === 0x90 || cmd === 0x80) {
+        try { console.log('[Worklet MIDI] synth', nodeId, cmd === 0x90 ? 'NoteOn' : 'NoteOff', d1, d2); } catch {}
+      }
       switch (cmd) {
-        case 0x90:
+        case 0x90: // Note On
           if ((d2 & 0x7F) > 0) {
             synth.note_on?.(d1 & 0x7F, d2 & 0x7F);
           } else {
-            synth.note_off?.(d1 & 0x7F);
+            synth.note_off?.(d1 & 0x7F); // treated as Note Off when velocity = 0
           }
           break;
-        case 0x80:
+        case 0x80: // Note Off
           synth.note_off?.(d1 & 0x7F);
           break;
+        case 0xB0: { // Control Change
+          const controller = d1 & 0x7F;
+          if (controller === 64) { // Sustain pedal
+            const down = (d2 & 0x7F) >= 64;
+            synth.sustain_pedal?.(down);
+          }
+          break;
+        }
         default:
-          // ignore other messages for now
+          // ignore others for now
           break;
       }
     }

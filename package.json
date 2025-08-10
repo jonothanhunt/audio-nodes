@@ -1,9 +1,9 @@
 {
-  "name": "audio-nodes-v3",
+  "name": "audio-nodes",
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev",
     "build": "next build",
     "build:wasm": "./build-wasm.sh",
     "wasm:watch": "watchexec -w audio-engine/src './build-wasm.sh'",
