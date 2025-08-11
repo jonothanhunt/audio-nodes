@@ -91,6 +91,52 @@ export class AudioEngine {
     }
 }
 
+const MidiTransposeNodeFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_miditransposenode_free(ptr >>> 0, 1));
+
+export class MidiTransposeNode {
+
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        MidiTransposeNodeFinalization.unregister(this);
+        return ptr;
+    }
+
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_miditransposenode_free(ptr, 0);
+    }
+    constructor() {
+        const ret = wasm.miditransposenode_new();
+        this.__wbg_ptr = ret >>> 0;
+        MidiTransposeNodeFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * @param {number} semitones
+     * @param {number} clamp_low
+     * @param {number} clamp_high
+     * @param {boolean} pass_through_non_note
+     */
+    set_params(semitones, clamp_low, clamp_high, pass_through_non_note) {
+        wasm.miditransposenode_set_params(this.__wbg_ptr, semitones, clamp_low, clamp_high, pass_through_non_note);
+    }
+    /**
+     * @param {number} status
+     * @param {number} data1
+     * @param {number} data2
+     * @returns {Uint8Array}
+     */
+    transform(status, data1, data2) {
+        const ret = wasm.miditransposenode_transform(this.__wbg_ptr, status, data1, data2);
+        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v1;
+    }
+}
+
 const OscillatorNodeFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_oscillatornode_free(ptr >>> 0, 1));

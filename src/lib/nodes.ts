@@ -62,6 +62,14 @@ export function getDefaultNodeData(
         onParameterChange,
         onEmitMidi,
       };
+    case "midi-transpose":
+      return {
+        semitones: 0,
+        clampLow: 0,
+        clampHigh: 127,
+        passOther: true,
+        onParameterChange,
+      };
     default:
       return { onParameterChange };
   }

@@ -72,6 +72,14 @@ const nodeCategories: {
         icon: Music as unknown as IconType,
         color: 'amber',
         tag: 'midi'
+      },
+      {
+        type: 'midi-transpose',
+        name: 'MIDI Transpose',
+        description: 'Shift note pitch ± semitones',
+        icon: Music as unknown as IconType,
+        color: 'amber',
+        tag: 'midi'
       }
     ]
   },

@@ -7,6 +7,12 @@ export class AudioEngine {
   readonly sample_rate: number;
   readonly buffer_size: number;
 }
+export class MidiTransposeNode {
+  free(): void;
+  constructor();
+  set_params(semitones: number, clamp_low: number, clamp_high: number, pass_through_non_note: boolean): void;
+  transform(status: number, data1: number, data2: number): Uint8Array;
+}
 export class OscillatorNode {
   free(): void;
   constructor(sample_rate: number);
@@ -65,6 +71,10 @@ export interface InitOutput {
   readonly synthnode_set_gain: (a: number, b: number) => void;
   readonly synthnode_set_max_voices: (a: number, b: number) => void;
   readonly synthnode_process: (a: number, b: number, c: number, d: any) => void;
+  readonly __wbg_miditransposenode_free: (a: number, b: number) => void;
+  readonly miditransposenode_new: () => number;
+  readonly miditransposenode_set_params: (a: number, b: number, c: number, d: number, e: number) => void;
+  readonly miditransposenode_transform: (a: number, b: number, c: number, d: number) => [number, number];
   readonly __wbg_audioengine_free: (a: number, b: number) => void;
   readonly audioengine_new: (a: number) => number;
   readonly audioengine_sample_rate: (a: number) => number;
@@ -87,6 +97,7 @@ export interface InitOutput {
   readonly speakernode_volume: (a: number) => number;
   readonly __wbindgen_export_0: WebAssembly.Table;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
+  readonly __wbindgen_free: (a: number, b: number, c: number) => void;
   readonly __wbindgen_start: () => void;
 }
 

@@ -19,6 +19,10 @@ export const synthnode_set_glide: (a: number, b: number) => void;
 export const synthnode_set_gain: (a: number, b: number) => void;
 export const synthnode_set_max_voices: (a: number, b: number) => void;
 export const synthnode_process: (a: number, b: number, c: number, d: any) => void;
+export const __wbg_miditransposenode_free: (a: number, b: number) => void;
+export const miditransposenode_new: () => number;
+export const miditransposenode_set_params: (a: number, b: number, c: number, d: number, e: number) => void;
+export const miditransposenode_transform: (a: number, b: number, c: number, d: number) => [number, number];
 export const __wbg_audioengine_free: (a: number, b: number) => void;
 export const audioengine_new: (a: number) => number;
 export const audioengine_sample_rate: (a: number) => number;
@@ -41,4 +45,5 @@ export const speakernode_process: (a: number, b: number, c: number, d: number, e
 export const speakernode_volume: (a: number) => number;
 export const __wbindgen_export_0: WebAssembly.Table;
 export const __wbindgen_malloc: (a: number, b: number) => number;
+export const __wbindgen_free: (a: number, b: number, c: number) => void;
 export const __wbindgen_start: () => void;

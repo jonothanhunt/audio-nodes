@@ -23,6 +23,7 @@ import { useAudioEngine } from "@/hooks/useAudioEngine";
 import { getDefaultNodeData } from "@/lib/nodes";
 import { useProjectPersistence } from "@/hooks/useProjectPersistence";
 import { useGraph } from "@/hooks/useGraph";
+import MidiTransposeNode from "@/components/nodes/MidiTransposeNode";
 
 // Custom node registry
 const nodeTypes = {
@@ -32,6 +33,7 @@ const nodeTypes = {
   sequencer: SequencerNode,
   synth: SynthesizerNode,
   'midi-input': MidiInputNode,
+  'midi-transpose': MidiTransposeNode,
 };
 
 export default function AudioNodesEditor() {

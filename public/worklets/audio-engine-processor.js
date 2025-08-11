@@ -19,6 +19,7 @@ class EngineProcessor extends AudioWorkletProcessor {
     this._oscInstances = new Map(); // nodeId -> wasm.OscillatorNode
     this._reverbInstances = new Map(); // nodeId -> wasm.ReverbNode
     this._synthInstances = new Map(); // nodeId -> wasm.SynthNode (planned)
+    this._transposeInstances = new Map(); // nodeId -> wasm.MidiTransposeNode
 
     this._midiQueues = new Map(); // nodeId -> Array of events for next blocks
     this._timebase = { perfNowMs: 0, audioCurrentTimeSec: 0 };
@@ -27,6 +28,8 @@ class EngineProcessor extends AudioWorkletProcessor {
 
     // Ask main thread to bootstrap the WASM into the worklet
     this._initWasm();
+
+    this._transposeNoteState = new Map(); // nodeId -> { active: Map<key, transposedNote>, lastSemitones: number }
   }
 
   async _initWasm() {
@@ -55,6 +58,7 @@ class EngineProcessor extends AudioWorkletProcessor {
       code += '\ntry { globalThis.ReverbNode = typeof ReverbNode !== "undefined" ? ReverbNode : globalThis.ReverbNode; } catch(_){}';
       code += '\ntry { globalThis.SpeakerNode = typeof SpeakerNode !== "undefined" ? SpeakerNode : globalThis.SpeakerNode; } catch(_){}';
       code += '\ntry { globalThis.SynthNode = typeof SynthNode !== "undefined" ? SynthNode : globalThis.SynthNode; } catch(_){}';
+      code += '\ntry { globalThis.MidiTransposeNode = typeof MidiTransposeNode !== "undefined" ? MidiTransposeNode : globalThis.MidiTransposeNode; } catch(_){}';
       new Function(code)();
       if (typeof globalThis.__wbg_init_default !== 'function') {
         throw new Error('WASM init function not found after transforming glue');
@@ -66,9 +70,13 @@ class EngineProcessor extends AudioWorkletProcessor {
         ReverbNode: globalThis.ReverbNode,
         SpeakerNode: globalThis.SpeakerNode,
         SynthNode: globalThis.SynthNode,
+        MidiTransposeNode: globalThis.MidiTransposeNode,
       };
       if (typeof this._wasm.SynthNode !== 'function') {
         this.port.postMessage({ type: 'error', message: 'SynthNode constructor missing in worklet (type=' + typeof this._wasm.SynthNode + ')' });
+      }
+      if (typeof this._wasm.MidiTransposeNode !== 'function') {
+        this.port.postMessage({ type: 'error', message: 'MidiTransposeNode constructor missing in worklet' });
       }
       this._ready = true;
       this.port.postMessage({ type: 'ready', sampleRate });
@@ -113,6 +121,8 @@ class EngineProcessor extends AudioWorkletProcessor {
           try { syn.free?.(); } catch {}
           this._synthInstances.delete(nodeId);
         }
+        const tr = this._transposeInstances.get(nodeId);
+        if (tr) { try { tr.free?.(); } catch {} this._transposeInstances.delete(nodeId); }
         try { this.port.postMessage({ type: 'ackRemove', nodeId }); } catch {}
         break;
       }
@@ -134,9 +144,11 @@ class EngineProcessor extends AudioWorkletProcessor {
         for (const inst of this._synthInstances.values()) {
           try { inst.free?.(); } catch {}
         }
+        for (const inst of this._transposeInstances.values()) { try { inst.free?.(); } catch {} }
         this._oscInstances.clear();
         this._reverbInstances.clear();
         this._synthInstances.clear();
+        this._transposeInstances.clear();
         try { this.port.postMessage({ type: 'ackClear' }); } catch {}
         break;
       }
@@ -147,10 +159,7 @@ class EngineProcessor extends AudioWorkletProcessor {
       }
       case 'midi': {
         const { sourceId, events } = msg;
-        if (events && events.length) {
-          try { console.log('[Worklet MIDI] recv', sourceId, events.map(e=>e.data)); } catch {}
-        }
-        const midiEdges = this._connections.filter((c) => c.from === sourceId && (c.fromOutput === 'midi' || c.fromOutput === undefined || c.fromOutput === null));
+        const midiEdges = this._connections.filter((c) => c.from === sourceId && (c.fromOutput === 'midi' || c.fromOutput === 'midi-out' || c.fromOutput == null));
         for (const edge of midiEdges) {
           const q = this._midiQueues.get(edge.to) || [];
           if (Array.isArray(events)) {
@@ -208,13 +217,14 @@ class EngineProcessor extends AudioWorkletProcessor {
         if (!queue || queue.length === 0) continue;
         const nodeData = this._nodes.get(nodeId);
         if (!nodeData) continue;
-        // Only synth will consume for now; others can ignore
         if (nodeData.type === 'synth' && this._processSynthMIDI) {
           const events = queue.splice(0, queue.length);
-          this._processSynthMIDI(nodeId, events, blockStartTimeSec, blockSize);
+            this._processSynthMIDI(nodeId, events, blockStartTimeSec, blockSize);
+        } else if (nodeData.type === 'midi-transpose') {
+          const events = queue.splice(0, queue.length);
+          this._processTransposeMIDI?.(nodeId, nodeData, events, blockStartTimeSec, blockSize);
         } else {
-          // Unknown target, drop
-          queue.length = 0;
+          queue.length = 0; // drop
         }
       }
 
@@ -267,6 +277,17 @@ class EngineProcessor extends AudioWorkletProcessor {
       }
       inst = new Ctor(sampleRate);
       this._synthInstances.set(nodeId, inst);
+    }
+    return inst;
+  }
+
+  _getTransposeInstance(nodeId) {
+    let inst = this._transposeInstances.get(nodeId);
+    if (!inst) {
+      const Ctor = this._wasm && this._wasm.MidiTransposeNode;
+      if (typeof Ctor !== 'function') return null;
+      inst = new Ctor();
+      this._transposeInstances.set(nodeId, inst);
     }
     return inst;
   }
@@ -342,6 +363,93 @@ class EngineProcessor extends AudioWorkletProcessor {
     }
   }
 
+  _processTransposeMIDI(nodeId, data, events /*, blockStartTimeSec, blockSize */) {
+    const inst = this._getTransposeInstance(nodeId);
+    if (!inst) return;
+    const semitones = typeof data.semitones === 'number' ? data.semitones : 0;
+    const clampLow = typeof data.clampLow === 'number' ? data.clampLow : 0;
+    const clampHigh = typeof data.clampHigh === 'number' ? data.clampHigh : 127;
+    const passOther = !!data.passOther;
+    try { inst.set_params?.(semitones, clampLow, clampHigh, passOther); } catch {}
+
+    let state = this._transposeNoteState.get(nodeId);
+    if (!state) { state = { active: new Map(), lastSemitones: semitones }; this._transposeNoteState.set(nodeId, state); }
+
+    const outEvents = [];
+
+    // If semitones changed flush currently active notes
+    if (state.lastSemitones !== semitones) {
+      for (const [key, transposedNote] of state.active.entries()) {
+        const channel = (key >> 7) & 0x0F;
+        outEvents.push({ data: [0x80 | channel, transposedNote & 0x7F, 0] });
+      }
+      state.active.clear();
+      state.lastSemitones = semitones;
+    }
+
+    for (const ev of events) {
+      const d = ev.data;
+      if (!d || d.length < 3) continue;
+      const status = d[0] & 0xFF;
+      const cmd = status & 0xF0;
+      const channel = status & 0x0F; // 0-15
+      if (cmd === 0x90) {
+        const origNote = d[1] & 0x7F;
+        const vel = d[2] & 0x7F;
+        if (vel > 0) {
+          try {
+            const res = inst.transform(status, origNote, vel);
+            if (res && res.length === 3) {
+              const transposedNote = res[1] & 0x7F;
+              const key = (channel << 7) | origNote;
+              state.active.set(key, transposedNote);
+              outEvents.push({ data: [res[0] & 0xFF, transposedNote, res[2] & 0x7F] });
+            }
+          } catch {}
+        } else {
+          const key = (channel << 7) | origNote;
+          const transposedNote = state.active.get(key);
+          if (transposedNote != null) {
+            outEvents.push({ data: [0x80 | channel, transposedNote, 0] });
+            state.active.delete(key);
+          } else {
+            try {
+              const res = inst.transform(status, origNote, 0);
+              if (res && res.length === 3) outEvents.push({ data: [0x80 | channel, res[1] & 0x7F, 0] });
+            } catch {}
+          }
+        }
+      } else if (cmd === 0x80) {
+        const origNote = d[1] & 0x7F;
+        const key = (channel << 7) | origNote;
+        const transposedNote = state.active.get(key);
+        if (transposedNote != null) {
+          outEvents.push({ data: [0x80 | channel, transposedNote, 0] });
+          state.active.delete(key);
+        } else {
+          try {
+            const res = inst.transform(status, origNote, d[2] & 0x7F);
+            if (res && res.length === 3) outEvents.push({ data: [0x80 | channel, res[1] & 0x7F, 0] });
+          } catch {}
+        }
+      } else {
+        if (passOther) {
+          try {
+            const res = inst.transform(status, d[1] & 0x7F, d[2] & 0x7F);
+            if (res && res.length === 3) outEvents.push({ data: [res[0] & 0xFF, res[1] & 0x7F, res[2] & 0x7F] });
+          } catch {}
+        }
+      }
+    }
+    if (!outEvents.length) return;
+    const downstream = this._connections.filter(c => c.from === nodeId && (c.fromOutput === 'midi-out' || c.fromOutput === 'midi' || c.fromOutput == null));
+    for (const edge of downstream) {
+      const q = this._midiQueues.get(edge.to) || [];
+      for (const ev of outEvents) q.push(ev);
+      this._midiQueues.set(edge.to, q);
+    }
+  }
+
   _processOscillator(nodeId, data, outL, outR) {
     const N = outL.length;
     const osc = this._getOscInstance(nodeId);
@@ -410,8 +518,8 @@ class EngineProcessor extends AudioWorkletProcessor {
       case 'reverb':
         this._processReverb(nodeId, data, outL, outR, visited);
         break;
+      // midi transpose has no audio output
       default:
-        // Unknown/parameter-only node, ignore
         break;
     }
   }

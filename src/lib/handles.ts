@@ -53,6 +53,11 @@ export function getHandleRole(
     case "midi-input":
       if (handleId === "midi") return "midi-out"; // expose hardware MIDI as source
       return "unknown";
+    case "midi-transpose":
+      // Backward compat: original implementation used id "midi" for both; now we split.
+      if (handleId === "midi") return "midi-in";
+      if (handleId === "midi-out") return "midi-out";
+      return "unknown";
     default:
       return "unknown";
   }

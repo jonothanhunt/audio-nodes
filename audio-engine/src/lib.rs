@@ -51,4 +51,6 @@ impl AudioEngine {
     }
 }
 
+pub use nodes::transpose::MidiTransposeNode;
+
 // SynthNode is defined in nodes/mod.rs
