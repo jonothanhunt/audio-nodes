@@ -60,3 +60,9 @@ next-env.d.ts
 
 # personal learning notes (do not commit)
 LEARNING-RUST-WASM.md
+
+# Copilot / assistant artifacts
+copilot-instructions*
+*.copilot-* 
+# Ignore entire .github directory (remove if you actually want workflows/issues templates)
+.github/
