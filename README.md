@@ -169,159 +169,62 @@ Future Enhancements:
 - Real-time parameter binding from UI to worklet
 - Project save/load with JSON serialization
 
+### 🎨 Node UI Design Language (Best Practices)
+These guidelines define the consistent visual & interaction language for all node components:
+
+1. Column Layout
+   - Two columns: LEFT = all inputs & parameter controls; RIGHT = outputs only.
+   - Both columns are TOP-aligned (no vertical centering of a lone output).
+   - Sources with no inputs (e.g. MIDI In) still use the two-column layout: left column shows inputs (no handles), right column shows a top-aligned output label (e.g. “MIDI Out”) used to align the handle.
+   - If a node has no outputs (pure sink like Speaker) omit the right column; retain padding symmetry.
+
+2. Inputs Without Handles
+   - Some parameters are purely local UI (e.g. a preset selector) and have no inbound connection handle.
+   - They still occupy a normal row (label + control) for consistent vertical rhythm.
+   - Only rows representing connectable params get a left handle; others are purely visual.
+
+3. Parameter Rows & Registration
+   - Each param row registers itself for vertical alignment; the handle layer decides which ones become handles based on param metadata (type lists).
+   - Adding a new param = update the config array; UI + handle (if applicable) appear automatically.
+
+4. Vertical Alignment of Handles
+   - Computed from the vertical center of each registered row using a shared provider & ResizeObserver.
+   - Absolute-positioned handles sit just outside the card edge (`left: -size/2` or `right: -size/2`).
+
+5. Handle Styling & Sizes
+   - Variants & sizes: numeric = 16px diamond (rotated square), audio out = 18px circle, string/select = 20px pentagon, midi = 16px square, bool = 20px triangle (SVG).
+   - Base (disconnected) background: `#111827` except SVG variants which use transparent background and `--fill`.
+   - Border: `1px solid accentColor` (SVG variants use stroke in the SVG instead).
+   - Hover: fill/background switches to accentColor (SVG sets `--fill`).
+
+6. Handle Shape Semantics
+   - Audio: circle. Numeric/continuous: diamond. String/enum: pentagon. MIDI/event: square. Boolean/gate: triangle.
+
+7. Accent Usage
+   - Card border + selection glow; title icon + text; subtle gradient overlay; slider fill; active handle fills.
+
+8. Parameter Defaults & Persistence
+   - On mount, any missing param is initialized (idempotent) using config defaults.
+
+9. Input Components
+   - Number + Select share unified width (`w-28`), center text for numeric consistency. Drag prevention on interactive controls.
+
+10. Sliders
+   - Auto-render for Number params with both min and max.
+
+11. Top Alignment Rule (Reiterated)
+   - Inputs and outputs remain top-aligned regardless of differing column heights to aid scanning across multiple selected nodes.
+
 ## 🎛️ Available Nodes
 
-### Oscillator Node
-- Type: Synthesis
-- Parameters: Frequency, Amplitude, Waveform (Sine, Square, Sawtooth, Triangle)
-- Outputs: Audio signal
+- Oscillator: Audio source (Frequency, Amplitude, Waveform). Output: Audio.
+- Reverb: Effect (Feedback, Wet Mix). Input: Audio. Output: Audio.
+- Speaker: Sink (Volume, Mute). Input: Audio. Output: Final mix.
+- Sequencer: MIDI generator (pattern grid, BPM, Play). Output: MIDI.
+- Synthesizer: Poly synth (Preset, Waveform, ADSR, Filter, Glide, Gain, Voices). Input: MIDI. Output: Audio.
+- MIDI Input: Source (Device, Channel). Output: MIDI.
 
-### Reverb Node
-- Type: Effect
-- Parameters: Feedback, Wet Mix
-- Inputs: Audio signal
-- Outputs: Processed audio with reverb
-
-### Speaker Node
-- Type: Utility
-- Parameters: Volume, Mute
-- Inputs: Audio signal
-- Outputs: Final audio output
-
-### Sequencer Node
-- Type: MIDI Generator
-- Parameters: Pattern, BPM, Gate Length
-- Outputs: MIDI events (Note On/Off)
-
-### Synthesizer Node
-- Type: Synthesis
-- Parameters: Preset, Waveform, ADSR, Filter Cutoff/Resonance, Glide, Gain
-- Inputs: MIDI events
-- Outputs: Audio signal
-
-### MIDI Input Node
-- Type: MIDI Source
-- Parameters: Device ID (optional), Channel filter (All or 1–16)
-- Outputs: MIDI events (raw bytes)
-- Notes: Uses Web MIDI API on main thread, forwards events with `atTimeMs` for scheduling.
-
-## 🧪 Planned / Upcoming Nodes
-
-(Subject to change. Order roughly reflects build priority.)
-
-### Clock / Transport Node
-- Purpose: Explicit tempo source; supersedes global fallback when connected.
-- Parameters: BPM, PPQ, Beats/Bar, Swing %, Swing Subdivision, Run, Phase Offset, Reset.
-- Outputs: Clock timing messages (internal) + optional MIDI Clock (enable toggle).
-- Notes: Multiple instances allow polymeter / tempo layering.
-
-### MIDI Input Node
-- Purpose: Receive external hardware MIDI (Web MIDI API on main thread) and forward bytes to worklet.
-- Outputs: MIDI events.
-- Notes: Device selector + optional channel filter.
-
-### Computer Keyboard MIDI Node
-- Purpose: Use QWERTY (GarageBand-style mapping) to emit Note On/Off.
-- Outputs: MIDI events.
-- Notes: Velocity mapping (fixed or based on key repeat speed later).
-
-### MIDI Transposer Node
-- Purpose: Shift incoming MIDI note numbers by semitones (with min/max note clamp).
-- Parameters: Semitones (±24), Clamp Low, Clamp High, Pass Through Non-Note (bool).
-- Inputs: MIDI.
-- Outputs: MIDI (modified notes).
-
-### MIDI Stepper / Note Step Effect Node
-- Purpose: Apply a repeating sequence of pitch offsets / velocity values per incoming note event (step sequencer modifier).
-- Parameters: Steps array (e.g. [-12,0,0,7]), Advance Mode (per note / per clock tick / per beat), Reset trigger.
-- Inputs: MIDI (notes) + optional clock.
-- Outputs: MIDI (transformed notes).
-
-### Mixer / Crossfader Node
-- Purpose: Blend or route between two (later N) audio inputs.
-- Inputs: A, B audio; optional control input (future CV/modulation).
-- Parameters: Mix (0–1), Output Gain.
-- Outputs: Mixed audio.
-
-### Echo / Delay Node
-- Purpose: Feedback delay effect.
-- Parameters: Delay Time (ms / sync later), Feedback, Wet, Tone (simple low-pass in feedback path).
-- Inputs: Audio.
-- Outputs: Audio.
-
-### Value Nodes
-- Number Value: Constant numeric control (e.g. mod source). Outputs: scalar per block.
-- Boolean Value: On/Off gate (e.g. mute trigger).
-- (Later) Random / Sample & Hold, Curve, Envelope follower.
-
-### Sampler Node
-- Purpose: Trigger playback of user-loaded audio buffers via MIDI (note = zone / pitch shift).
-- Parameters: Start Offset, One-shot / Loop, Pitch Mode, Gain, Envelope.
-- Project Packaging: Likely move to a zip-based project format (`project.json` + `/samples/*`). Interim: embed base64 or keep external URLs.
-
-### LFO Node
-- Purpose: Low frequency modulation source.
-- Parameters: Shape, Rate, Depth, Phase, Offset, Sync (future), Target (UI only; routing via connections).
-- Outputs: Control signal (float per frame or per block smoothed).
-
-### Envelope Generator Node
-- Purpose: ADSR triggered by MIDI Note On/Off (or gate input later).
-- Parameters: A, D, S, R, Retrigger mode.
-- Outputs: Control signal.
-
-### Arpeggiator Node
-- Purpose: Transform held MIDI chords into ordered patterns.
-- Parameters: Mode (up/down/up-down/random), Rate, Octave Range, Gate.
-- Inputs: MIDI chord.
-- Outputs: MIDI stream.
-
-### Euclidean / Pattern Rhythm Node
-- Purpose: Generate rhythmic trigger patterns.
-- Parameters: Steps, Pulses, Rotation, Rate.
-- Outputs: MIDI Note or custom trigger byte (note-on style).
-
-### Analyzer / Scope Node (UI Only DSP Passthrough)
-- Purpose: Visualize waveform or spectrum for debugging.
-- Inputs: Audio.
-- Outputs: Audio (unchanged pass-through).
-
-### Recorder Node
-- Purpose: Capture mixed output to WAV (in-browser encoding) and allow download.
-- Inputs: Audio.
-- Outputs: (None) Provides downloadable file.
-
-## 🔧 Adding New Nodes
-
-1. Create the Rust implementation in `audio-engine/src/nodes/<new_node>.rs`.
-2. Export the node in `audio-engine/src/nodes/mod.rs` and wire it in `audio-engine/src/lib.rs` as needed.
-3. Create the UI component in `src/components/nodes/<NewNode>.tsx`.
-4. Add the node to the Node Library in `src/components/NodeLibrary.tsx`.
-5. Register the node type in `src/components/AudioNodesEditor.tsx` and `src/lib/nodes.ts`.
-6. Rebuild the WASM package: `npm run build:wasm`.
-
-## 📝 Scripts
-
-- `npm run dev` - Start development server with Webpack
-- `npm run build` - Build for production
-- `npm run build:wasm` - Build Rust/WASM and copy artifacts to `public/` and `src/`
-- `npm run wasm:watch` - Auto-rebuild WASM when Rust files change (requires `watchexec`)
-- `npm run start` - Start production server
-- `npm run lint` - Run ESLint
-
-### WASM Development Workflow
-
-1. Quick rebuild: `npm run build:wasm`
-2. Auto-rebuild during development: `npm run wasm:watch` (install `watchexec` first: `cargo install watchexec-cli`)
-3. Manual rebuild: `./build-wasm.sh`
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Add your node implementations (both Rust and TypeScript)
-4. Test the audio processing
-5. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License.
+```diff
+- If no Speaker is present, sources used to mix directly to output.
++ Audio is silent unless at least one Speaker node is present. Only audio reaching a Speaker input is heard.
+```

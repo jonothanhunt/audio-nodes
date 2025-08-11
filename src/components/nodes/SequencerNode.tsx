@@ -1,9 +1,13 @@
 "use client";
 
 import React from "react";
-import { Handle, Position } from "reactflow";
 import { Music } from "lucide-react";
 import { getNodeMeta } from '@/lib/nodeRegistry';
+import { NodeUIProvider, useNodeUI } from '../node-ui/NodeUIProvider';
+import { HandleLayer } from '../node-ui/HandleLayer';
+import { NumberParam } from '../node-ui/params/NumberParam';
+import { SelectParam } from '../node-ui/params/SelectParam';
+import { BooleanParam } from '../node-ui/params/BooleanParam';
 
 interface SequencerNodeProps {
   id: string;
@@ -58,13 +62,25 @@ function noteToMidi(note: string): number {
   return (octave + 1) * 12 + idx;
 }
 
-export default function SequencerNode({
-  id,
-  data,
-  selected,
-}: SequencerNodeProps) {
+export default function SequencerNode({ id, data, selected }: SequencerNodeProps) {
   const { accentColor } = getNodeMeta('sequencer');
   const { onParameterChange } = data;
+
+  // Ensure defaults for scalars
+  React.useEffect(() => {
+    const ensure = (key: keyof SequencerNodeProps['data'], def: string | number | boolean) => {
+      if ((data as Record<string, unknown>)[key] == null) {
+        onParameterChange(id, key as string, def);
+      }
+    };
+    ensure('length', 16);
+    ensure('fromNote', 'C4');
+    ensure('toNote', 'C5');
+    ensure('bpm', 120);
+    ensure('playing', false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const lengthProp = data.length ?? 16;
   const fromNoteProp = data.fromNote ?? "C4";
   const toNoteProp = data.toNote ?? "C5";
@@ -197,50 +213,6 @@ export default function SequencerNode({
     }
   }, [playingProp, data, steps, currentStep, noteCount, bottomMidi, id]);
 
-  const rootRef = React.useRef<HTMLDivElement | null>(null);
-  const cardRef = React.useRef<HTMLDivElement | null>(null);
-  const outRef = React.useRef<HTMLDivElement | null>(null);
-  const playRef = React.useRef<HTMLDivElement | null>(null);
-  const bpmRef = React.useRef<HTMLDivElement | null>(null);
-
-  const [outTop, setOutTop] = React.useState(0);
-  const [playTop, setPlayTop] = React.useState(0);
-  const [bpmTop, setBpmTop] = React.useState(0);
-
-  const compute = React.useCallback(() => {
-    const rootEl = rootRef.current as HTMLElement | null;
-    if (!rootEl) return;
-    const centerFromRoot = (el: HTMLElement | null) => {
-      if (!el) return 0;
-      let top = 0;
-      let curr: HTMLElement | null = el;
-      while (curr && curr !== rootEl) {
-        top += curr.offsetTop || 0;
-        curr = (curr.offsetParent as HTMLElement) || null;
-      }
-      return top + (el.offsetHeight || 0) / 2;
-    };
-    setOutTop(centerFromRoot(outRef.current));
-    setPlayTop(centerFromRoot(playRef.current));
-    setBpmTop(centerFromRoot(bpmRef.current));
-  }, []);
-
-  React.useLayoutEffect(() => {
-    compute();
-    if (typeof ResizeObserver !== "undefined") {
-      const ro = new ResizeObserver(() => compute());
-      if (rootRef.current) ro.observe(rootRef.current);
-      if (cardRef.current) ro.observe(cardRef.current);
-      if (outRef.current) ro.observe(outRef.current);
-      if (playRef.current) ro.observe(playRef.current);
-      if (bpmRef.current) ro.observe(bpmRef.current);
-      return () => ro.disconnect();
-    }
-    const onResize = () => compute();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [compute]);
-
   // Adjust steps when length or note range change (preserve absolute MIDI notes)
   const prevRangeRef = React.useRef<{ bottomMidi: number; topMidi: number }>({ bottomMidi, topMidi });
   const lastMappedRef = React.useRef<boolean[][] | null>(null);
@@ -291,16 +263,19 @@ export default function SequencerNode({
     setTimeout(() => onParameterChange(id, "steps", next), 0);
   };
 
+  const numericKeys = ['length', 'bpm'];
+  const stringKeys = ['fromNote', 'toNote'];
+  const boolKeys = ['playing'];
+
+  const get = (key: keyof SequencerNodeProps['data']) => (data as Record<string, unknown>)[key];
+
   return (
-    <div className="relative" ref={rootRef}>
+    <NodeUIProvider accentColor={accentColor} numericKeys={numericKeys} stringKeys={stringKeys} boolKeys={boolKeys}>
       {selected && (
-        <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-xs text-gray-500">
-          ID: {id}
-        </div>
+        <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-xs text-gray-500">ID: {id}</div>
       )}
 
       <div
-        ref={cardRef}
         className={`relative bg-gray-900 rounded-lg p-4 shadow-lg border`}
         style={{ borderColor: accentColor, boxShadow: selected ? `0 0 0 1px ${accentColor}, 0 0 12px -2px ${accentColor}` : undefined }}
       >
@@ -312,115 +287,63 @@ export default function SequencerNode({
         </div>
 
         {/* Controls + Output label */}
-        <div className="grid grid-cols-[minmax(14rem,_auto)_auto] gap-x-8 gap-y-2">
-          {/* Stack controls vertically like other nodes */}
-          <div className="space-y-2">
-            <div className="relative flex items-center">
-              <label className="block text-xs text-gray-300 w-24">Length</label>
-              <input
-                type="number"
-                value={lengthClamped}
-                min={1}
-                max={64}
-                onChange={(e) =>
-                  onParameterChange(
-                    id,
-                    "length",
-                    Math.max(1, Math.min(64, Number(e.target.value)))
-                  )
-                }
-                className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm text-white w-20 text-center"
-              />
-            </div>
-            {/* Range From/To */}
-            <div className="relative flex items-center">
-              <label className="block text-xs text-gray-300 w-24">From</label>
-              <select
-                value={fromNoteProp}
-                onChange={(e) => {
-                  const newFrom = e.target.value;
-                  onParameterChange(id, "fromNote", newFrom);
-                  // If from becomes higher than to, clamp to to
-                  const newFromMidi = noteToMidi(newFrom);
-                  if (newFromMidi > topMidi) {
-                    onParameterChange(id, "toNote", newFrom);
-                  }
-                }}
-                className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm text-white w-24"
-              >
-                {NOTE_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="relative flex items-center">
-              <label className="block text-xs text-gray-300 w-24">To</label>
-              <select
-                value={toNoteProp}
-                onChange={(e) => {
-                  const newTo = e.target.value;
-                  onParameterChange(id, "toNote", newTo);
-                  const newToMidi = noteToMidi(newTo);
-                  if (newToMidi < bottomMidi) {
-                    onParameterChange(id, "fromNote", newTo);
-                  }
-                }}
-                className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm text-white w-24"
-              >
-                {NOTE_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {/* Play control (bool) */}
-            <div ref={playRef} className="relative flex items-center">
-              <label className="block text-xs text-gray-300 w-24">Play</label>
-              <label className="flex items-center gap-2 text-xs text-gray-300">
-                <input
-                  type="checkbox"
-                  checked={!!playingProp}
-                  onChange={(e) =>
-                    onParameterChange(id, "playing", e.target.checked)
-                  }
-                  className="bg-gray-800 border border-gray-600 rounded"
-                />
-                <span>{playingProp ? "On" : "Off"}</span>
-              </label>
-            </div>
-            {/* BPM control */}
-            <div ref={bpmRef} className="relative flex items-center">
-              <label className="block text-xs text-gray-300 w-24">BPM</label>
-              <input
-                type="number"
-                value={bpmClamped}
-                min={20}
-                max={600}
-                onChange={(e) =>
-                  onParameterChange(
-                    id,
-                    "bpm",
-                    Math.max(20, Math.min(600, Number(e.target.value)))
-                  )
-                }
-                className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm text-white w-20 text-center"
-              />
-            </div>
+        <div className="grid grid-cols-[minmax(16rem,_auto)_auto] gap-y-2 gap-x-4">
+          <div className="space-y-2 col-span-1">
+            <SelectParam
+              nodeId={id}
+              paramKey="fromNote"
+              label="From"
+              value={String(get('fromNote') ?? 'C4')}
+              options={NOTE_OPTIONS}
+              onParameterChange={onParameterChange as (nid: string, param: string, value: string) => void}
+              widthClass="w-24"
+            />
+            <SelectParam
+              nodeId={id}
+              paramKey="toNote"
+              label="To"
+              value={String(get('toNote') ?? 'C5')}
+              options={NOTE_OPTIONS}
+              onParameterChange={onParameterChange as (nid: string, param: string, value: string) => void}
+              widthClass="w-24"
+            />
+            <NumberParam
+              nodeId={id}
+              paramKey="length"
+              label="Length"
+              value={Number(get('length') ?? 16)}
+              min={1}
+              max={64}
+              step={1}
+              onParameterChange={onParameterChange as (nid: string, param: string, value: number) => void}
+            />
+            <BooleanParam
+              nodeId={id}
+              paramKey="playing"
+              label="Play"
+              value={Boolean(get('playing') ?? false)}
+              onParameterChange={onParameterChange as (nid: string, param: string, value: boolean) => void}
+            />
+            <NumberParam
+              nodeId={id}
+              paramKey="bpm"
+              label="BPM"
+              value={Number(get('bpm') ?? 120)}
+              min={20}
+              max={600}
+              step={1}
+              onParameterChange={onParameterChange as (nid: string, param: string, value: number) => void}
+            />
           </div>
-
-          {/* Output label to anchor MIDI handle */}
-          <div ref={outRef} className="flex items-center justify-end">
-            <span className="text-xs text-gray-300 mr-2">MIDI Out</span>
+          <div className="flex flex-col col-span-1">
+            <MidiOutRow />
           </div>
         </div>
 
         {/* Step Grid */}
         <div className="mt-6">
           <div className="flex">
-            {/* Labels column (note names) - narrowed width and margin */}
+            {/* Labels column (note names) */}
             <div className="flex flex-col-reverse gap-1 mr-1">
               {Array.from({ length: noteCount }).map((_, noteIdx) => {
                 const rowMidi = bottomMidi + noteIdx;
@@ -464,7 +387,8 @@ export default function SequencerNode({
                         return (
                           <button
                             key={noteIdx}
-                            onClick={() => toggleStep(stepIdx, noteIdx)}
+                            onClick={(e) => { e.stopPropagation(); toggleStep(stepIdx, noteIdx); }}
+                            onPointerDown={(e) => e.stopPropagation()}
                             className={`w-4 h-4 rounded transition-colors ${
                               active
                                 ? "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.7)]"
@@ -487,41 +411,17 @@ export default function SequencerNode({
         </div>
       </div>
 
-      {/* Left-side input handles */}
-      {/* Play = triangle (bool) */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="play"
-        className="!w-3 !h-3 !rounded-none !bg-gray-200 !border !border-gray-300"
-        style={{
-          top: playTop,
-          transform: "translateY(-50%)",
-          left: -6,
-          clipPath: "polygon(50% 0%, 0% 100%, 100% 100%)",
-        }}
-      />
-      {/* BPM = diamond (numeric param) */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="bpm"
-        className="!w-3 !h-3 !bg-gray-200 !border !border-gray-300 !rounded-none"
-        style={{
-          top: bpmTop,
-          transform: "translateY(-50%) rotate(45deg)",
-          left: -6,
-        }}
-      />
+      {/* Render handles: param handles on the left; only a MIDI Out on the right */}
+      <HandleLayer includeMidiIn={false} outputId="midi-out" outputVariant="midi" />
+    </NodeUIProvider>
+  );
+}
 
-      {/* Right-side output handle: MIDI = square */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="midi"
-        className="!w-3 !h-3 !bg-gray-200 !border !border-gray-300 !rounded-none"
-        style={{ top: outTop, transform: "translateY(-50%)", right: -6 }}
-      />
+function MidiOutRow() {
+  const { outputEl } = useNodeUI();
+  return (
+    <div className="relative flex items-center justify-end" ref={el => outputEl(el)}>
+      <span className="text-xs text-gray-300 mr-2">MIDI Out</span>
     </div>
   );
 }

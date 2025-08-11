@@ -534,13 +534,7 @@ class EngineProcessor extends AudioWorkletProcessor {
     }
 
     if (speakers.length === 0) {
-      // No explicit sinks; as a fallback, mix any source nodes directly
-      for (const [nodeId, data] of this._nodes.entries()) {
-        if (!data || !data.type) continue;
-        if (data.type === 'oscillator' || data.type === 'synth') {
-          this._processInputNode(nodeId, data, outL, outR);
-        }
-      }
+      // No explicit sinks; keep silent output (outL/outR already cleared)
       return;
     }
 

@@ -1,188 +1,121 @@
 'use client';
 
 import React from 'react';
-import { Handle, Position } from 'reactflow';
 import { Volume2 } from 'lucide-react';
 import { getNodeMeta } from '@/lib/nodeRegistry';
+import { NodeUIProvider, useNodeUI } from '../node-ui/NodeUIProvider';
+import { HandleLayer } from '../node-ui/HandleLayer';
+import { NumberParam } from '../node-ui/params/NumberParam';
+import { labelCls, inputCls } from '../node-ui/styles/inputStyles';
 
 interface OscillatorNodeProps {
   id: string;
   selected?: boolean;
   data: {
-    frequency: number;
-    amplitude: number;
-    waveform: string;
+    frequency?: number;
+    amplitude?: number;
+    waveform?: string;
     onParameterChange: (nodeId: string, parameter: string, value: string | number) => void;
   };
 }
 
-const waveforms = [
-  { value: 'sine', label: 'Sine' },
-  { value: 'square', label: 'Square' },
-  { value: 'sawtooth', label: 'Sawtooth' },
-  { value: 'triangle', label: 'Triangle' },
-];
+const waveforms = ['sine','square','sawtooth','triangle'] as const;
+
+const paramConfig = [
+  { key: 'frequency', type: 'number', min: 20, max: 2000, step: 1, default: 440 },
+  { key: 'amplitude', type: 'number', min: 0, max: 1, step: 0.01, default: 0.5 },
+] as const;
+
+type OscParamKey = typeof paramConfig[number]['key'];
 
 export default function OscillatorNode({ id, data, selected }: OscillatorNodeProps) {
   const { accentColor } = getNodeMeta('oscillator');
-  const { frequency, amplitude, waveform, onParameterChange } = data;
+  const { onParameterChange } = data;
 
-  // Separate refs: root (react-flow node) and card (inner panel)
-  const rootRef = React.useRef<HTMLDivElement | null>(null);
-  const cardRef = React.useRef<HTMLDivElement | null>(null);
-  const freqRef = React.useRef<HTMLDivElement | null>(null);
-  const ampRef = React.useRef<HTMLDivElement | null>(null);
-  const outRef = React.useRef<HTMLDivElement | null>(null);
-
-  const [freqTop, setFreqTop] = React.useState(0);
-  const [ampTop, setAmpTop] = React.useState(0);
-  const [outTop, setOutTop] = React.useState(0);
-
-  const computeHandlePositions = React.useCallback(() => {
-    const rootEl = rootRef.current as HTMLElement | null;
-    if (!rootEl) return;
-
-    const centerFromRoot = (el: HTMLElement | null) => {
-      if (!el) return 0;
-      let top = 0;
-      let curr: HTMLElement | null = el;
-      // Accumulate offsetTop up to the positioned root
-      while (curr && curr !== rootEl) {
-        top += curr.offsetTop || 0;
-        curr = (curr.offsetParent as HTMLElement) || null;
-      }
-      return top + (el.offsetHeight || 0) / 2;
-    };
-
-    setFreqTop(centerFromRoot(freqRef.current));
-    setAmpTop(centerFromRoot(ampRef.current));
-    setOutTop(centerFromRoot(outRef.current));
+  // Ensure defaults
+  React.useEffect(() => {
+    paramConfig.forEach(p => {
+      const current = (data as Record<string, unknown>)[p.key];
+      if (current == null) onParameterChange(id, p.key, p.default);
+    });
+    if ((data as Record<string, unknown>)['waveform'] == null) {
+      onParameterChange(id, 'waveform', 'sine');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  React.useLayoutEffect(() => {
-    computeHandlePositions();
-    if (typeof ResizeObserver !== 'undefined') {
-      const ro = new ResizeObserver(() => computeHandlePositions());
-      if (rootRef.current) ro.observe(rootRef.current);
-      if (cardRef.current) ro.observe(cardRef.current);
-      if (freqRef.current) ro.observe(freqRef.current);
-      if (ampRef.current) ro.observe(ampRef.current);
-      if (outRef.current) ro.observe(outRef.current);
-      return () => ro.disconnect();
-    }
-    const onResize = () => computeHandlePositions();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, [computeHandlePositions]);
-
-  React.useEffect(() => {
-    computeHandlePositions();
-  }, [frequency, amplitude, waveform, computeHandlePositions]);
+  const numericKeys = paramConfig.filter(p => p.type === 'number').map(p => p.key);
+  const getValue = (key: OscParamKey) => (data as Record<string, unknown>)[key];
 
   return (
-    <div className="relative" ref={rootRef}>
-      {/* Floating ID shown only when selected */}
+    <NodeUIProvider accentColor={accentColor} numericKeys={numericKeys}>
       {selected && (
         <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-xs text-gray-500">ID: {id}</div>
       )}
-
       <div
-        ref={cardRef}
         className={`relative bg-gray-900 rounded-lg p-4 shadow-lg border`}
         style={{ borderColor: accentColor, boxShadow: selected ? `0 0 0 1px ${accentColor}, 0 0 12px -2px ${accentColor}` : undefined }}
       >
         <div className="pointer-events-none absolute inset-0 rounded-lg" style={{ background: `linear-gradient(135deg, ${accentColor}26, transparent 65%)` }} />
-        {/* Header with full color */}
+
         <div className="flex items-center gap-2 mb-3 relative">
           <Volume2 className="w-4 h-4" style={{ color: accentColor }} />
           <span className="title-font font-w-70 text-sm" style={{ color: accentColor }}>Oscillator</span>
         </div>
 
-        {/* Grid: inputs (left) | outputs (right) */}
-        <div className="grid grid-cols-[minmax(12rem,_auto)_auto] gap-x-8 gap-y-2">
-          {/* Inputs column */}
-          <div className="space-y-2">
-            {/* Frequency row */}
-            <div ref={freqRef} className="relative flex items-center">
-              <label className="block text-xs text-gray-300 w-20">Frequency</label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  value={frequency}
-                  onChange={(e) => onParameterChange(id, 'frequency', parseFloat(e.target.value))}
-                  className="bg-gray-800 border-l-4 border-l-gray-600 border border-gray-600 rounded px-2 py-1 text-sm text-white w-24 text-center"
-                  min="20"
-                  max="2000"
-                />
-                <span className="text-xs text-gray-400">Hz</span>
-              </div>
-            </div>
-
-            {/* Amplitude row */}
-            <div ref={ampRef} className="relative flex items-center">
-              <label className="block text-xs text-gray-300 w-20">Amplitude</label>
-              <input
-                type="number"
-                value={amplitude}
-                onChange={(e) => onParameterChange(id, 'amplitude', parseFloat(e.target.value))}
-                className="bg-gray-800 border-l-4 border-l-gray-600 border border-gray-600 rounded px-2 py-1 text-sm text-white w-24 text-center"
-                min="0"
-                max="1"
-                step="0.1"
+        <div className="grid grid-cols-[minmax(16rem,_auto)_auto] gap-y-2 gap-x-4">
+          <div className="space-y-2 col-span-1">
+            {paramConfig.map(cfg => (
+              <NumberParam
+                key={cfg.key}
+                nodeId={id}
+                paramKey={cfg.key}
+                label={cfg.key.charAt(0).toUpperCase() + cfg.key.slice(1)}
+                value={Number(getValue(cfg.key) ?? cfg.default)}
+                min={cfg.min}
+                max={cfg.max}
+                step={cfg.step}
+                badge={cfg.key === 'frequency' ? 'Hz' : undefined}
+                onParameterChange={onParameterChange as (nid: string, param: string, value: number) => void}
               />
-            </div>
-
-            {/* Waveform (no handle) */}
-            <div className="relative flex items-center">
-              <label className="block text-xs text-gray-300 w-20">Waveform</label>
-              <select
-                value={waveform}
-                onChange={(e) => onParameterChange(id, 'waveform', e.target.value)}
-                className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm text-white w-36"
-              >
-                {waveforms.map((wf) => (
-                  <option key={wf.value} value={wf.value}>
-                    {wf.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            ))}
+            <WaveformRow id={id} value={String((data as Record<string, unknown>)['waveform'] ?? 'sine')} onChange={onParameterChange} />
           </div>
-
-          {/* Outputs column */}
-          <div className="space-y-2">
-            {/* Audio Out row */}
-            <div ref={outRef} className="relative flex items-center justify-end">
-              <span className="text-xs text-gray-300 mr-2">Audio Out</span>
-            </div>
+          <div className="flex flex-col col-span-1">
+            <AudioOutRow />
           </div>
         </div>
       </div>
+      <HandleLayer includeMidiIn={false} />
+    </NodeUIProvider>
+  );
+}
 
-      {/* Absolute handles aligned to measured row centers */}
-      {/* Float params = outlined diamond */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="frequency"
-        className="!w-3 !h-3 !bg-gray-200 !border !border-gray-300 !rounded-none"
-        style={{ top: freqTop, transform: 'translateY(-50%) rotate(45deg)', left: -6 }}
-      />
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="amplitude"
-        className="!w-3 !h-3 !bg-gray-200 !border !border-gray-300 !rounded-none"
-        style={{ top: ampTop, transform: 'translateY(-50%) rotate(45deg)', left: -6 }}
-      />
-      {/* Audio = filled circle */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="output"
-        className="!w-3 !h-3 !rounded-full !bg-gray-200 !border !border-gray-300"
-        style={{ top: outTop, transform: 'translateY(-50%)', right: -6 }}
-      />
+function WaveformRow({ id, value, onChange }: { id: string; value: string; onChange: (nid: string, param: string, value: string) => void; }) {
+  const stop = (e: React.SyntheticEvent) => { e.stopPropagation(); };
+  return (
+    <div className="relative flex items-center">
+      <label className={labelCls}>Waveform</label>
+      <select
+        value={value}
+        onChange={e => { e.stopPropagation(); onChange(id, 'waveform', e.target.value); }}
+        onPointerDown={stop}
+        onMouseDown={stop}
+        onClick={stop}
+        onDoubleClick={stop}
+        className={`${inputCls} w-28 nodrag`}
+      >
+        {waveforms.map(w => <option key={w} value={w}>{w}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function AudioOutRow() {
+  const { outputEl } = useNodeUI();
+  return (
+    <div className="relative flex items-center justify-end" ref={el => outputEl(el)}>
+      <span className="text-xs text-gray-300 mr-2">Audio Out</span>
     </div>
   );
 }

@@ -27,8 +27,9 @@ export function getHandleRole(
       if (handleId === "volume") return "param-in";
       return "unknown";
     case "sequencer":
-      if (handleId === "midi") return "midi-out";
-      if (handleId === "play" || handleId === "bpm") return "param-in";
+      if (handleId === "midi-out" || handleId === "midi") return "midi-out";
+      if (["fromNote", "toNote", "length", "playing", "bpm"].includes(handleId || ""))
+        return "param-in";
       return "unknown";
     case "synth":
       if (handleId === "midi") return "midi-in";
