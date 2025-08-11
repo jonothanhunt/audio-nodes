@@ -31,11 +31,16 @@ export default function GradientEdge(props: EdgeProps) {
   const [edgePath, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
   const gradId = `edge-grad-${id}`;
 
-  const strokeWidth = (style && typeof style.strokeWidth === 'number') ? style.strokeWidth : 2;
-  const baseOpacity = style && typeof style.opacity === 'number' ? style.opacity : 1;
+  const styleStrokeWidth = typeof style?.strokeWidth === 'number' ? style.strokeWidth : undefined;
+  const baseStrokeWidth = styleStrokeWidth ?? 2;
+  const baseOpacity = typeof style?.opacity === 'number' ? style.opacity : 1;
+  const effectiveStrokeWidth = selected ? baseStrokeWidth * 2 : baseStrokeWidth;
 
-  // Emphasize when selected
-  const effectiveStrokeWidth = selected ? strokeWidth + 1 : strokeWidth;
+  // Omit strokeWidth from original style without creating unused variable
+  const styleRest = { ...(style || {}) } as React.CSSProperties & { strokeWidth?: number };
+  if ('strokeWidth' in styleRest) {
+    delete styleRest.strokeWidth;
+  }
 
   return (
     <g className="react-flow__edge" data-edgeid={id}>
@@ -45,23 +50,26 @@ export default function GradientEdge(props: EdgeProps) {
           <stop offset="100%" stopColor={tgtColor} />
         </linearGradient>
       </defs>
+      {/* Visible gradient stroke */}
       <path
         id={id}
         d={edgePath}
         fill="none"
         stroke={`url(#${gradId})`}
         strokeWidth={effectiveStrokeWidth}
-        className="react-flow__edge-path"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={`react-flow__edge-path ${selected ? 'selected' : ''}`}
         markerEnd={markerEnd}
-        style={{ ...style, opacity: baseOpacity, stroke: `url(#${gradId})` }}
+        style={{ ...styleRest, strokeWidth: effectiveStrokeWidth, opacity: baseOpacity, stroke: `url(#${gradId})`, filter: selected ? 'drop-shadow(0 0 4px rgba(255,255,255,0.25))' : undefined }}
       />
-      {/* Invisible thicker stroke for easier pointer interactions */}
+      {/* Interaction path (needed for proper selection per docs) */}
       <path
         d={edgePath}
         fill="none"
         stroke="transparent"
-        strokeWidth={Math.max(effectiveStrokeWidth + 10, 12)}
-        className="pointer-events-stroke"
+        strokeWidth={Math.max(effectiveStrokeWidth + 12, 14)}
+        className="react-flow__edge-interaction"
       />
       {props.label && (
         <foreignObject

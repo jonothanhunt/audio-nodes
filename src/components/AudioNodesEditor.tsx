@@ -25,6 +25,8 @@ import { useProjectPersistence } from "@/hooks/useProjectPersistence";
 import { useGraph } from "@/hooks/useGraph";
 import MidiTransposeNode from "@/components/nodes/MidiTransposeNode";
 import GradientEdge from '@/components/edges/GradientEdge';
+import { getNodeMeta } from '@/lib/nodeRegistry';
+import type { OnConnectStartParams } from 'reactflow';
 
 // Custom node registry
 const nodeTypes = {
@@ -56,6 +58,15 @@ export default function AudioNodesEditor() {
     sendMIDI,
   } = useAudioEngine();
   const rfInstanceRef = React.useRef<ReactFlowInstance | null>(null);
+  const [connectingColor, setConnectingColor] = React.useState<string | null>(null);
+
+  const handleConnectStart = useCallback((_: unknown, params: OnConnectStartParams) => {
+    const nid = params?.nodeId;
+    if (!nid) { setConnectingColor(null); return; }
+    const node = nodes.find(n => n.id === nid);
+    setConnectingColor(node ? getNodeMeta(node.type).accentColor : null);
+  }, [nodes]);
+  const handleConnectEnd = useCallback(() => { setConnectingColor(null); }, []);
 
   // MIDI emit (Sequencer etc.)
   const handleEmitMidi = useCallback(
@@ -399,6 +410,9 @@ export default function AudioNodesEditor() {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onConnectStart={handleConnectStart}
+            onConnectEnd={handleConnectEnd}
+            connectionLineStyle={connectingColor ? { stroke: connectingColor, strokeWidth: 2 } : { stroke: '#555', strokeWidth: 2 }}
             nodeTypes={nodeTypes}
             proOptions={{ hideAttribution: true }}
             minZoom={0.03}
