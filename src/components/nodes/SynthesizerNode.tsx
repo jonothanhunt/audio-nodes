@@ -3,6 +3,7 @@
 import React from "react";
 import { Handle, Position } from "reactflow";
 import { Volume2 } from "lucide-react";
+import { getNodeMeta } from '@/lib/nodeRegistry';
 
 interface SynthNodeProps {
   id: string;
@@ -29,6 +30,7 @@ interface SynthNodeProps {
 }
 
 export default function SynthesizerNode({ id, data, selected }: SynthNodeProps) {
+  const { accentColor } = getNodeMeta('synth');
   const { onParameterChange } = data;
 
   // Defaults
@@ -119,15 +121,14 @@ export default function SynthesizerNode({ id, data, selected }: SynthNodeProps) 
 
       <div
         ref={cardRef}
-        className={`relative bg-gray-900 rounded-lg p-4 shadow-lg border ${
-          selected ? "border-purple-500" : "border-purple-500/30"
-        }`}
+        className={`relative bg-gray-900 rounded-lg p-4 shadow-lg border`}
+        style={{ borderColor: accentColor, boxShadow: selected ? `0 0 0 1px ${accentColor}, 0 0 12px -2px ${accentColor}` : undefined }}
       >
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-purple-500/10 via-purple-500/0 to-transparent rounded-lg" />
+        <div className="pointer-events-none absolute inset-0 rounded-lg" style={{ background: `linear-gradient(135deg, ${accentColor}26, transparent 65%)` }} />
 
         <div className="flex items-center gap-2 mb-3 relative">
-          <Volume2 className="w-4 h-4 text-purple-400" />
-          <span className="title-font font-w-70 text-purple-400 text-sm">Synth</span>
+          <Volume2 className="w-4 h-4" style={{ color: accentColor }} />
+          <span className="title-font font-w-70 text-sm" style={{ color: accentColor }}>Synth</span>
         </div>
 
         <div className="grid grid-cols-[minmax(16rem,_auto)] gap-y-2">

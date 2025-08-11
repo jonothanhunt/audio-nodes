@@ -3,6 +3,7 @@
 import React from 'react';
 import { Handle, Position } from 'reactflow';
 import { Volume2 } from 'lucide-react';
+import { getNodeMeta } from '@/lib/nodeRegistry';
 
 interface OscillatorNodeProps {
   id: string;
@@ -23,6 +24,7 @@ const waveforms = [
 ];
 
 export default function OscillatorNode({ id, data, selected }: OscillatorNodeProps) {
+  const { accentColor } = getNodeMeta('oscillator');
   const { frequency, amplitude, waveform, onParameterChange } = data;
 
   // Separate refs: root (react-flow node) and card (inner panel)
@@ -86,14 +88,14 @@ export default function OscillatorNode({ id, data, selected }: OscillatorNodePro
 
       <div
         ref={cardRef}
-        className={`relative bg-gray-900 rounded-lg p-4 shadow-lg border ${selected ? 'border-purple-500' : 'border-purple-500/30'}`}
+        className={`relative bg-gray-900 rounded-lg p-4 shadow-lg border`}
+        style={{ borderColor: accentColor, boxShadow: selected ? `0 0 0 1px ${accentColor}, 0 0 12px -2px ${accentColor}` : undefined }}
       >
-        {/* Subtle gradient from top-left (category tint) */}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-purple-500/10 via-purple-500/0 to-transparent rounded-lg" />
+        <div className="pointer-events-none absolute inset-0 rounded-lg" style={{ background: `linear-gradient(135deg, ${accentColor}26, transparent 65%)` }} />
         {/* Header with full color */}
         <div className="flex items-center gap-2 mb-3 relative">
-          <Volume2 className="w-4 h-4 text-purple-400" />
-          <span className="title-font font-w-70 text-purple-400 text-sm">Oscillator</span>
+          <Volume2 className="w-4 h-4" style={{ color: accentColor }} />
+          <span className="title-font font-w-70 text-sm" style={{ color: accentColor }}>Oscillator</span>
         </div>
 
         {/* Grid: inputs (left) | outputs (right) */}

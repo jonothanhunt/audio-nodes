@@ -24,6 +24,7 @@ import { getDefaultNodeData } from "@/lib/nodes";
 import { useProjectPersistence } from "@/hooks/useProjectPersistence";
 import { useGraph } from "@/hooks/useGraph";
 import MidiTransposeNode from "@/components/nodes/MidiTransposeNode";
+import GradientEdge from '@/components/edges/GradientEdge';
 
 // Custom node registry
 const nodeTypes = {
@@ -370,6 +371,8 @@ export default function AudioNodesEditor() {
     };
   }, [sendMIDI, setNodes]);
 
+  const edgeTypes = React.useMemo(() => ({ gradient: GradientEdge }), []);
+
   return (
     <div className="h-screen w-screen relative bg-gray-900 overflow-hidden">
       {/* Startup overlay to initialize audio context */}
@@ -391,7 +394,8 @@ export default function AudioNodesEditor() {
         <div className="absolute inset-0">
           <ReactFlow
             nodes={nodes}
-            edges={edges}
+            edges={edges.map(e => ({ ...e, type: 'gradient' }))}
+            edgeTypes={edgeTypes}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
@@ -403,6 +407,7 @@ export default function AudioNodesEditor() {
             isValidConnection={isValidConnection}
             onInit={(instance) => { rfInstanceRef.current = instance; }}
           >
+            {/* Removed old per-edge gradient defs; handled by custom edge component */}
             <MiniMap
               className="react-flow-minimap-dark !top-auto !right-auto bg-gray-800/80 backdrop-blur-md rounded-xl border border-gray-700/80 shadow"
               style={{ width: 288, height: 146 }}

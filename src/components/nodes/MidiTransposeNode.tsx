@@ -3,6 +3,7 @@
 import React from "react";
 import { Handle, Position } from "reactflow";
 import { ArrowUpDown } from "lucide-react";
+import { getNodeMeta } from '@/lib/nodeRegistry';
 
 interface MidiTransposeNodeProps {
   id: string;
@@ -20,6 +21,7 @@ const labelCls = "block text-xs text-gray-300 w-20";
 const inputCls = "bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm text-white";
 
 const MidiTransposeNode: React.FC<MidiTransposeNodeProps> = ({ id, data, selected }) => {
+  const { accentColor } = getNodeMeta('midi-transpose');
   const { onParameterChange } = data;
   const semitones = typeof data.semitones === 'number' ? data.semitones : 0;
   const clampLow = typeof data.clampLow === 'number' ? data.clampLow : 0;
@@ -78,12 +80,13 @@ const MidiTransposeNode: React.FC<MidiTransposeNodeProps> = ({ id, data, selecte
       )}
       <div
         ref={cardRef}
-        className={`relative bg-gray-900 rounded-lg p-4 shadow-lg border ${selected ? 'border-amber-500' : 'border-amber-500/30'}`}
+        className={`relative bg-gray-900 rounded-lg p-4 shadow-lg border`}
+        style={{ borderColor: accentColor, boxShadow: selected ? `0 0 0 1px ${accentColor}, 0 0 12px -2px ${accentColor}` : undefined }}
       >
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-500/10 via-transparent to-transparent rounded-lg" />
+        <div className="pointer-events-none absolute inset-0 rounded-lg" style={{ background: `linear-gradient(135deg, ${accentColor}26, transparent 65%)` }} />
         <div className="flex items-center gap-2 mb-3 relative">
-          <ArrowUpDown className="w-4 h-4 text-amber-400" />
-          <span className="title-font font-w-70 text-amber-400 text-sm">Transpose</span>
+          <ArrowUpDown className="w-4 h-4" style={{ color: accentColor }} />
+          <span className="title-font font-w-70 text-sm" style={{ color: accentColor }}>Transpose</span>
         </div>
         {/* Two column layout: left = inputs/params, right = pass other & notes */}
         <div className="grid grid-cols-[minmax(10rem,_auto)_auto] gap-x-8 gap-y-2">

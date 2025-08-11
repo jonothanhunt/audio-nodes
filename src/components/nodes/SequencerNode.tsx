@@ -3,6 +3,7 @@
 import React from "react";
 import { Handle, Position } from "reactflow";
 import { Music } from "lucide-react";
+import { getNodeMeta } from '@/lib/nodeRegistry';
 
 interface SequencerNodeProps {
   id: string;
@@ -62,6 +63,7 @@ export default function SequencerNode({
   data,
   selected,
 }: SequencerNodeProps) {
+  const { accentColor } = getNodeMeta('sequencer');
   const { onParameterChange } = data;
   const lengthProp = data.length ?? 16;
   const fromNoteProp = data.fromNote ?? "C4";
@@ -299,16 +301,14 @@ export default function SequencerNode({
 
       <div
         ref={cardRef}
-        className={`relative bg-gray-900 rounded-lg p-4 shadow-lg border ${
-          selected ? "border-amber-500" : "border-amber-500/30"
-        }`}
+        className={`relative bg-gray-900 rounded-lg p-4 shadow-lg border`}
+        style={{ borderColor: accentColor, boxShadow: selected ? `0 0 0 1px ${accentColor}, 0 0 12px -2px ${accentColor}` : undefined }}
       >
-        {/* Subtle top-left gradient (Sequencing = amber) */}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-500/10 via-amber-500/0 to-transparent rounded-lg" />
+        <div className="pointer-events-none absolute inset-0 rounded-lg" style={{ background: `linear-gradient(135deg, ${accentColor}26, transparent 65%)` }} />
         {/* Header */}
         <div className="flex items-center gap-2 mb-3 relative">
-          <Music className="w-4 h-4 text-amber-400" />
-          <span className="title-font font-w-70 text-amber-400 text-sm">Sequencer</span>
+          <Music className="w-4 h-4" style={{ color: accentColor }} />
+          <span className="title-font font-w-70 text-sm" style={{ color: accentColor }}>Sequencer</span>
         </div>
 
         {/* Controls + Output label */}

@@ -3,6 +3,7 @@
 import React from 'react';
 import { Handle, Position } from 'reactflow';
 import { Waves } from 'lucide-react';
+import { getNodeMeta } from '@/lib/nodeRegistry';
 
 interface ReverbNodeProps {
   id: string;
@@ -15,6 +16,7 @@ interface ReverbNodeProps {
 }
 
 export default function ReverbNode({ id, data, selected }: ReverbNodeProps) {
+  const { accentColor } = getNodeMeta('reverb');
   const { feedback, wetMix, onParameterChange } = data;
 
   // Refs for measured alignment
@@ -73,13 +75,12 @@ export default function ReverbNode({ id, data, selected }: ReverbNodeProps) {
         <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-xs text-gray-500">ID: {id}</div>
       )}
 
-      <div ref={cardRef} className={`relative bg-gray-900 rounded-lg p-4 shadow-lg border ${selected ? 'border-blue-500' : 'border-blue-500/30'}`}>
-        {/* Subtle top-left gradient (Effects = blue) */}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-blue-500/10 via-blue-500/0 to-transparent rounded-lg" />
+      <div ref={cardRef} className={`relative bg-gray-900 rounded-lg p-4 shadow-lg border`} style={{ borderColor: accentColor, boxShadow: selected ? `0 0 0 1px ${accentColor}, 0 0 12px -2px ${accentColor}` : undefined }}>
+        <div className="pointer-events-none absolute inset-0 rounded-lg" style={{ background: `linear-gradient(135deg, ${accentColor}26, transparent 65%)` }} />
         {/* Header full color */}
         <div className="flex items-center gap-2 mb-3 relative">
-          <Waves className="w-4 h-4 text-blue-400" />
-          <span className="title-font font-w-70 text-blue-400 text-sm">Reverb</span>
+          <Waves className="w-4 h-4" style={{ color: accentColor }} />
+          <span className="title-font font-w-70 text-sm" style={{ color: accentColor }}>Reverb</span>
         </div>
 
         {/* Two-column grid */}
@@ -122,16 +123,13 @@ export default function ReverbNode({ id, data, selected }: ReverbNodeProps) {
 
           {/* Outputs column */}
           <div className="space-y-2">
-            {/* Audio Out */}
             <div ref={outRef} className="relative flex items-center justify-end">
               <span className="text-xs text-gray-300 mr-2">Audio Out</span>
             </div>
           </div>
         </div>
       </div>
-
       {/* Absolute handles aligned */}
-      {/* Audio In (circle) */}
       <Handle
         type="target"
         position={Position.Left}
@@ -139,7 +137,6 @@ export default function ReverbNode({ id, data, selected }: ReverbNodeProps) {
         className="!w-3 !h-3 !rounded-full !bg-gray-200 !border !border-gray-300"
         style={{ top: inTop, transform: 'translateY(-50%)', left: -6 }}
       />
-      {/* Params (diamonds) */}
       <Handle
         type="target"
         position={Position.Left}
@@ -154,7 +151,6 @@ export default function ReverbNode({ id, data, selected }: ReverbNodeProps) {
         className="!w-3 !h-3 !bg-gray-200 !border !border-gray-300 !rounded-none"
         style={{ top: wetTop, transform: 'translateY(-50%) rotate(45deg)', left: -6 }}
       />
-      {/* Audio Out (circle) */}
       <Handle
         type="source"
         position={Position.Right}
