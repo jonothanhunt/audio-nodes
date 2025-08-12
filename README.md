@@ -1,245 +1,216 @@
 # Audio Nodes
 
-A Next.js-based visual audio programming environment using Rust/WebAssembly for audio processing.
+[![node >=18](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org/)
+[![rust stable](https://img.shields.io/badge/rust-stable-orange)](https://www.rust-lang.org/)
+[![wasm-pack](https://img.shields.io/badge/wasm--pack-ready-purple)](https://github.com/rustwasm/wasm-pack)
 
-I love node-based dev and music, so I thought the wasm approach would be a good opportunity to learn Rust.
+A visual audio playground where you build sound by connecting blocks (nodes). It runs in your browser. Under the hood, the sound engine is written in [Rust](https://www.rust-lang.org/) and compiled to [WebAssembly (WASM)](https://webassembly.org/) for speed; the UI is built with [Next.js](https://nextjs.org/) ([React](https://react.dev/)) and [React Flow](https://reactflow.dev).
 
-## 🎵 Features
+I love node‑based creative workflows and making music—so this project is a good opportunity to learn Rust/WASM while making something fun and useful.
 
-- Node-based audio editor with visual programming interface
-- Rust/WASM audio engine for high-performance audio processing
-- AudioWorklet-based, off-main-thread DSP
-- Real-time parameter control with live audio updates
-- MIDI support with raw MIDI bytes standard
-- Multiple audio nodes: Oscillator, Reverb, Speaker, Sequencer, and Synthesizer
-- Project save/load functionality
-- Dark theme UI with purple/blue accents matching professional audio software
+## Index
 
-## 🛠️ Tech Stack
+- [Introduction](#introduction)
+  - [What is it?](#what-is-it)
+  - [How it works](#how-it-works)
+- [Demo](#demo)
+- [Developer Guide](#developer-guide)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Build the Audio Engine (WASM)](#build-the-audio-engine-wasm)
+  - [Run the app](#run-the-app)
+  - [Project structure](#project-structure)
+  - [Architecture overview](#architecture-overview)
+    - [Audio processing pipeline](#audio-processing-pipeline)
+    - [MIDI system](#midi-system)
+    - [Clock & timing](#clock--timing)
+    - [UI layer & design language](#ui-layer--design-language)
+  - [Adding a node (Rust + TypeScript)](#adding-a-node-rust--typescript)
+  - [Troubleshooting](#troubleshooting)
+- [Available nodes](#available-nodes)
 
-- Frontend: Next.js 15, TypeScript, Tailwind CSS, React Flow
-- Audio Engine: Rust with wasm-bindgen
-- Audio Pipeline: Web Audio API (AudioContext + AudioWorkletNode for transport only)
-- Build Tools: wasm-pack, Webpack
+---
 
-## 🚀 Getting Started
+## Introduction
+
+### What is it?
+
+Audio Nodes lets you create simple synth and effect chains by connecting visual blocks: for example, MIDI Input → Synthesizer → Reverb → Speaker. You can tweak parameters in real time and hear the result instantly.
+
+- In: MIDI or generated notes (Sequencer)
+- Process: Oscillator/Synth, Reverb, Transpose, etc.
+- Out: Speaker (final output)
+
+> [!IMPORTANT]
+> Audio is silent unless at least one Speaker node is present. Only audio reaching a Speaker input is heard.
+
+### How it works
+
+- Each block (node) does one job (make sound, change sound, or route sound).
+- You drag cables between nodes to define the flow.
+- The final node “Speaker” is the output to your device—connect to it to hear anything.
+- Everything runs in your browser.
+
+### Demo
+
+![Audio Nodes demo](./audio-nodes.png)
+
+---
+
+## Developer Guide
 
 ### Prerequisites
 
-- Node.js 18+
-- Rust with wasm-pack installed
+- [Node.js](https://nodejs.org/) 18+
+- [Rust](https://www.rust-lang.org/) + [wasm-pack](https://rustwasm.github.io/wasm-pack/)
 
 ### Installation
-
-1. Clone the repository:
 
 ```bash
 git clone <repository-url>
 cd audio-nodes
-```
-
-2. Install dependencies:
-
-```bash
 npm install
 ```
 
-3. Build the Rust/WASM audio engine (copies artifacts to `public/audio-engine-wasm` and `src/audio-engine-wasm`):
+### Build the Audio Engine (WASM)
+
+Builds the Rust engine and copies wasm-bindgen outputs into both `public/audio-engine-wasm/` and `src/audio-engine-wasm/`:
 
 ```bash
 npm run build:wasm
 ```
 
-4. Start the development server:
+### Run the app
 
 ```bash
 npm run dev
+# open http://localhost:3000
 ```
 
-5. Open http://localhost:3000 to view the application.
+> [!TIP]
+> If audio doesn’t start, interact with the page (click) to allow the browser to start the AudioContext.
 
-## 📁 Project Structure
+### Project structure
 
 ```
 audio-nodes/
 ├── public/
 │   ├── worklets/
-│   │   └── audio-engine-processor.js   # AudioWorkletProcessor (runs DSP)
-│   ├── audio-engine-wasm/              # wasm-bindgen output served by Next.js
+│   │   └── audio-engine-processor.js      # AudioWorkletProcessor (runs DSP)
+│   ├── audio-engine-wasm/                 # wasm-bindgen output served by Next.js
 │   │   ├── audio_engine.js
 │   │   ├── audio_engine_bg.wasm
 │   │   └── *.d.ts / package.json
-│   └── projects/                       # Default project files
-│       └── default-project.json
+│   └── projects/
+│       └── default-project.json           # Example project
 ├── src/
-│   ├── app/                            # Next.js App Router
+│   ├── app/                               # Next.js App Router
 │   │   ├── page.tsx
 │   │   ├── layout.tsx
 │   │   └── globals.css
 │   ├── components/
-│   │   ├── nodes/                      # Node UI components
+│   │   ├── nodes/                         # Node UI components (React)
+│   │   │   ├── MidiInputNode.tsx
+│   │   │   ├── MidiTransposeNode.tsx
 │   │   │   ├── OscillatorNode.tsx
 │   │   │   ├── ReverbNode.tsx
-│   │   │   ├── SpeakerNode.tsx
 │   │   │   ├── SequencerNode.tsx
+│   │   │   ├── SpeakerNode.tsx
 │   │   │   └── SynthesizerNode.tsx
-│   │   ├── AudioNodesEditor.tsx        # Main node editor component
-│   │   ├── NodeLibrary.tsx             # Node palette/library
-│   │   ├── SaveLoadPanel.tsx           # Project persistence UI
-│   │   └── TitleBarCreds.tsx           # Header component
-│   ├── hooks/                          # React hooks
-│   │   ├── useAudioEngine.ts
-│   │   ├── useGraph.ts
-│   │   ├── useProjectPersistence.ts
-│   │   └── useWasm.ts
+│   │   ├── node-ui/                       # Handle layer + shared node UI
+│   │   ├── edges/                         # Custom React Flow edges
+│   │   ├── AudioNodesEditor.tsx           # Main editor
+│   │   ├── NodeLibrary.tsx                # Node palette/library
+│   │   ├── SaveLoadPanel.tsx              # Project persistence UI
+│   │   └── TitleBarCreds.tsx              # Header/nav
+│   ├── hooks/
+│   │   ├── useAudioEngine.ts              # Bootstraps worklet + wasm in page
+│   │   ├── useGraph.ts                    # Graph state (React Flow)
+│   │   ├── useProjectPersistence.ts       # Save/load (file + localStorage)
+│   │   └── useWasm.ts                     # WASM loader glue
 │   ├── lib/
-│   │   ├── audioManager.ts             # Initializes worklet, manages graph, bootstraps WASM
-│   │   ├── handles.ts                  # Node handle types and utilities
-│   │   ├── nodes.ts                    # Node type definitions
-│   │   └── utils.ts                    # Utility functions
+│   │   ├── audioManager.ts                # Manages worklet graph + messages
+│   │   ├── handles.ts
+│   │   ├── nodeRegistry.ts                # Metadata (colors, categories)
+│   │   ├── nodes.ts                       # Node type defaults and helpers
+│   │   └── utils.ts
 │   ├── types/
-│   │   └── project.ts                  # Project data structures
-│   └── audio-engine-wasm/              # Local copy of wasm-bindgen pkg (types/JS glue)
-├── audio-engine/                       # Rust audio processing
+│   │   └── project.ts
+│   └── audio-engine-wasm/                 # Local copy of wasm-bindgen pkg
+├── audio-engine/                          # Rust audio processing engine
 │   ├── src/
 │   │   ├── nodes/
 │   │   │   ├── oscillator.rs
 │   │   │   ├── reverb.rs
 │   │   │   ├── speaker.rs
 │   │   │   ├── synth.rs
-│   │   │   └── mod.rs
+│   │   │   └── transpose.rs
 │   │   └── lib.rs
 │   ├── Cargo.toml
-│   └── pkg/                           # wasm-pack build output
-├── build-wasm.sh                       # Builds + copies wasm-bindgen artifacts
+│   └── pkg/                               # wasm-pack build output
+├── build-wasm.sh                           # Builds + copies wasm artifacts
 └── README.md
 ```
 
-## 🎯 Architecture
+### Architecture overview
 
-### Audio Processing
+#### Audio processing pipeline
 
-- All DSP is implemented in Rust and compiled to WebAssembly.
-- The main thread initializes an `AudioWorkletNode` and bootstraps the WASM into the worklet by fetching the wasm-bindgen glue (`audio_engine.js`) and `.wasm` bytes from `public/audio-engine-wasm/`, then posting them to the worklet.
-- The `AudioWorkletProcessor` evaluates the glue, initializes the WASM, and processes audio buffers off the main thread.
-- The UI sends graph updates (nodes, parameters, connections) to the worklet via `postMessage`. Payloads are structured-clone safe.
-- Web Audio API is used only for transport/output (AudioContext, AudioWorkletNode, and destination). All synthesis/effects/mixing happen in WASM.
-- Processing occurs in the browser's native block size (typically 128 frames per render quantum).
+- DSP implemented in Rust, compiled with [wasm-bindgen](https://rustwasm.github.io/wasm-bindgen/) to WASM.
+- Main thread spins up an [AudioWorkletNode](https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletNode), fetches glue (`audio_engine.js`) + `.wasm` from `public/audio-engine-wasm/`, then posts to the worklet.
+- The [AudioWorkletProcessor](https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletProcessor) initializes the WASM and processes audio off the main thread.
+- UI sends node graph updates and parameter changes via `postMessage` to the worklet.
+- [Web Audio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API) is used for transport/output (context + destination). All synthesis/effects/mixing happen in WASM.
 
-### MIDI System
+#### MIDI system
 
-- Uses raw MIDI bytes standard for universal compatibility
-- Supports sample-accurate timing with `atFrame` (0..blockSize-1) or `atTimeMs` fallback
-- MIDI routing: `midi-out → midi-in` connections only
-- Worklet maintains per-node MIDI queues and handles routing
-- Sequencer nodes emit Note On/Off events; Synthesizer nodes consume MIDI input
+- Raw MIDI bytes for universal compatibility.
+- Optional sample‑accurate scheduling using `atFrame` (0..blockSize‑1) or time‑based `atTimeMs`.
+- Routing rule: `midi-out → midi-in` only.
+- Worklet maintains per‑node MIDI queues and routes messages accordingly.
 
-### Clock & Timing Design
+#### Clock & timing
 
-Hybrid approach:
+- Global transport (default 120 BPM) exists implicitly when no clock node is connected.
+- Future clock nodes allow multiple tempos/polymeter.
+- Scheduling per block, with room for swing/humanize.
 
-- Global Transport: implicit, auto-runs (default 120 BPM) if no explicit Clock node is connected to a timing-dependent node. Stored in project root. Can be surfaced as a node later.
-- Clock Nodes: explicit timing sources allowing multiple simultaneous tempos / polymeter.
+#### UI layer & design language
 
-Clock Node Parameters:
+- [React Flow](https://reactflow.dev) for node graph, [Tailwind CSS](https://tailwindcss.com/) for styling.
+- Two-column layout: inputs/params (left), outputs (right), both top‑aligned.
+- Handle shapes encode type: audio (circle), midi (square), numeric (diamond), boolean (triangle), string/enum (pentagon).
+- Accent color used for borders, titles, active handles.
 
-- bpm: number
-- ppq: ticks per quarter (default 96) for fine resolution
-- beats_per_bar: default 4 (user adjustable)
-- swing_pct: 0–0.6 applied to chosen subdivision (swing_subdivision: 1/8 or 1/16)
-- run (bool), reset (trigger)
-- phase_offset_beats: fractional start offset
-- ratio: optional multiplier/divider relative to another clock (future Clock Ratio node)
+### Adding a node (Rust + TypeScript)
 
-Outputs (internal timing message, not over UI thread):
-`{ type: "clock", clockId, tick, ppq, beat, bar, atFrame }`
+High‑level steps to add a new node type that processes audio or MIDI.
 
-Scheduling Algorithm (per block):
+1) Rust/WASM (audio‑engine)
+- Create `audio-engine/src/nodes/<your_node>.rs` (e.g. [`audio-engine/src/nodes/synth.rs`](audio-engine/src/nodes/synth.rs)) and implement processing.
+- Expose a wasm‑bindgen interface in [`audio-engine/src/lib.rs`](audio-engine/src/lib.rs) (constructors, getters/setters, process functions).
+- Rebuild artifacts:
 
-1. frames_per_tick = sample_rate _ 60 / (bpm _ ppq)
-2. While next_tick_frame < block_end emit tick (store atFrame = next_tick_frame - block_start)
-3. Apply swing by lengthening every second subdivision tick and shortening the preceding one (preserve total period).
-4. Update counters (tick→beat→bar).
-
-Tempo Change: applied after current block's scheduled ticks (simple). Future: mid-block proportional adjustment.
-
-Sequencer Resolution: derives step timing by dividing incoming ticks (e.g. step every 24 ticks for 1/16 at ppq=96).
-
-Multiple Clocks: Each sequencer chooses one clock input; if none, uses global transport. Advanced polymetric setups connect different clocks to different sequencers.
-
-Future Enhancements:
-
-- Clock Ratio node (derives child tempo by ratio while phase-aligning bar starts)
-- Tap Tempo & Tempo Automation events
-- Humanize / Groove nodes that post-process tick timing
-
-### UI Layer
-
-- React Flow for node-based editing and connections
-- TypeScript for strong typing of node parameters and messages
-- Tailwind CSS with dark theme and purple/blue accents (#8b5cf6, #3b82f6)
-- Real-time parameter binding from UI to worklet
-- Project save/load with JSON serialization
-
-### 🎨 Node UI Design Language (Best Practices)
-
-These guidelines define the consistent visual & interaction language for all node components:
-
-1. Column Layout
-    - Two columns: LEFT = all inputs & parameter controls; RIGHT = outputs only.
-    - Both columns are TOP-aligned (no vertical centering of a lone output).
-    - Sources with no inputs (e.g. MIDI In) still use the two-column layout: left column shows inputs (no handles), right column shows a top-aligned output label (e.g. “MIDI Out”) used to align the handle.
-    - If a node has no outputs (pure sink like Speaker) omit the right column; retain padding symmetry.
-
-2. Inputs Without Handles
-    - Some parameters are purely local UI (e.g. a preset selector) and have no inbound connection handle.
-    - They still occupy a normal row (label + control) for consistent vertical rhythm.
-    - Only rows representing connectable params get a left handle; others are purely visual.
-
-3. Parameter Rows & Registration
-    - Each param row registers itself for vertical alignment; the handle layer decides which ones become handles based on param metadata (type lists).
-    - Adding a new param = update the config array; UI + handle (if applicable) appear automatically.
-
-4. Vertical Alignment of Handles
-    - Computed from the vertical center of each registered row using a shared provider & ResizeObserver.
-    - Absolute-positioned handles sit just outside the card edge (`left: -size/2` or `right: -size/2`).
-
-5. Handle Styling & Sizes
-    - Variants & sizes: numeric = 16px diamond (rotated square), audio out = 18px circle, string/select = 20px pentagon, midi = 16px square, bool = 20px triangle (SVG).
-    - Base (disconnected) background: `#111827` except SVG variants which use transparent background and `--fill`.
-    - Border: `1px solid accentColor` (SVG variants use stroke in the SVG instead).
-    - Hover: fill/background switches to accentColor (SVG sets `--fill`).
-
-6. Handle Shape Semantics
-    - Audio: circle. Numeric/continuous: diamond. String/enum: pentagon. MIDI/event: square. Boolean/gate: triangle.
-
-7. Accent Usage
-    - Card border + selection glow; title icon + text; subtle gradient overlay; slider fill; active handle fills.
-
-8. Parameter Defaults & Persistence
-    - On mount, any missing param is initialized (idempotent) using config defaults.
-
-9. Input Components
-    - Number + Select share unified width (`w-28`), center text for numeric consistency. Drag prevention on interactive controls.
-
-10. Sliders
-
-- Auto-render for Number params with both min and max.
-
-11. Top Alignment Rule (Reiterated)
-
-- Inputs and outputs remain top-aligned regardless of differing column heights to aid scanning across multiple selected nodes.
-
-## 🎛️ Available Nodes
-
-- Oscillator: Audio source (Frequency, Amplitude, Waveform). Output: Audio.
-- Reverb: Effect (Feedback, Wet Mix). Input: Audio. Output: Audio.
-- Speaker: Sink (Volume, Mute). Input: Audio. Output: Final mix.
-- Sequencer: MIDI generator (pattern grid, BPM, Play). Output: MIDI.
-- Synthesizer: Poly synth (Preset, Waveform, ADSR, Filter, Glide, Gain, Voices). Input: MIDI. Output: Audio.
-- MIDI Input: Source (Device, Channel). Output: MIDI.
-
-```diff
-- If no Speaker is present, sources used to mix directly to output.
-+ Audio is silent unless at least one Speaker node is present. Only audio reaching a Speaker input is heard.
+```bash
+npm run build:wasm
 ```
+
+2) Worklet wiring
+- Ensure [`public/worklets/audio-engine-processor.js`](public/worklets/audio-engine-processor.js) initializes your exported functions or uses the generic engine API to create/update your node.
+- Update message handling if your node needs special messages.
+
+3) UI (React/TypeScript)
+- Add a React component in `src/components/nodes/` (e.g. [`src/components/nodes/SynthesizerNode.tsx`](src/components/nodes/SynthesizerNode.tsx)).
+- Register defaults and metadata in [`src/lib/nodes.ts`](src/lib/nodes.ts) and [`src/lib/nodeRegistry.ts`](src/lib/nodeRegistry.ts).
+- If the node emits/consumes MIDI, ensure [`src/components/AudioNodesEditor.tsx`](src/components/AudioNodesEditor.tsx) and [`src/lib/audioManager.ts`](src/lib/audioManager.ts) are aware of its ports.
+
+Tip: Most parameter changes flow through a common `onParameterChange(nodeId, key, value)` pattern—wire your UI controls to it and let the worklet sync happen automatically.
+
+### Troubleshooting
+
+- No sound? Add a Speaker node and ensure an audio signal reaches it.
+- Browser blocked audio start? Click anywhere (user gesture) to start the AudioContext.
+- WASM didn’t load? Run `npm run build:wasm` and check the console for network errors loading files in `public/audio-engine-wasm/`.
+
+[Back to top](#audio-nodes)
+
