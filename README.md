@@ -6,7 +6,12 @@
 
 A visual audio playground where you build sound by connecting blocks (nodes). It runs in your browser. Under the hood, the sound engine is written in [Rust](https://www.rust-lang.org/) and compiled to [WebAssembly (WASM)](https://webassembly.org/) for speed; the UI is built with [Next.js](https://nextjs.org/) ([React](https://react.dev/)) and [React Flow](https://reactflow.dev).
 
+Live site: https://audio-nodes.jonothan.dev
+
 I love node‑based creative workflows and making music—so this project is a good opportunity to learn Rust/WASM while making something fun and useful.
+
+![Audio Nodes demo](./audio-nodes.png)
+
 
 ## Index
 
@@ -50,10 +55,6 @@ Audio Nodes lets you create simple synth and effect chains by connecting visual 
 - You drag cables between nodes to define the flow.
 - The final node “Speaker” is the output to your device—connect to it to hear anything.
 - Everything runs in your browser.
-
-### Demo
-
-![Audio Nodes demo](./audio-nodes.png)
 
 ---
 
