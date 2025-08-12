@@ -1,5 +1,5 @@
-import AudioNodesEditor from '@/components/AudioNodesEditor';
+import AudioNodesEditor from "@/components/AudioNodesEditor";
 
 export default function Home() {
-  return <AudioNodesEditor />;
+    return <AudioNodesEditor />;
 }

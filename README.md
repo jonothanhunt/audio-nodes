@@ -32,22 +32,26 @@ I love node-based dev and music, so I thought the wasm approach would be a good 
 ### Installation
 
 1. Clone the repository:
+
 ```bash
 git clone <repository-url>
 cd audio-nodes
 ```
 
 2. Install dependencies:
+
 ```bash
 npm install
 ```
 
 3. Build the Rust/WASM audio engine (copies artifacts to `public/audio-engine-wasm` and `src/audio-engine-wasm`):
+
 ```bash
 npm run build:wasm
 ```
 
 4. Start the development server:
+
 ```bash
 npm run dev
 ```
@@ -114,6 +118,7 @@ audio-nodes/
 ## 🎯 Architecture
 
 ### Audio Processing
+
 - All DSP is implemented in Rust and compiled to WebAssembly.
 - The main thread initializes an `AudioWorkletNode` and bootstraps the WASM into the worklet by fetching the wasm-bindgen glue (`audio_engine.js`) and `.wasm` bytes from `public/audio-engine-wasm/`, then posting them to the worklet.
 - The `AudioWorkletProcessor` evaluates the glue, initializes the WASM, and processes audio buffers off the main thread.
@@ -122,6 +127,7 @@ audio-nodes/
 - Processing occurs in the browser's native block size (typically 128 frames per render quantum).
 
 ### MIDI System
+
 - Uses raw MIDI bytes standard for universal compatibility
 - Supports sample-accurate timing with `atFrame` (0..blockSize-1) or `atTimeMs` fallback
 - MIDI routing: `midi-out → midi-in` connections only
@@ -129,11 +135,14 @@ audio-nodes/
 - Sequencer nodes emit Note On/Off events; Synthesizer nodes consume MIDI input
 
 ### Clock & Timing Design
+
 Hybrid approach:
+
 - Global Transport: implicit, auto-runs (default 120 BPM) if no explicit Clock node is connected to a timing-dependent node. Stored in project root. Can be surfaced as a node later.
 - Clock Nodes: explicit timing sources allowing multiple simultaneous tempos / polymeter.
 
 Clock Node Parameters:
+
 - bpm: number
 - ppq: ticks per quarter (default 96) for fine resolution
 - beats_per_bar: default 4 (user adjustable)
@@ -146,7 +155,8 @@ Outputs (internal timing message, not over UI thread):
 `{ type: "clock", clockId, tick, ppq, beat, bar, atFrame }`
 
 Scheduling Algorithm (per block):
-1. frames_per_tick = sample_rate * 60 / (bpm * ppq)
+
+1. frames_per_tick = sample_rate _ 60 / (bpm _ ppq)
 2. While next_tick_frame < block_end emit tick (store atFrame = next_tick_frame - block_start)
 3. Apply swing by lengthening every second subdivision tick and shortening the preceding one (preserve total period).
 4. Update counters (tick→beat→bar).
@@ -158,11 +168,13 @@ Sequencer Resolution: derives step timing by dividing incoming ticks (e.g. step 
 Multiple Clocks: Each sequencer chooses one clock input; if none, uses global transport. Advanced polymetric setups connect different clocks to different sequencers.
 
 Future Enhancements:
+
 - Clock Ratio node (derives child tempo by ratio while phase-aligning bar starts)
 - Tap Tempo & Tempo Automation events
 - Humanize / Groove nodes that post-process tick timing
 
 ### UI Layer
+
 - React Flow for node-based editing and connections
 - TypeScript for strong typing of node parameters and messages
 - Tailwind CSS with dark theme and purple/blue accents (#8b5cf6, #3b82f6)
@@ -170,50 +182,53 @@ Future Enhancements:
 - Project save/load with JSON serialization
 
 ### 🎨 Node UI Design Language (Best Practices)
+
 These guidelines define the consistent visual & interaction language for all node components:
 
 1. Column Layout
-   - Two columns: LEFT = all inputs & parameter controls; RIGHT = outputs only.
-   - Both columns are TOP-aligned (no vertical centering of a lone output).
-   - Sources with no inputs (e.g. MIDI In) still use the two-column layout: left column shows inputs (no handles), right column shows a top-aligned output label (e.g. “MIDI Out”) used to align the handle.
-   - If a node has no outputs (pure sink like Speaker) omit the right column; retain padding symmetry.
+    - Two columns: LEFT = all inputs & parameter controls; RIGHT = outputs only.
+    - Both columns are TOP-aligned (no vertical centering of a lone output).
+    - Sources with no inputs (e.g. MIDI In) still use the two-column layout: left column shows inputs (no handles), right column shows a top-aligned output label (e.g. “MIDI Out”) used to align the handle.
+    - If a node has no outputs (pure sink like Speaker) omit the right column; retain padding symmetry.
 
 2. Inputs Without Handles
-   - Some parameters are purely local UI (e.g. a preset selector) and have no inbound connection handle.
-   - They still occupy a normal row (label + control) for consistent vertical rhythm.
-   - Only rows representing connectable params get a left handle; others are purely visual.
+    - Some parameters are purely local UI (e.g. a preset selector) and have no inbound connection handle.
+    - They still occupy a normal row (label + control) for consistent vertical rhythm.
+    - Only rows representing connectable params get a left handle; others are purely visual.
 
 3. Parameter Rows & Registration
-   - Each param row registers itself for vertical alignment; the handle layer decides which ones become handles based on param metadata (type lists).
-   - Adding a new param = update the config array; UI + handle (if applicable) appear automatically.
+    - Each param row registers itself for vertical alignment; the handle layer decides which ones become handles based on param metadata (type lists).
+    - Adding a new param = update the config array; UI + handle (if applicable) appear automatically.
 
 4. Vertical Alignment of Handles
-   - Computed from the vertical center of each registered row using a shared provider & ResizeObserver.
-   - Absolute-positioned handles sit just outside the card edge (`left: -size/2` or `right: -size/2`).
+    - Computed from the vertical center of each registered row using a shared provider & ResizeObserver.
+    - Absolute-positioned handles sit just outside the card edge (`left: -size/2` or `right: -size/2`).
 
 5. Handle Styling & Sizes
-   - Variants & sizes: numeric = 16px diamond (rotated square), audio out = 18px circle, string/select = 20px pentagon, midi = 16px square, bool = 20px triangle (SVG).
-   - Base (disconnected) background: `#111827` except SVG variants which use transparent background and `--fill`.
-   - Border: `1px solid accentColor` (SVG variants use stroke in the SVG instead).
-   - Hover: fill/background switches to accentColor (SVG sets `--fill`).
+    - Variants & sizes: numeric = 16px diamond (rotated square), audio out = 18px circle, string/select = 20px pentagon, midi = 16px square, bool = 20px triangle (SVG).
+    - Base (disconnected) background: `#111827` except SVG variants which use transparent background and `--fill`.
+    - Border: `1px solid accentColor` (SVG variants use stroke in the SVG instead).
+    - Hover: fill/background switches to accentColor (SVG sets `--fill`).
 
 6. Handle Shape Semantics
-   - Audio: circle. Numeric/continuous: diamond. String/enum: pentagon. MIDI/event: square. Boolean/gate: triangle.
+    - Audio: circle. Numeric/continuous: diamond. String/enum: pentagon. MIDI/event: square. Boolean/gate: triangle.
 
 7. Accent Usage
-   - Card border + selection glow; title icon + text; subtle gradient overlay; slider fill; active handle fills.
+    - Card border + selection glow; title icon + text; subtle gradient overlay; slider fill; active handle fills.
 
 8. Parameter Defaults & Persistence
-   - On mount, any missing param is initialized (idempotent) using config defaults.
+    - On mount, any missing param is initialized (idempotent) using config defaults.
 
 9. Input Components
-   - Number + Select share unified width (`w-28`), center text for numeric consistency. Drag prevention on interactive controls.
+    - Number + Select share unified width (`w-28`), center text for numeric consistency. Drag prevention on interactive controls.
 
 10. Sliders
-   - Auto-render for Number params with both min and max.
+
+- Auto-render for Number params with both min and max.
 
 11. Top Alignment Rule (Reiterated)
-   - Inputs and outputs remain top-aligned regardless of differing column heights to aid scanning across multiple selected nodes.
+
+- Inputs and outputs remain top-aligned regardless of differing column heights to aid scanning across multiple selected nodes.
 
 ## 🎛️ Available Nodes
 

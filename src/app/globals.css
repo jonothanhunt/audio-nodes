@@ -1,120 +1,133 @@
 @import "tailwindcss";
 
 :root {
-  --background: #111827; /* Tailwind gray-900 */
-  --foreground: #e5e7eb; /* Tailwind gray-200 */
+    --background: #111827; /* Tailwind gray-900 */
+    --foreground: #e5e7eb; /* Tailwind gray-200 */
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-hyperlegible), var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-title: var(--font-lastik);
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --font-sans: var(--font-hyperlegible), var(--font-geist-sans);
+    --font-mono: var(--font-geist-mono);
+    --font-title: var(--font-lastik);
 }
 
 /* Keep the same background in both schemes to avoid flashing/overscroll white */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #111827;
-    --foreground: #e5e7eb;
-  }
+    :root {
+        --background: #111827;
+        --foreground: #e5e7eb;
+    }
 }
 
-html, body {
-  background-color: var(--background);
+html,
+body {
+    background-color: var(--background);
 }
 
 body {
-  color: var(--foreground);
-  font-family: var(--font-hyperlegible), system-ui, sans-serif;
+    color: var(--foreground);
+    font-family: var(--font-hyperlegible), system-ui, sans-serif;
 }
 
 /* Title helper: use Lastik variable font at very light weight */
 .title-font {
-  font-family: var(--font-lastik), ui-sans-serif, system-ui, sans-serif;
-  font-variation-settings: "wght" 20;
-  font-weight: 20;
-  letter-spacing: 0.01em;
+    font-family: var(--font-lastik), ui-sans-serif, system-ui, sans-serif;
+    font-variation-settings: "wght" 20;
+    font-weight: 20;
+    letter-spacing: 0.01em;
 }
 
 /* React Flow Dark Theme */
 .react-flow-dark {
-  background: #111827;
-  color: #ffffff;
+    background: #111827;
+    color: #ffffff;
 }
 
 .react-flow-dark .react-flow__edge-path {
-  stroke: #6b7280;
+    stroke: #6b7280;
 }
 
 .react-flow-dark .react-flow__edge.selected .react-flow__edge-path {
-  stroke: #8b5cf6;
+    stroke: #8b5cf6;
 }
 
 .react-flow-dark .react-flow__connection-line {
-  stroke: #6b7280;
+    stroke: #6b7280;
 }
 
 .react-flow-dark .react-flow__controls,
 .react-flow-controls-dark {
-  background: rgba(31, 41, 55, 0.85) !important; /* #1f2937 with opacity */
-  border: 1px solid #374151 !important;
-  border-radius: 0.75rem !important; /* match rounded panels */
-  backdrop-filter: blur(8px);
-  box-shadow: 0 10px 15px -3px rgba(0,0,0,0.2), 0 4px 6px -4px rgba(0,0,0,0.2);
-  overflow: hidden; /* clip inner button corners */
+    background: rgba(31, 41, 55, 0.85) !important; /* #1f2937 with opacity */
+    border: 1px solid #374151 !important;
+    border-radius: 0.75rem !important; /* match rounded panels */
+    backdrop-filter: blur(8px);
+    box-shadow:
+        0 10px 15px -3px rgba(0, 0, 0, 0.2),
+        0 4px 6px -4px rgba(0, 0, 0, 0.2);
+    overflow: hidden; /* clip inner button corners */
 }
 
 .react-flow-controls-dark button {
-  background: transparent !important;
-  color: #ffffff !important; /* icon color via currentColor */
-  border: none !important; /* remove default separators */
-  padding: 0.5rem !important; /* match panel control padding */
+    background: transparent !important;
+    color: #ffffff !important; /* icon color via currentColor */
+    border: none !important; /* remove default separators */
+    padding: 0.5rem !important; /* match panel control padding */
 }
 
 /* subtle dividers between stacked buttons */
 .react-flow-controls-dark button + button {
-  border-top: 1px solid rgba(55, 65, 81, 0.6) !important;
+    border-top: 1px solid rgba(55, 65, 81, 0.6) !important;
 }
 
 .react-flow-controls-dark button:hover {
-  background: rgba(55, 65, 81, 0.8) !important; /* #374151 */
+    background: rgba(55, 65, 81, 0.8) !important; /* #374151 */
 }
 
 /* Force SVG icons to white for higher contrast */
 .react-flow-controls-dark button svg,
 .react-flow-controls-dark button svg * {
-  stroke: #ffffff !important;
-  fill: none !important;
+    stroke: #ffffff !important;
+    fill: none !important;
 }
 
 .react-flow-minimap-dark {
-  background: rgba(31, 41, 55, 0.85) !important;
-  border: 1px solid #374151 !important;
-  border-radius: 0.75rem !important; /* match rounded panels */
-  backdrop-filter: blur(8px);
-  box-shadow: 0 10px 15px -3px rgba(0,0,0,0.2), 0 4px 6px -4px rgba(0,0,0,0.2);
-  overflow: hidden;
+    background: rgba(31, 41, 55, 0.85) !important;
+    border: 1px solid #374151 !important;
+    border-radius: 0.75rem !important; /* match rounded panels */
+    backdrop-filter: blur(8px);
+    box-shadow:
+        0 10px 15px -3px rgba(0, 0, 0, 0.2),
+        0 4px 6px -4px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
 }
 
 .react-flow-minimap-dark svg {
-  border-radius: 0.75rem !important;
+    border-radius: 0.75rem !important;
 }
 
 .react-flow-minimap-dark .react-flow__minimap-mask {
-  fill: #111827 !important;
-  fill-opacity: 0.6 !important;
+    fill: #111827 !important;
+    fill-opacity: 0.6 !important;
 }
 
 .react-flow-minimap-dark .react-flow__minimap-node {
-  fill: #9ca3af !important; /* slightly brighter */
-  stroke: #e5e7eb !important; /* light border for contrast */
+    fill: #9ca3af !important; /* slightly brighter */
+    stroke: #e5e7eb !important; /* light border for contrast */
 }
 
 @layer utilities {
-  .font-w-70 { font-weight: 70; }
-  .font-w-80 { font-weight: 80; }
-  .font-w-90 { font-weight: 90; }
-  .font-w-100 { font-weight: 100; }
+    .font-w-70 {
+        font-weight: 70;
+    }
+    .font-w-80 {
+        font-weight: 80;
+    }
+    .font-w-90 {
+        font-weight: 90;
+    }
+    .font-w-100 {
+        font-weight: 100;
+    }
 }

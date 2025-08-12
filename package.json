@@ -1,31 +1,31 @@
 {
-  "name": "audio-nodes",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "build:wasm": "./build-wasm.sh",
-    "wasm:watch": "watchexec -w audio-engine/src './build-wasm.sh'",
-    "start": "next start",
-    "lint": "next lint"
-  },
-  "dependencies": {
-    "lucide-react": "^0.539.0",
-    "next": "15.4.6",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "reactflow": "^11.11.4"
-  },
-  "devDependencies": {
-    "@eslint/eslintrc": "^3",
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20.19.9",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "15.4.6",
-    "tailwindcss": "^4",
-    "typescript": "^5"
-  }
+    "name": "audio-nodes",
+    "version": "0.1.0",
+    "private": true,
+    "scripts": {
+        "dev": "next dev",
+        "build": "next build",
+        "build:wasm": "./build-wasm.sh",
+        "wasm:watch": "watchexec -w audio-engine/src './build-wasm.sh'",
+        "start": "next start",
+        "lint": "next lint"
+    },
+    "dependencies": {
+        "lucide-react": "^0.539.0",
+        "next": "15.4.6",
+        "react": "19.1.0",
+        "react-dom": "19.1.0",
+        "reactflow": "^11.11.4"
+    },
+    "devDependencies": {
+        "@eslint/eslintrc": "^3",
+        "@tailwindcss/postcss": "^4",
+        "@types/node": "^20.19.9",
+        "@types/react": "^19",
+        "@types/react-dom": "^19",
+        "eslint": "^9",
+        "eslint-config-next": "15.4.6",
+        "tailwindcss": "^4",
+        "typescript": "^5"
+    }
 }

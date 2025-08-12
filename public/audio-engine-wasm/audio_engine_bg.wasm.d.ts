@@ -7,27 +7,61 @@ export const reverbnode_set_feedback: (a: number, b: number) => void;
 export const reverbnode_feedback: (a: number) => number;
 export const reverbnode_set_wet_mix: (a: number, b: number) => void;
 export const reverbnode_wet_mix: (a: number) => number;
-export const reverbnode_process: (a: number, b: number, c: number, d: number, e: number, f: any) => void;
+export const reverbnode_process: (
+    a: number,
+    b: number,
+    c: number,
+    d: number,
+    e: number,
+    f: any,
+) => void;
 export const __wbg_synthnode_free: (a: number, b: number) => void;
 export const synthnode_new: (a: number) => number;
 export const synthnode_note_on: (a: number, b: number, c: number) => void;
 export const synthnode_note_off: (a: number, b: number) => void;
 export const synthnode_sustain_pedal: (a: number, b: number) => void;
 export const synthnode_set_waveform: (a: number, b: number) => void;
-export const synthnode_set_adsr: (a: number, b: number, c: number, d: number, e: number) => void;
+export const synthnode_set_adsr: (
+    a: number,
+    b: number,
+    c: number,
+    d: number,
+    e: number,
+) => void;
 export const synthnode_set_glide: (a: number, b: number) => void;
 export const synthnode_set_gain: (a: number, b: number) => void;
 export const synthnode_set_max_voices: (a: number, b: number) => void;
-export const synthnode_process: (a: number, b: number, c: number, d: any) => void;
+export const synthnode_process: (
+    a: number,
+    b: number,
+    c: number,
+    d: any,
+) => void;
 export const __wbg_miditransposenode_free: (a: number, b: number) => void;
 export const miditransposenode_new: () => number;
-export const miditransposenode_set_params: (a: number, b: number, c: number, d: number, e: number) => void;
-export const miditransposenode_transform: (a: number, b: number, c: number, d: number) => [number, number];
+export const miditransposenode_set_params: (
+    a: number,
+    b: number,
+    c: number,
+    d: number,
+    e: number,
+) => void;
+export const miditransposenode_transform: (
+    a: number,
+    b: number,
+    c: number,
+    d: number,
+) => [number, number];
 export const __wbg_audioengine_free: (a: number, b: number) => void;
 export const audioengine_new: (a: number) => number;
 export const audioengine_sample_rate: (a: number) => number;
 export const audioengine_buffer_size: (a: number) => number;
-export const audioengine_process_audio: (a: number, b: number, c: number, d: any) => void;
+export const audioengine_process_audio: (
+    a: number,
+    b: number,
+    c: number,
+    d: any,
+) => void;
 export const __wbg_oscillatornode_free: (a: number, b: number) => void;
 export const oscillatornode_new: (a: number) => number;
 export const oscillatornode_set_frequency: (a: number, b: number) => void;
@@ -35,13 +69,25 @@ export const oscillatornode_frequency: (a: number) => number;
 export const oscillatornode_set_amplitude: (a: number, b: number) => void;
 export const oscillatornode_amplitude: (a: number) => number;
 export const oscillatornode_set_waveform: (a: number, b: number) => void;
-export const oscillatornode_process: (a: number, b: number, c: number, d: any) => void;
+export const oscillatornode_process: (
+    a: number,
+    b: number,
+    c: number,
+    d: any,
+) => void;
 export const __wbg_speakernode_free: (a: number, b: number) => void;
 export const speakernode_new: () => number;
 export const speakernode_set_volume: (a: number, b: number) => void;
 export const speakernode_set_muted: (a: number, b: number) => void;
 export const speakernode_muted: (a: number) => number;
-export const speakernode_process: (a: number, b: number, c: number, d: number, e: number, f: any) => void;
+export const speakernode_process: (
+    a: number,
+    b: number,
+    c: number,
+    d: number,
+    e: number,
+    f: any,
+) => void;
 export const speakernode_volume: (a: number) => number;
 export const __wbindgen_export_0: WebAssembly.Table;
 export const __wbindgen_malloc: (a: number, b: number) => number;

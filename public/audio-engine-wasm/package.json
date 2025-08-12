@@ -1,15 +1,15 @@
 {
-  "name": "audio-engine",
-  "type": "module",
-  "version": "0.1.0",
-  "files": [
-    "audio_engine_bg.wasm",
-    "audio_engine.js",
-    "audio_engine.d.ts"
-  ],
-  "main": "audio_engine.js",
-  "types": "audio_engine.d.ts",
-  "sideEffects": [
-    "./snippets/*"
-  ]
+    "name": "audio-engine",
+    "type": "module",
+    "version": "0.1.0",
+    "files": [
+        "audio_engine_bg.wasm",
+        "audio_engine.js",
+        "audio_engine.d.ts"
+    ],
+    "main": "audio_engine.js",
+    "types": "audio_engine.d.ts",
+    "sideEffects": [
+        "./snippets/*"
+    ]
 }
