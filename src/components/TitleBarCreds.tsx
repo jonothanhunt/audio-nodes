@@ -40,11 +40,15 @@ export default function TitleBarCreds() {
                 </Link>
                 <a
                     href="https://github.com/jonothanhunt/audio-nodes#readme"
-                    className="text-lg text-white/85 hover:text-white transition-colors"
+                    className="text-lg text-white/85 hover:text-white transition-colors inline-flex items-center gap-1"
                     target="_blank"
                     rel="noopener noreferrer"
                 >
-                    about
+                    <span>about</span>
+                    <ArrowUpRight
+                        className="w-3.5 h-3.5 opacity-80"
+                        aria-hidden="true"
+                    />
                 </a>
                 <Link
                     href="https://jonothan.dev"
