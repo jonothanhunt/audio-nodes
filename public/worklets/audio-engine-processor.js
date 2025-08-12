@@ -43,6 +43,20 @@ class EngineProcessor extends AudioWorkletProcessor {
     }
   }
 
+  // Queue All Notes Off (CC 123) to all synth nodes to ensure hanging notes are stopped
+  _queueAllNotesOffToAllSynths() {
+    try {
+      for (const [nid, data] of this._nodes.entries()) {
+        if (!data || data.type !== 'synth') continue;
+        const q = this._midiQueues.get(nid) || [];
+        for (let ch = 0; ch < 16; ch++) {
+          q.push({ data: [0xB0 | ch, 123, 0] }); // CC 123 All Notes Off
+        }
+        this._midiQueues.set(nid, q);
+      }
+    } catch {/* ignore */}
+  }
+
   async _bootstrapFromMain(glueCode, wasmBytes) {
     if (this._ready || this._loading) return;
     this._loading = true;
@@ -105,24 +119,46 @@ class EngineProcessor extends AudioWorkletProcessor {
       }
       case 'removeNode': {
         const { nodeId } = msg;
+        const oldData = this._nodes.get(nodeId);
+        // If removing a transpose node, send NoteOff for any active transformed notes downstream
+        if (oldData && oldData.type === 'midi-transpose') {
+          const state = this._transposeNoteState.get(nodeId);
+          if (state && state.active && state.active.size > 0) {
+            const outEvents = [];
+            for (const [key, transposedNote] of state.active.entries()) {
+              const channel = (key >> 7) & 0x0F;
+              outEvents.push({ data: [0x80 | channel, transposedNote & 0x7F, 0] });
+            }
+            const downstream = this._connections.filter(c => c.from === nodeId && (c.fromOutput === 'midi-out' || c.fromOutput === 'midi' || c.fromOutput == null));
+            if (downstream.length) {
+              for (const edge of downstream) {
+                const q = this._midiQueues.get(edge.to) || [];
+                for (const ev of outEvents) q.push(ev);
+                this._midiQueues.set(edge.to, q);
+              }
+            } else {
+              this._queueAllNotesOffToAllSynths();
+            }
+            state.active.clear();
+          } else {
+            this._queueAllNotesOffToAllSynths();
+          }
+        }
+        // If removing a sequencer or MIDI input, proactively stop any sounding notes
+        if (oldData && (oldData.type === 'sequencer' || oldData.type === 'midi-input')) {
+          this._queueAllNotesOffToAllSynths();
+        }
+        // Proceed with removal and free
         this._nodes.delete(nodeId);
         const osc = this._oscInstances.get(nodeId);
-        if (osc) {
-          try { osc.free?.(); } catch {}
-          this._oscInstances.delete(nodeId);
-        }
+        if (osc) { try { osc.free?.(); } catch {} this._oscInstances.delete(nodeId); }
         const rev = this._reverbInstances.get(nodeId);
-        if (rev) {
-          try { rev.free?.(); } catch {}
-          this._reverbInstances.delete(nodeId);
-        }
+        if (rev) { try { rev.free?.(); } catch {} this._reverbInstances.delete(nodeId); }
         const syn = this._synthInstances.get(nodeId);
-        if (syn) {
-          try { syn.free?.(); } catch {}
-          this._synthInstances.delete(nodeId);
-        }
+        if (syn) { try { syn.free?.(); } catch {} this._synthInstances.delete(nodeId); }
         const tr = this._transposeInstances.get(nodeId);
         if (tr) { try { tr.free?.(); } catch {} this._transposeInstances.delete(nodeId); }
+        this._transposeNoteState.delete(nodeId);
         try { this.port.postMessage({ type: 'ackRemove', nodeId }); } catch {}
         break;
       }
@@ -353,6 +389,15 @@ class EngineProcessor extends AudioWorkletProcessor {
           if (controller === 64) { // Sustain pedal
             const down = (d2 & 0x7F) >= 64;
             synth.sustain_pedal?.(down);
+          } else if (controller === 123) { // All Notes Off
+            if (typeof synth.all_notes_off === 'function') {
+              try { synth.all_notes_off(); } catch {}
+            } else {
+              // Fallback: manually send note_off for all notes
+              for (let n = 0; n < 128; n++) {
+                try { synth.note_off?.(n); } catch {}
+              }
+            }
           }
           break;
         }
