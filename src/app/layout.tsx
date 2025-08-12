@@ -29,6 +29,15 @@ const atkinsonHyperlegible = localFont({
 export const metadata: Metadata = {
     title: "Audio Nodes",
     description: "Create and manipulate audio with nodes!",
+    icons: {
+        icon: [
+            { url: "/favicon.svg", type: "image/svg+xml" },
+            { url: "/favicon.ico" },
+        ],
+        apple: [
+            { url: "/favicon.svg" },
+        ],
+    },
 };
 
 export default function RootLayout({
