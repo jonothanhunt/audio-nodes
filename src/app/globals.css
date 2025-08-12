@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #111827; /* Tailwind gray-900 */
+  --foreground: #e5e7eb; /* Tailwind gray-200 */
 }
 
 @theme inline {
@@ -13,22 +13,28 @@
   --font-title: var(--font-lastik);
 }
 
+/* Keep the same background in both schemes to avoid flashing/overscroll white */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #111827;
+    --foreground: #e5e7eb;
   }
 }
 
+html, body {
+  background-color: var(--background);
+}
+
 body {
-  background: var(--background);
   color: var(--foreground);
   font-family: var(--font-hyperlegible), system-ui, sans-serif;
 }
 
-/* Title helper: use Lastik variable font */
+/* Title helper: use Lastik variable font at very light weight */
 .title-font {
   font-family: var(--font-lastik), ui-sans-serif, system-ui, sans-serif;
+  font-variation-settings: "wght" 20;
+  font-weight: 20;
   letter-spacing: 0.01em;
 }
 
