@@ -8,6 +8,7 @@ import { HandleLayer } from '../node-ui/HandleLayer';
 import { NumberParam } from '../node-ui/params/NumberParam';
 import { BooleanParam } from '../node-ui/params/BooleanParam';
 import { labelCls } from '../node-ui/styles/inputStyles';
+import NodeHelpPopover, { HelpItem } from '../node-ui/NodeHelpPopover';
 
 interface MidiTransposeNodeProps {
   id: string;
@@ -33,6 +34,9 @@ type MTKey = typeof paramConfig[number]['key'];
 const MidiTransposeNode: React.FC<MidiTransposeNodeProps> = ({ id, data, selected }) => {
   const { accentColor } = getNodeMeta('midi-transpose');
   const { onParameterChange } = data;
+
+  const [helpOpen, setHelpOpen] = React.useState(false);
+  const helpBtnRef = React.useRef<HTMLButtonElement | null>(null);
 
   // Ensure defaults once
   React.useEffect(() => {
@@ -63,9 +67,39 @@ const MidiTransposeNode: React.FC<MidiTransposeNodeProps> = ({ id, data, selecte
         <div className="pointer-events-none absolute inset-0 rounded-lg" style={{ background: `linear-gradient(135deg, ${accentColor}26, transparent 65%)` }} />
 
         <div className="flex items-center gap-2 mb-3 relative">
-          <ArrowUpDown className="w-4 h-4" style={{ color: accentColor }} />
-          <span className="title-font font-w-70 text-sm" style={{ color: accentColor }}>Transpose</span>
+          <ArrowUpDown className="w-4 h-4 -translate-y-0.5" style={{ color: accentColor }} />
+          <span className="title-font text-base" style={{ color: accentColor }}>Transpose</span>
+          <div className="ml-auto flex items-center">
+            <button
+              ref={helpBtnRef}
+              type="button"
+              aria-label="About this node"
+              className="nodrag inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-gray-700 text-[11px] font-semibold border border-gray-300 shadow-sm hover:bg-gray-100"
+              onClick={(e) => { e.stopPropagation(); setHelpOpen(v => !v); }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              ?
+            </button>
+          </div>
         </div>
+
+        <NodeHelpPopover
+          open={helpOpen}
+          onClose={() => setHelpOpen(false)}
+          anchorRef={helpBtnRef as React.RefObject<HTMLElement>}
+          title="Transpose"
+          description="Shift incoming MIDI notes by a fixed number of semitones. Optionally clamp to a range and pass through non-note messages."
+          inputs={[
+            { name: 'MIDI In', description: 'Incoming MIDI events (notes and others).' },
+            { name: 'Semitones', description: 'Transpose amount in semitones (-24 to +24).' },
+            { name: 'Clamp Low / High', description: 'Limit final note range (0–127).' },
+            { name: 'Pass Other', description: 'If enabled, non-note messages pass through unchanged.' },
+          ] as HelpItem[]}
+          outputs={[
+            { name: 'MIDI Out', description: 'Transposed MIDI note events, plus optionally other messages.' },
+          ] as HelpItem[]}
+        />
 
         <div className="grid grid-cols-[minmax(16rem,_auto)_auto] gap-y-2 gap-x-4">
           <div className="space-y-2 col-span-1">

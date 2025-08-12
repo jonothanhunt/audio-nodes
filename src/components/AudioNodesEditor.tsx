@@ -17,7 +17,6 @@ import SpeakerNode from "@/components/nodes/SpeakerNode";
 import SequencerNode from "@/components/nodes/SequencerNode";
 import SynthesizerNode from "./nodes/SynthesizerNode";
 import MidiInputNode from "@/components/nodes/MidiInputNode";
-import TitleBarCreds from "@/components/TitleBarCreds";
 import SaveLoadPanel from "@/components/SaveLoadPanel";
 import { useAudioEngine } from "@/hooks/useAudioEngine";
 import { getDefaultNodeData } from "@/lib/nodes";
@@ -59,6 +58,7 @@ export default function AudioNodesEditor() {
   } = useAudioEngine();
   const rfInstanceRef = React.useRef<ReactFlowInstance | null>(null);
   const [connectingColor, setConnectingColor] = React.useState<string | null>(null);
+  const prevNodeIdsRef = React.useRef<Set<string>>(new Set());
 
   const handleConnectStart = useCallback((_: unknown, params: OnConnectStartParams) => {
     const nid = params?.nodeId;
@@ -106,13 +106,23 @@ export default function AudioNodesEditor() {
     [setNodes, audioManager]
   );
 
-  // Sync nodes to worklet
+  // Sync nodes to worklet (updates and removals)
   React.useEffect(() => {
+    // compute removals
+    const currentIds = new Set(nodes.map(n => n.id));
+    const prevIds = prevNodeIdsRef.current;
+    for (const id of prevIds) {
+      if (!currentIds.has(id)) {
+        try { audioManager.removeNode(id); } catch {}
+      }
+    }
+    // push updates
     nodes.forEach((node) => {
       if (node.data && node.type) {
         audioManager.updateNode(node.id, { type: node.type, ...node.data });
       }
     });
+    prevNodeIdsRef.current = currentIds;
   }, [nodes, audioManager]);
 
   // Sync connections
@@ -388,9 +398,9 @@ export default function AudioNodesEditor() {
     <div className="h-screen w-screen relative bg-gray-900 overflow-hidden">
       {/* Startup overlay to initialize audio context */}
       {!audioInitialized && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-gray-900/70 backdrop-blur-xl">
+        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-gray-900/70 backdrop-blur-xl">
           <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-xl max-w-sm w-[90%] text-center">
-            <h2 className="title-font font-w-70 text-lg text-white mb-2">Initialize Audio</h2>
+            <h2 className="title-font text-lg text-white mb-2">Initialize Audio</h2>
             <p className="text-sm text-gray-300 mb-4">Click to start the audio engine (required by browser autoplay policies).</p>
             <button
               onClick={() => { void initializeAudio(); }}
@@ -421,7 +431,6 @@ export default function AudioNodesEditor() {
             isValidConnection={isValidConnection}
             onInit={(instance) => { rfInstanceRef.current = instance; }}
           >
-            {/* Removed old per-edge gradient defs; handled by custom edge component */}
             <MiniMap
               className="react-flow-minimap-dark !top-auto !right-auto bg-gray-800/80 backdrop-blur-md rounded-xl border border-gray-700/80 shadow"
               style={{ width: 288, height: 146 }}
@@ -433,8 +442,8 @@ export default function AudioNodesEditor() {
             <Background variant={BackgroundVariant.Dots} gap={12} size={1} className="bg-gray-900" />
           </ReactFlow>
         </div>
-        <div className="absolute top-4 left-4 bottom-44 z-50 w-72 flex flex-col pointer-events-auto gap-4">
-          <TitleBarCreds />
+        {/* Left panel moved slightly up to reduce gap while staying below title bar */}
+        <div className="absolute top-16 left-4 bottom-44 z-50 w-72 flex flex-col pointer-events-auto gap-4">
           <SaveLoadPanel
             onSave={handleSaveClick}
             onLoadObject={handleLoadFromObject}

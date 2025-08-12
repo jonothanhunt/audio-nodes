@@ -6,6 +6,7 @@ import { getNodeMeta } from '@/lib/nodeRegistry';
 import { NodeUIProvider, useNodeUI } from '../node-ui/NodeUIProvider';
 import { HandleLayer } from '../node-ui/HandleLayer';
 import { labelCls, inputCls } from '../node-ui/styles/inputStyles';
+import NodeHelpPopover, { HelpItem } from '../node-ui/NodeHelpPopover';
 
 interface MidiInputNodeProps {
   id: string;
@@ -29,6 +30,8 @@ const MidiInputNode: React.FC<MidiInputNodeProps> = ({ id, data, selected }) => 
   const { onParameterChange, deviceId = "", channel = "all", status, devices = [], error } = data;
 
   const stop = (e: React.SyntheticEvent) => { e.stopPropagation(); };
+  const [helpOpen, setHelpOpen] = React.useState(false);
+  const helpBtnRef = React.useRef<HTMLButtonElement | null>(null);
 
   return (
     <NodeUIProvider accentColor={accentColor}>
@@ -42,9 +45,37 @@ const MidiInputNode: React.FC<MidiInputNodeProps> = ({ id, data, selected }) => 
         <div className="pointer-events-none absolute inset-0 rounded-lg" style={{ background: `linear-gradient(135deg, ${accentColor}26, transparent 65%)` }} />
         {/* Header */}
         <div className="flex items-center gap-2 mb-3 relative">
-          <Keyboard className="w-4 h-4" style={{ color: accentColor }} />
-          <span className="title-font font-w-70 text-sm" style={{ color: accentColor }}>MIDI In</span>
+          <Keyboard className="w-4 h-4 -translate-y-0.5" style={{ color: accentColor }} />
+          <span className="title-font text-base" style={{ color: accentColor }}>MIDI In</span>
+          <div className="ml-auto flex items-center">
+            <button
+              ref={helpBtnRef}
+              type="button"
+              aria-label="About this node"
+              className="nodrag inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-gray-700 text-[11px] font-semibold border border-gray-300 shadow-sm hover:bg-gray-100"
+              onClick={(e) => { e.stopPropagation(); setHelpOpen(v => !v); }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              ?
+            </button>
+          </div>
         </div>
+
+        <NodeHelpPopover
+          open={helpOpen}
+          onClose={() => setHelpOpen(false)}
+          anchorRef={helpBtnRef as React.RefObject<HTMLElement>}
+          title="MIDI In"
+          description="Receives MIDI messages from a connected device. Optionally filter by channel."
+          inputs={[
+            { name: 'Device', description: 'Select a specific MIDI input or use (All).' },
+            { name: 'Channel', description: 'Limit to a single channel or receive All.' },
+          ] as HelpItem[]}
+          outputs={[
+            { name: 'MIDI Out', description: 'Forwards received MIDI events to other nodes.' },
+          ] as HelpItem[]}
+        />
 
         {/* Two-column, top-aligned layout: LEFT inputs, RIGHT outputs */}
         <div className="grid grid-cols-[minmax(16rem,_auto)_auto] gap-y-2 gap-x-4">

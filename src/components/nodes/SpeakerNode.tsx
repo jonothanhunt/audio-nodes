@@ -8,6 +8,7 @@ import { HandleLayer } from '../node-ui/HandleLayer';
 import { NumberParam } from '../node-ui/params/NumberParam';
 import { BooleanParam } from '../node-ui/params/BooleanParam';
 import { labelCls } from '../node-ui/styles/inputStyles';
+import NodeHelpPopover, { HelpItem } from '../node-ui/NodeHelpPopover';
 
 interface SpeakerNodeProps {
   id: string;
@@ -29,6 +30,8 @@ type SpeakerParamKey = typeof paramConfig[number]['key'];
 export default function SpeakerNode({ id, data, selected }: SpeakerNodeProps) {
   const { accentColor } = getNodeMeta('speaker');
   const { onParameterChange } = data;
+  const [helpOpen, setHelpOpen] = React.useState(false);
+  const helpBtnRef = React.useRef<HTMLButtonElement | null>(null);
 
   React.useEffect(() => {
     paramConfig.forEach(p => {
@@ -58,9 +61,36 @@ export default function SpeakerNode({ id, data, selected }: SpeakerNodeProps) {
         <div className="pointer-events-none absolute inset-0 rounded-lg" style={{ background: `linear-gradient(135deg, ${accentColor}26, transparent 65%)` }} />
 
         <div className="flex items-center gap-2 mb-3 relative">
-          <SpeakerIcon className="w-4 h-4" style={{ color: accentColor }} />
-          <span className="title-font font-w-70 text-sm" style={{ color: accentColor }}>Speaker</span>
+          <SpeakerIcon className="w-4 h-4 -translate-y-0.5" style={{ color: accentColor }} />
+          <span className="title-font text-base" style={{ color: accentColor }}>Speaker</span>
+          <div className="ml-auto flex items-center">
+            <button
+              ref={helpBtnRef}
+              type="button"
+              aria-label="About this node"
+              className="nodrag inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-gray-700 text-[11px] font-semibold border border-gray-300 shadow-sm hover:bg-gray-100"
+              onClick={(e) => { e.stopPropagation(); setHelpOpen(v => !v); }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              ?
+            </button>
+          </div>
         </div>
+
+        <NodeHelpPopover
+          open={helpOpen}
+          onClose={() => setHelpOpen(false)}
+          anchorRef={helpBtnRef as React.RefObject<HTMLElement>}
+          title="Speaker"
+          description="Final output node. Controls volume and mute."
+          inputs={[
+            { name: 'Audio In', description: 'Audio signal input to be played.' },
+            { name: 'Volume', description: 'Output level (0–1).' },
+            { name: 'Muted', description: 'Toggle output.' },
+          ] as HelpItem[]}
+          outputs={[]}
+        />
 
         {/* Speaker has only inputs, so we can use a single column. */}
         <div className="space-y-2">

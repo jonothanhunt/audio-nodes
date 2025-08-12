@@ -7,6 +7,7 @@ import { NodeUIProvider, useNodeUI } from '../node-ui/NodeUIProvider';
 import { HandleLayer } from '../node-ui/HandleLayer';
 import { NumberParam } from '../node-ui/params/NumberParam';
 import { labelCls } from '../node-ui/styles/inputStyles';
+import NodeHelpPopover, { HelpItem } from '../node-ui/NodeHelpPopover';
 
 interface ReverbNodeProps {
   id: string;
@@ -28,6 +29,8 @@ type RevParamKey = typeof paramConfig[number]['key'];
 export default function ReverbNode({ id, data, selected }: ReverbNodeProps) {
   const { accentColor } = getNodeMeta('reverb');
   const { onParameterChange } = data;
+  const [helpOpen, setHelpOpen] = React.useState(false);
+  const helpBtnRef = React.useRef<HTMLButtonElement | null>(null);
 
   // Ensure defaults
   React.useEffect(() => {
@@ -53,9 +56,36 @@ export default function ReverbNode({ id, data, selected }: ReverbNodeProps) {
         <div className="pointer-events-none absolute inset-0 rounded-lg" style={{ background: `linear-gradient(135deg, ${accentColor}26, transparent 65%)` }} />
 
         <div className="flex items-center gap-2 mb-3 relative">
-          <Waves className="w-4 h-4" style={{ color: accentColor }} />
-          <span className="title-font font-w-70 text-sm" style={{ color: accentColor }}>Reverb</span>
+          <Waves className="w-4 h-4 -translate-y-0.5" style={{ color: accentColor }} />
+          <span className="title-font text-base" style={{ color: accentColor }}>Reverb</span>
+          <div className="ml-auto flex items-center">
+            <button
+              ref={helpBtnRef}
+              type="button"
+              aria-label="About this node"
+              className="nodrag inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-gray-700 text-[11px] font-semibold border border-gray-300 shadow-sm hover:bg-gray-100"
+              onClick={(e) => { e.stopPropagation(); setHelpOpen(v => !v); }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              ?
+            </button>
+          </div>
         </div>
+
+        <NodeHelpPopover
+          open={helpOpen}
+          onClose={() => setHelpOpen(false)}
+          anchorRef={helpBtnRef as React.RefObject<HTMLElement>}
+          title="Reverb"
+          description="Adds reverberation (echo/space) to the audio signal."
+          inputs={[
+            { name: 'Audio In', description: 'Audio signal input.' },
+            { name: 'Feedback', description: 'Amount of signal fed back into the effect.' },
+            { name: 'Wet Mix', description: 'Balance between processed and dry signal.' },
+          ] as HelpItem[]}
+          outputs={[{ name: 'Audio Out', description: 'Processed audio signal.' }] as HelpItem[]}
+        />
 
         <div className="grid grid-cols-[minmax(16rem,_auto)_auto] gap-y-2 gap-x-4">
           <div className="space-y-2 col-span-1">

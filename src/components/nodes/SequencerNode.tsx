@@ -8,6 +8,7 @@ import { HandleLayer } from '../node-ui/HandleLayer';
 import { NumberParam } from '../node-ui/params/NumberParam';
 import { SelectParam } from '../node-ui/params/SelectParam';
 import { BooleanParam } from '../node-ui/params/BooleanParam';
+import NodeHelpPopover, { HelpItem } from '../node-ui/NodeHelpPopover';
 
 interface SequencerNodeProps {
   id: string;
@@ -65,6 +66,20 @@ function noteToMidi(note: string): number {
 export default function SequencerNode({ id, data, selected }: SequencerNodeProps) {
   const { accentColor } = getNodeMeta('sequencer');
   const { onParameterChange } = data;
+  const [helpOpen, setHelpOpen] = React.useState(false);
+  const buttonRef = React.useRef<HTMLButtonElement | null>(null);
+
+  React.useEffect(() => {
+    if (!helpOpen) return;
+    const onDocPointerDown = (e: PointerEvent) => {
+      const t = e.target as Node | null;
+      if (buttonRef.current && buttonRef.current.contains(t as Node)) return;
+      setHelpOpen(false);
+    };
+    const opts: AddEventListenerOptions = { capture: true };
+    document.addEventListener('pointerdown', onDocPointerDown, opts);
+    return () => document.removeEventListener('pointerdown', onDocPointerDown, opts);
+  }, [helpOpen]);
 
   // Ensure defaults for scalars
   React.useEffect(() => {
@@ -263,6 +278,29 @@ export default function SequencerNode({ id, data, selected }: SequencerNodeProps
     setTimeout(() => onParameterChange(id, "steps", next), 0);
   };
 
+  const handleClearGrid = () => {
+    // Send immediate NOTE_OFF for any notes active in the current step to avoid hangs
+    try {
+      const emit = data.onEmitMidi as (sourceId: string, events: Array<{ data: [number, number, number] }>) => void;
+      if (typeof emit === 'function') {
+        const channel = 0; const NOTE_OFF = 0x80 | channel;
+        const curr = steps[currentStep] || [];
+        const events: Array<{ data: [number, number, number] }> = [];
+        for (let noteIdx = 0; noteIdx < noteCount; noteIdx++) {
+          if (curr[noteIdx]) {
+            const midiNote = bottomMidi + noteIdx;
+            events.push({ data: [NOTE_OFF, midiNote, 0] });
+          }
+        }
+        if (events.length) emit(id, events);
+      }
+    } catch { /* ignore */ }
+
+    const cleared = makeGrid(lengthClamped, noteCount, false);
+    setSteps(cleared);
+    setTimeout(() => onParameterChange(id, "steps", cleared), 0);
+  };
+
   const numericKeys = ['length', 'bpm'];
   const stringKeys = ['fromNote', 'toNote'];
   const boolKeys = ['playing'];
@@ -282,9 +320,41 @@ export default function SequencerNode({ id, data, selected }: SequencerNodeProps
         <div className="pointer-events-none absolute inset-0 rounded-lg" style={{ background: `linear-gradient(135deg, ${accentColor}26, transparent 65%)` }} />
         {/* Header */}
         <div className="flex items-center gap-2 mb-3 relative">
-          <Music className="w-4 h-4" style={{ color: accentColor }} />
-          <span className="title-font font-w-70 text-sm" style={{ color: accentColor }}>Sequencer</span>
+          <Music className="w-4 h-4 -translate-y-0.5" style={{ color: accentColor }} />
+          <span className="title-font text-base" style={{ color: accentColor }}>Sequencer</span>
+          <div className="ml-auto flex items-center">
+            <button
+              type="button"
+              aria-label="About this node"
+              ref={buttonRef}
+              className="nodrag inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-gray-700 text-[11px] font-semibold border border-gray-300 shadow-sm hover:bg-gray-100"
+              onClick={(e) => { e.stopPropagation(); setHelpOpen((v) => !v); }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              ?
+            </button>
+          </div>
         </div>
+
+        {/* Help Popover */}
+        <NodeHelpPopover
+          open={helpOpen}
+          onClose={() => setHelpOpen(false)}
+          anchorRef={buttonRef as React.RefObject<HTMLElement>}
+          title="Sequencer"
+          description="Step sequencer that emits MIDI Note On/Off at a given BPM. Toggle cells to activate notes per step."
+          inputs={[
+            { name: 'From/To', description: 'MIDI note range shown in the grid.' },
+            { name: 'Length', description: 'Number of steps (1–64).' },
+            { name: 'Play', description: 'Starts/stops the playhead.' },
+            { name: 'BPM', description: 'Tempo for advancing steps.' },
+          ] as HelpItem[]}
+          outputs={[
+            { name: 'MIDI Out', description: 'Note On/Off for active cells at each step.' },
+          ] as HelpItem[]}
+          align="right"
+        />
 
         {/* Controls + Output label */}
         <div className="grid grid-cols-[minmax(16rem,_auto)_auto] gap-y-2 gap-x-4">
@@ -407,6 +477,17 @@ export default function SequencerNode({ id, data, selected }: SequencerNodeProps
                 );
               })}
             </div>
+          </div>
+          <div className="mt-3 flex justify-start">
+            <button
+              type="button"
+              className="nodrag inline-flex items-center px-2 py-1 rounded border border-gray-600 bg-gray-800 text-xs text-white hover:bg-gray-700"
+              onClick={(e) => { e.stopPropagation(); handleClearGrid(); }}
+              onPointerDown={(e) => e.stopPropagation()}
+              aria-label="Clear all steps"
+            >
+              Clear grid
+            </button>
           </div>
         </div>
       </div>

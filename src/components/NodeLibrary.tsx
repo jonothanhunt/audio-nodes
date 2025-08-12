@@ -43,7 +43,7 @@ export default function NodeLibrary({ onAddNode }: NodeLibraryProps) {
           if (!visible.length) return null;
           return (
             <div key={cat}>
-              <h3 className="text-sm font-medium text-gray-400 mb-2">{cat}</h3>
+              <h3 className="text-xs font-medium text-gray-400 mb-2 tracking-wide uppercase">{cat}</h3>
               <div className="space-y-2">
                 {visible.map(d => {
                   const tone = getCategoryTone(getNodeMeta(d.type).category);
@@ -63,8 +63,8 @@ export default function NodeLibrary({ onAddNode }: NodeLibraryProps) {
                         <Icon className={`w-4 h-4 ${s.icon} flex-shrink-0 mt-0.5`} />
                         <div className="flex-1 text-left">
                           <div className="flex items-center justify-between mb-1">
-                            <span className={`title-font font-w-70 ${s.title} text-sm`}>{d.name}</span>
-                            <span className="text-xs text-gray-300 bg-black/20 px-1.5 py-0.5 rounded">{d.tag}</span>
+                            <span className={`title-font ${s.title} text-base`}>{d.name}</span>
+                            {/* <span className="text-xs text-gray-300 bg-black/20 px-1.5 py-0.5 rounded">{d.tag}</span> */}
                           </div>
                           <p className="text-xs text-gray-300">{d.description}</p>
                         </div>
