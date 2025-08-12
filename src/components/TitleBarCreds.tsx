@@ -38,12 +38,14 @@ export default function TitleBarCreds() {
                 >
                     help
                 </Link>
-                <Link
-                    href="/about"
+                <a
+                    href="https://github.com/jonothanhunt/audio-nodes#readme"
                     className="text-lg text-white/85 hover:text-white transition-colors"
+                    target="_blank"
+                    rel="noopener noreferrer"
                 >
                     about
-                </Link>
+                </a>
                 <Link
                     href="https://jonothan.dev"
                     className="text-lg text-white/85 hover:text-white transition-colors inline-flex items-center gap-1"
