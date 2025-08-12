@@ -18,7 +18,6 @@ I love node‑based creative workflows and making music—so this project is a g
 - [Introduction](#introduction)
   - [What is it?](#what-is-it)
   - [How it works](#how-it-works)
-- [Demo](#demo)
 - [Developer Guide](#developer-guide)
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
