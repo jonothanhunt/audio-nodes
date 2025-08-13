@@ -32,6 +32,14 @@ export function useGraph() {
 
     const isValidConnection = useCallback(
         (connection: Connection) => {
+            // Disallow self-connections entirely
+            if (
+                connection.source != null &&
+                connection.target != null &&
+                connection.source === connection.target
+            ) {
+                return false;
+            }
             const sourceNode = nodes.find((n) => n.id === connection.source);
             const targetNode = nodes.find((n) => n.id === connection.target);
             if (!sourceNode || !targetNode) return false;
@@ -47,7 +55,8 @@ export function useGraph() {
 
             const audioOk = fromRole === "audio-out" && toRole === "audio-in";
             const midiOk = fromRole === "midi-out" && toRole === "midi-in";
-            return audioOk || midiOk;
+            const paramOk = fromRole === "param-out" && toRole === "param-in";
+            return audioOk || midiOk || paramOk;
         },
         [nodes],
     );

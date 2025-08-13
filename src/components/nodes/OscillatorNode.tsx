@@ -218,7 +218,7 @@ function WaveformRow({
         e.stopPropagation();
     };
     return (
-        <div className="relative flex items-center">
+        <div className="relative flex items-center h-8">
             <label className={labelCls}>Waveform</label>
             <select
                 value={value}
@@ -246,7 +246,7 @@ function AudioOutRow() {
     const { outputEl } = useNodeUI();
     return (
         <div
-            className="relative flex items-center justify-end"
+            className="relative flex items-center justify-end h-8"
             ref={(el) => outputEl(el)}
         >
             <span className="text-xs text-gray-300 mr-2">Audio Out</span>

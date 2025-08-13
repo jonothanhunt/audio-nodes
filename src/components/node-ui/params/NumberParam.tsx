@@ -34,7 +34,8 @@ export function NumberParam({
     useSlider,
     badge,
 }: NumberParamProps) {
-    const { accentColor } = useNodeUI();
+    const { accentColor, isParamConnected } = useNodeUI();
+    const connected = isParamConnected?.(paramKey) ?? false;
     const stop = (e: React.SyntheticEvent) => {
         e.stopPropagation();
     };
@@ -90,9 +91,10 @@ export function NumberParam({
     const slider =
         showSlider && min != null && max != null ? (
             <div
-                className="ml-3 flex items-center gap-1 w-52"
+                className={`ml-3 flex items-center gap-1 w-52 ${connected ? "opacity-60" : ""}`}
                 onPointerDown={stop}
                 onMouseDown={stop}
+                style={{ pointerEvents: connected ? "none" : undefined }}
             >
                 <span className="text-sm text-white/50 w-6 text-right select-none">
                     {min}
@@ -113,6 +115,7 @@ export function NumberParam({
                         max={max}
                         step={step ?? (max - min) / 100}
                         value={effectiveValue}
+                        disabled={connected}
                         onChange={(e) => {
                             e.stopPropagation();
                             const v = parseFloat(e.target.value);
@@ -136,6 +139,7 @@ export function NumberParam({
                 min={min}
                 max={max}
                 step={step}
+                disabled={connected}
                 onChange={(e) => {
                     e.stopPropagation();
                     const next = e.target.value;
@@ -154,7 +158,8 @@ export function NumberParam({
                 onMouseDown={stop}
                 onClick={stop}
                 onDoubleClick={stop}
-                className={`${sharedInputCls} nodrag ${invalid ? "border-red-500 focus:border-red-500" : ""}`}
+                className={`${sharedInputCls} nodrag ${invalid ? "border-red-500 focus:border-red-500" : ""} ${connected ? "cursor-not-allowed opacity-60" : ""}`}
+                style={{ pointerEvents: connected ? "none" : undefined }}
             />
             {slider}
         </ParamRow>

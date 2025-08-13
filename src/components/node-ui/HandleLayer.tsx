@@ -14,6 +14,7 @@ interface HandleLayerProps {
     inputHandleVariant?: HandleVariant; // variant for the top input slot (default midi)
     inputHandleId?: string; // id override (default 'midi')
     outputVariant?: HandleVariant; // variant for the right-side output (default 'audio')
+    includeParamTargets?: boolean; // render left-side param handles (default true)
 }
 
 export function HandleLayer({
@@ -22,6 +23,7 @@ export function HandleLayer({
     inputHandleVariant = "midi",
     inputHandleId = "midi",
     outputVariant = "audio",
+    includeParamTargets = true,
 }: HandleLayerProps) {
     const {
         accentColor,
@@ -46,18 +48,23 @@ export function HandleLayer({
                         connected: false,
                         variant: inputHandleVariant,
                         accentColor,
+                        baseBg,
                     })}
                     onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLElement).style.background =
-                            accentColor;
+                        (
+                            e.currentTarget as HTMLElement
+                        ).style.setProperty("--fill", accentColor);
                     }}
                     onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLElement).style.background =
-                            baseBg;
+                        (
+                            e.currentTarget as HTMLElement
+                        ).style.setProperty("--fill", baseBg);
                     }}
-                />
+                >
+                    {renderHandleInner(inputHandleVariant, accentColor)}
+                </Handle>
             )}
-            {Object.entries(paramTops).map(([key, top]) => {
+            {includeParamTargets && Object.entries(paramTops).map(([key, top]) => {
                 const variant = getVariantFor(key);
                 return (
                     <Handle
@@ -72,28 +79,17 @@ export function HandleLayer({
                             connected: false,
                             variant,
                             accentColor,
+                            baseBg,
                         })}
                         onMouseEnter={(e) => {
-                            if (variant === "string" || variant === "bool") {
-                                (
-                                    e.currentTarget as HTMLElement
-                                ).style.setProperty("--fill", accentColor);
-                            } else {
-                                (
-                                    e.currentTarget as HTMLElement
-                                ).style.background = accentColor;
-                            }
+                            (
+                                e.currentTarget as HTMLElement
+                            ).style.setProperty("--fill", accentColor);
                         }}
                         onMouseLeave={(e) => {
-                            if (variant === "string" || variant === "bool") {
-                                (
-                                    e.currentTarget as HTMLElement
-                                ).style.setProperty("--fill", baseBg);
-                            } else {
-                                (
-                                    e.currentTarget as HTMLElement
-                                ).style.background = baseBg;
-                            }
+                            (
+                                e.currentTarget as HTMLElement
+                            ).style.setProperty("--fill", baseBg);
                         }}
                     >
                         {renderHandleInner(variant, accentColor)}
@@ -112,34 +108,17 @@ export function HandleLayer({
                         connected: false,
                         variant: outputVariant,
                         accentColor,
+                        baseBg,
                     })}
                     onMouseEnter={(e) => {
-                        if (
-                            outputVariant === "string" ||
-                            outputVariant === "bool"
-                        ) {
-                            (e.currentTarget as HTMLElement).style.setProperty(
-                                "--fill",
-                                accentColor,
-                            );
-                        } else {
-                            (e.currentTarget as HTMLElement).style.background =
-                                accentColor;
-                        }
+                        (
+                            e.currentTarget as HTMLElement
+                        ).style.setProperty("--fill", accentColor);
                     }}
                     onMouseLeave={(e) => {
-                        if (
-                            outputVariant === "string" ||
-                            outputVariant === "bool"
-                        ) {
-                            (e.currentTarget as HTMLElement).style.setProperty(
-                                "--fill",
-                                baseBg,
-                            );
-                        } else {
-                            (e.currentTarget as HTMLElement).style.background =
-                                baseBg;
-                        }
+                        (
+                            e.currentTarget as HTMLElement
+                        ).style.setProperty("--fill", baseBg);
                     }}
                 >
                     {renderHandleInner(outputVariant, accentColor)}

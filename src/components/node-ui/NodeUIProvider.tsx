@@ -19,6 +19,7 @@ interface NodeUIContextValue {
     outputTop: number;
     getVariantFor: (key: string) => HandleVariant;
     baseBg: string;
+    isParamConnected?: (key: string) => boolean;
 }
 
 const NodeUIContext = React.createContext<NodeUIContextValue | null>(null);
@@ -30,6 +31,7 @@ export interface NodeUIProviderProps {
     stringKeys?: string[];
     boolKeys?: string[];
     baseBg?: string;
+    isParamConnected?: (key: string) => boolean;
 }
 
 export function NodeUIProvider({
@@ -39,6 +41,7 @@ export function NodeUIProvider({
     stringKeys = [],
     boolKeys = [],
     baseBg = "#111827",
+    isParamConnected,
 }: NodeUIProviderProps) {
     const rootRef = React.useRef<HTMLDivElement | null>(null);
     const midiRef = React.useRef<HTMLElement | null>(null);
@@ -149,6 +152,7 @@ export function NodeUIProvider({
                 return "midi";
             },
             baseBg,
+            isParamConnected,
         }),
         [
             accentColor,
@@ -162,6 +166,7 @@ export function NodeUIProvider({
             stringKeys,
             boolKeys,
             baseBg,
+            isParamConnected,
         ],
     );
 

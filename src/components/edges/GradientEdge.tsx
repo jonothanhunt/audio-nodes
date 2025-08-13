@@ -28,11 +28,38 @@ export default function GradientEdge(props: EdgeProps) {
     const srcColor = srcMeta?.accentColor || "#666";
     const tgtColor = tgtMeta?.accentColor || "#999";
 
+    // Inset endpoints so the line originates closer to the node body (middle of handle)
+    const INSET = 8; // tweak as needed; positive moves toward inside of the node
+    const sx =
+        sourcePosition === "right"
+            ? sourceX - INSET
+            : sourcePosition === "left"
+              ? sourceX + INSET
+              : sourceX;
+    const tx =
+        targetPosition === "right"
+            ? targetX - INSET
+            : targetPosition === "left"
+              ? targetX + INSET
+              : targetX;
+    const sy =
+        sourcePosition === "top"
+            ? sourceY + INSET
+            : sourcePosition === "bottom"
+              ? sourceY - INSET
+              : sourceY;
+    const ty =
+        targetPosition === "top"
+            ? targetY + INSET
+            : targetPosition === "bottom"
+              ? targetY - INSET
+              : targetY;
+
     const [edgePath, labelX, labelY] = getBezierPath({
-        sourceX,
-        sourceY,
-        targetX,
-        targetY,
+        sourceX: sx,
+        sourceY: sy,
+        targetX: tx,
+        targetY: ty,
         sourcePosition,
         targetPosition,
     });

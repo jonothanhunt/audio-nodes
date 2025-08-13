@@ -140,11 +140,18 @@ export default function SynthesizerNode({
     const getValue = (key: SynthParamKey) =>
         (data as Record<string, unknown>)[key];
 
+    const isParamConnected = (key: string) => {
+        const arr = (data as unknown as { _connectedParams?: string[] })._connectedParams;
+        if (Array.isArray(arr) && arr.includes(key)) return true;
+        const fn = (data as { isParamConnected?: (k: string) => boolean }).isParamConnected;
+        return typeof fn === "function" ? !!fn(key) : false;
+    };
     return (
         <NodeUIProvider
             accentColor={accentColor}
             numericKeys={numericKeys}
             stringKeys={stringKeys}
+            isParamConnected={isParamConnected}
         >
             {selected && (
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-xs text-gray-500">
@@ -315,7 +322,7 @@ export default function SynthesizerNode({
 function MidiInRow() {
     const { midiEl } = useNodeUI();
     return (
-        <div className="relative flex items-center" ref={(el) => midiEl(el)}>
+    <div className="relative flex items-center h-8" ref={(el) => midiEl(el)}>
             <label className={labelCls}>MIDI In</label>
             <span className="text-xs text-gray-400">
                 Connect a sequencer or MIDI In
@@ -328,7 +335,7 @@ function AudioOutRow() {
     const { outputEl } = useNodeUI();
     return (
         <div
-            className="relative flex items-center justify-end"
+            className="relative flex items-center justify-end h-8"
             ref={(el) => outputEl(el)}
         >
             <span className="text-xs text-gray-300 mr-2">Audio Out</span>

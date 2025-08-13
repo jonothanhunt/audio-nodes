@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { labelCls, inputCls } from "./styles/inputStyles";
+import { labelCls, inputCls, rowHeightCls } from "./styles/inputStyles";
 import { useNodeUI } from "./NodeUIProvider";
 
 interface ParamRowProps {
@@ -11,11 +11,13 @@ interface ParamRowProps {
 }
 
 export function ParamRow({ label, paramKey, children, badge }: ParamRowProps) {
-    const { registerParam, accentColor } = useNodeUI();
+    const { registerParam, accentColor, isParamConnected } = useNodeUI();
+    const connected = isParamConnected?.(paramKey) ?? false;
     return (
         <div
-            className="relative flex items-center"
+            className={`relative flex items-center ${rowHeightCls}`}
             ref={(el) => registerParam(paramKey, el)}
+            data-connected={connected ? "true" : "false"}
         >
             <label className={`${labelCls} flex items-center`}>
                 <span>{label}</span>

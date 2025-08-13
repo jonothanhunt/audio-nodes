@@ -1,5 +1,3 @@
-"use client";
-
 import React from "react";
 import { Search } from "lucide-react";
 import {
@@ -17,7 +15,14 @@ export default function NodeLibrary({ onAddNode }: NodeLibraryProps) {
     const [selectedCategory, setSelectedCategory] = React.useState("All");
 
     const grouped = React.useMemo(() => groupDefinitionsByCategory(), []);
-    const categories = ["All", "Synthesis", "Effects", "Sequencing", "Utility"];
+    const categories = [
+        "All",
+        "Synthesis",
+        "Effects",
+        "Sequencing",
+        "Utility",
+        "Value",
+    ];
 
     return (
         <div className="w-full h-full flex flex-col">
@@ -37,7 +42,11 @@ export default function NodeLibrary({ onAddNode }: NodeLibraryProps) {
                         <button
                             key={category}
                             onClick={() => setSelectedCategory(category)}
-                            className={`px-2 py-1 text-xs rounded ${selectedCategory === category ? "bg-purple-600 text-white" : "bg-gray-700 text-gray-300 hover:bg-gray-600"}`}
+                            className={`px-2 py-1 text-xs rounded ${
+                                selectedCategory === category
+                                    ? "bg-purple-600 text-white"
+                                    : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                            }`}
                         >
                             {category}
                         </button>
@@ -49,7 +58,7 @@ export default function NodeLibrary({ onAddNode }: NodeLibraryProps) {
                     if (selectedCategory !== "All" && selectedCategory !== cat)
                         return null;
                     const visible = defs.filter((d) =>
-                        d.name.toLowerCase().includes(searchTerm.toLowerCase()),
+                        d.name.toLowerCase().includes(searchTerm.toLowerCase())
                     );
                     if (!visible.length) return null;
                     return (
@@ -60,7 +69,7 @@ export default function NodeLibrary({ onAddNode }: NodeLibraryProps) {
                             <div className="space-y-2">
                                 {visible.map((d) => {
                                     const tone = getCategoryTone(
-                                        getNodeMeta(d.type).category,
+                                        getNodeMeta(d.type).category
                                     );
                                     const styles: Record<
                                         string,
@@ -111,6 +120,13 @@ export default function NodeLibrary({ onAddNode }: NodeLibraryProps) {
                                             title: "text-slate-400",
                                             icon: "text-slate-400",
                                             gradientFrom: "from-slate-500/10",
+                                        },
+                                        red: {
+                                            border: "border-red-500/30",
+                                            hoverBorder: "hover:border-red-500",
+                                            title: "text-red-400",
+                                            icon: "text-red-400",
+                                            gradientFrom: "from-red-500/10",
                                         },
                                     };
                                     const s = styles[tone];

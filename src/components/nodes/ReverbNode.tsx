@@ -189,7 +189,7 @@ export default function ReverbNode({ id, data, selected }: ReverbNodeProps) {
 function AudioInRow() {
     const { midiEl } = useNodeUI();
     return (
-        <div className="relative flex items-center" ref={(el) => midiEl(el)}>
+        <div className="relative flex items-center h-8" ref={(el) => midiEl(el)}>
             <label className={labelCls}>Audio In</label>
             <span className="text-xs text-gray-400">Connect audio</span>
         </div>
@@ -200,7 +200,7 @@ function AudioOutRow() {
     const { outputEl } = useNodeUI();
     return (
         <div
-            className="relative flex items-center justify-end"
+            className="relative flex items-center justify-end h-8"
             ref={(el) => outputEl(el)}
         >
             <span className="text-xs text-gray-300 mr-2">Audio Out</span>

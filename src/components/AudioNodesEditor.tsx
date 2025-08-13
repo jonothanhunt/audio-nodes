@@ -6,6 +6,7 @@ import ReactFlow, {
     Background,
     BackgroundVariant,
     Node,
+    Edge,
     ReactFlowInstance,
 } from "reactflow";
 import "reactflow/dist/style.css";
@@ -25,7 +26,13 @@ import { useGraph } from "@/hooks/useGraph";
 import MidiTransposeNode from "@/components/nodes/MidiTransposeNode";
 import GradientEdge from "@/components/edges/GradientEdge";
 import { getNodeMeta } from "@/lib/nodeRegistry";
+import { getHandleRole } from "@/lib/handles";
 import type { OnConnectStartParams } from "reactflow";
+import ValueBoolNode from "./nodes/ValueBoolNode";
+import ValueNumberNode from "./nodes/ValueNumberNode";
+import ValueStringNode from "./nodes/ValueStringNode";
+import ValueTextNode from "./nodes/ValueTextNode";
+import ValueSelectNode from "./nodes/ValueSelectNode";
 
 // Custom node registry
 const nodeTypes = {
@@ -36,6 +43,11 @@ const nodeTypes = {
     synth: SynthesizerNode,
     "midi-input": MidiInputNode,
     "midi-transpose": MidiTransposeNode,
+    "value-bool": ValueBoolNode,
+    "value-number": ValueNumberNode,
+    "value-string": ValueStringNode, // legacy
+    "value-text": ValueTextNode,
+    "value-select": ValueSelectNode,
 };
 
 export default function AudioNodesEditor() {
@@ -54,9 +66,22 @@ export default function AudioNodesEditor() {
         useAudioEngine();
     const rfInstanceRef = React.useRef<ReactFlowInstance | null>(null);
     const [connectingColor, setConnectingColor] = React.useState<string | null>(
-        null,
+        null
     );
     const prevNodeIdsRef = React.useRef<Set<string>>(new Set());
+    const clipboardRef = React.useRef<{ nodes: Node[]; edges: Edge[] } | null>(
+        null
+    );
+    const pasteBumpRef = React.useRef<number>(0);
+    // Stable refs for current nodes/edges to avoid stale closures in callbacks
+    const nodesRef = React.useRef(nodes);
+    const edgesRef = React.useRef(edges);
+    React.useEffect(() => {
+        nodesRef.current = nodes;
+    }, [nodes]);
+    React.useEffect(() => {
+        edgesRef.current = edges;
+    }, [edges]);
 
     const handleConnectStart = useCallback(
         (_: unknown, params: OnConnectStartParams) => {
@@ -67,13 +92,24 @@ export default function AudioNodesEditor() {
             }
             const node = nodes.find((n) => n.id === nid);
             setConnectingColor(
-                node ? getNodeMeta(node.type).accentColor : null,
+                node ? getNodeMeta(node.type).accentColor : null
             );
         },
-        [nodes],
+        [nodes]
     );
     const handleConnectEnd = useCallback(() => {
         setConnectingColor(null);
+    }, []);
+
+    // Helper: for a nodeId/paramKey, determine if there is any incoming param-edge to that key
+    const isParamConnected = useCallback((nodeId: string, paramKey: string) => {
+        return edgesRef.current.some(
+            (e) =>
+                e.target === nodeId &&
+                (e.targetHandle || "") === paramKey &&
+                // source must be a param-out
+                true
+        );
     }, []);
 
     // MIDI emit (Sequencer etc.)
@@ -84,11 +120,11 @@ export default function AudioNodesEditor() {
                 data: [number, number, number];
                 atFrame?: number;
                 atTimeMs?: number;
-            }>,
+            }>
         ) => {
             sendMIDI(sourceId, events);
         },
-        [sendMIDI],
+        [sendMIDI]
     );
 
     // Parameter change
@@ -96,26 +132,83 @@ export default function AudioNodesEditor() {
         (
             nodeId: string,
             parameter: string,
-            value: string | number | boolean,
+            value: string | number | boolean
         ) => {
-            setNodes((nds) =>
-                nds.map((node) => {
-                    if (node.id === nodeId) {
-                        const updatedNode = {
-                            ...node,
-                            data: { ...node.data, [parameter]: value },
-                        };
-                        audioManager.updateNode(nodeId, {
-                            type: node.type || "unknown",
-                            ...updatedNode.data,
-                        });
-                        return updatedNode;
-                    }
-                    return node;
-                }),
-            );
+            setNodes((prev) => {
+                // 1) Update the source node's data
+                const updated = prev.map((node) => {
+                    if (node.id !== nodeId) return node;
+                    const newNode = {
+                        ...node,
+                        data: { ...node.data, [parameter]: value },
+                    };
+                    // sync to audio engine
+                    audioManager.updateNode(nodeId, {
+                        type: node.type || "unknown",
+                        ...newNode.data,
+                    });
+                    return newNode;
+                });
+
+                // 2) If this node has param-out connections, broadcast to targets
+                const source = updated.find((n) => n.id === nodeId);
+                if (!source) return updated;
+                const sourceType = source.type || "unknown";
+                const sourceValue = (source.data as Record<string, unknown>)[
+                    "value"
+                ] as unknown;
+
+                // Only broadcast for Value nodes (bool/number/string)
+                const isValueNode = (sourceType || "").startsWith("value-");
+                if (!isValueNode) return updated;
+
+                const outHandle = "output"; // HandleLayer default
+                const outgoing = edgesRef.current.filter(
+                    (e) =>
+                        e.source === nodeId &&
+                        (e.sourceHandle || "output") === outHandle
+                );
+                if (!outgoing.length) return updated;
+
+                let changedAny = false;
+                let next = updated;
+                for (const e of outgoing) {
+                    const idx = next.findIndex((n) => n.id === e.target);
+                    const target = idx >= 0 ? next[idx] : undefined;
+                    const targetKey = e.targetHandle || "";
+                    if (!target || !targetKey) continue;
+                    const cur = (target.data as Record<string, unknown>)[
+                        targetKey
+                    ];
+                    let v = sourceValue as
+                        | string
+                        | number
+                        | boolean
+                        | undefined;
+                    if (v === undefined) v = value as string | number | boolean;
+                    if (v === undefined) continue;
+                    if (cur === v) continue;
+                    // create new data object to ensure React Flow detects change
+                    const newData = {
+                        ...(target.data as Record<string, unknown>),
+                        [targetKey]: v,
+                    } as unknown as typeof target.data;
+                    const newNode = { ...target, data: newData };
+                    // replace in array (copy-on-write once)
+                    if (next === updated)
+                        next = updated.map((n, i) => (i === idx ? newNode : n));
+                    else next[idx] = newNode;
+                    // sync to audio engine
+                    audioManager.updateNode(target.id, {
+                        type: target.type || "unknown",
+                        ...(newData as unknown as Record<string, unknown>),
+                    });
+                    changedAny = true;
+                }
+                return changedAny ? next : updated;
+            });
         },
-        [setNodes, audioManager],
+        [setNodes, audioManager]
     );
 
     // Sync nodes to worklet (updates and removals)
@@ -153,6 +246,115 @@ export default function AudioNodesEditor() {
         audioManager.updateConnections(connections);
     }, [edges, audioManager]);
 
+    // Maintain a map of connected param-in handles per node for reliable UI disabling
+    React.useEffect(() => {
+        // Build target->set(paramKeys) for param-in edges only
+        const map = new Map<string, Set<string>>();
+        for (const e of edgesRef.current) {
+            const source = nodesRef.current.find((n) => n.id === e.source);
+            const target = nodesRef.current.find((n) => n.id === e.target);
+            const fromRole = getHandleRole(
+                source?.type,
+                e.sourceHandle || undefined
+            );
+            const toRole = getHandleRole(
+                target?.type,
+                e.targetHandle || undefined
+            );
+            if (fromRole !== "param-out" || toRole !== "param-in") continue;
+            const key = e.targetHandle || "";
+            if (!key) continue;
+            let set = map.get(e.target);
+            if (!set) {
+                set = new Set<string>();
+                map.set(e.target, set);
+            }
+            set.add(key);
+        }
+        // Update nodes' data._connectedParams when changed
+        setNodes((prev) =>
+            prev.map((n) => {
+                const set = map.get(n.id) || new Set<string>();
+                const nextArr = Array.from(set.values()).sort();
+                const dataRec =
+                    (n.data as unknown as Record<string, unknown>) || {};
+                const prevRaw = dataRec["_connectedParams"] as unknown;
+                const prevArr = Array.isArray(prevRaw)
+                    ? ([...prevRaw].sort() as string[])
+                    : [];
+                const equal =
+                    nextArr.length === prevArr.length &&
+                    nextArr.every((v, i) => v === prevArr[i]);
+                if (equal) return n;
+                const newData = {
+                    ...(n.data as unknown as Record<string, unknown>),
+                    _connectedParams: nextArr,
+                } as unknown as typeof n.data;
+                return { ...n, data: newData };
+            })
+        );
+    }, [setNodes, edges]);
+
+    // On new param connections, initialize target param with source value so disabled inputs show incoming data
+    React.useEffect(() => {
+        if (!edges.length) return;
+        setNodes((prev) => {
+            // Build updates for targets based on current edges
+            const updates = new Map<string, Record<string, unknown>>();
+            for (const e of edges) {
+                const source = prev.find((n) => n.id === e.source);
+                const target = prev.find((n) => n.id === e.target);
+                if (!source || !target) continue;
+                const fromRole = getHandleRole(
+                    source.type,
+                    e.sourceHandle || undefined
+                );
+                const toRole = getHandleRole(
+                    target.type,
+                    e.targetHandle || undefined
+                );
+                if (fromRole !== "param-out" || toRole !== "param-in") continue;
+                const sourceType = source.type || "";
+                if (!sourceType.startsWith("value-")) continue;
+                const key = e.targetHandle || "";
+                if (!key) continue;
+                const sourceVal = (
+                    source.data as unknown as Record<string, unknown>
+                )["value"] as unknown;
+                if (typeof sourceVal === "undefined") continue;
+                const cur = (target.data as unknown as Record<string, unknown>)[
+                    key
+                ];
+                if (cur === sourceVal) continue;
+                const entry = updates.get(target.id) || {};
+                (entry as Record<string, unknown>)[key] = sourceVal as
+                    | string
+                    | number
+                    | boolean;
+                updates.set(target.id, entry);
+            }
+            if (updates.size === 0) return prev;
+            const next = prev.map((n) => {
+                const up = updates.get(n.id);
+                if (!up) return n;
+                const mergedData = {
+                    ...(n.data as unknown as Record<string, unknown>),
+                    ...up,
+                } as unknown as typeof n.data;
+                const newNode = {
+                    ...n,
+                    data: mergedData,
+                };
+                audioManager.updateNode(newNode.id, {
+                    type: newNode.type || "unknown",
+                    ...(newNode.data as unknown as Record<string, unknown>),
+                });
+                return newNode;
+            });
+            return next;
+        });
+    }, [edges, setNodes, audioManager]);
+
     // Attach handlers
     React.useEffect(() => {
         setNodes((nds) =>
@@ -162,21 +364,23 @@ export default function AudioNodesEditor() {
                     ...node.data,
                     onParameterChange: handleParameterChange,
                     onEmitMidi: handleEmitMidi,
+                    isParamConnected: (key: string) =>
+                        isParamConnected(node.id, key),
                 },
-            })),
+            }))
         );
-    }, [handleParameterChange, handleEmitMidi, setNodes]);
+    }, [handleParameterChange, handleEmitMidi, isParamConnected, setNodes]);
 
     // Reattach for persistence
     const reattachHandlers = useCallback(
         (
-            data: Record<string, unknown> | undefined,
+            data: Record<string, unknown> | undefined
         ): Record<string, unknown> => ({
             ...(data || {}),
             onParameterChange: handleParameterChange,
             onEmitMidi: handleEmitMidi,
         }),
-        [handleParameterChange, handleEmitMidi],
+        [handleParameterChange, handleEmitMidi]
     );
 
     const {
@@ -190,11 +394,14 @@ export default function AudioNodesEditor() {
         setNodes,
         setEdges,
         rfInstanceRef,
-        reattachHandlers,
+        reattachHandlers
     );
 
     // Autoload project
+    const didBootRef = React.useRef(false);
     React.useEffect(() => {
+        if (didBootRef.current) return;
+        didBootRef.current = true;
         const boot = async () => {
             const ok = loadFromLocalStorage();
             if (ok) return;
@@ -212,32 +419,219 @@ export default function AudioNodesEditor() {
                 } catch {}
             }
         };
-        boot();
-    }, [handleLoadFromObject, loadFromLocalStorage]);
+        void boot();
+        // intentionally run only once
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Add new node
     const onAddNode = useCallback(
         (type: string) => {
+            const inst = rfInstanceRef.current;
+            // Place in viewport center
+            let pos = { x: 0, y: 0 };
+            if (inst) {
+                const container =
+                    (inst as unknown as { wrapper?: HTMLDivElement }).wrapper ||
+                    (document.querySelector(
+                        ".react-flow"
+                    ) as HTMLDivElement | null);
+                const rect = container?.getBoundingClientRect();
+                const cx = rect
+                    ? rect.left + rect.width / 2
+                    : window.innerWidth / 2;
+                const cy = rect
+                    ? rect.top + rect.height / 2
+                    : window.innerHeight / 2;
+                const screenToFlow = (
+                    inst as unknown as {
+                        screenToFlowPosition?: (p: {
+                            x: number;
+                            y: number;
+                        }) => { x: number; y: number };
+                    }
+                ).screenToFlowPosition;
+                if (typeof screenToFlow === "function")
+                    pos = screenToFlow({ x: cx, y: cy });
+                else pos = inst.project({ x: cx, y: cy });
+            }
             const newNode: Node = {
                 id: generateNodeId(),
                 type,
-                position: { x: Math.random() * 400, y: Math.random() * 400 },
+                position: pos,
                 data: getDefaultNodeData(
                     type,
                     handleParameterChange,
-                    handleEmitMidi,
+                    handleEmitMidi
                 ),
+                selected: true,
             };
-            setNodes((nds) => [...nds, newNode]);
+            setNodes((nds) => {
+                // Clear previous selection and select the new node
+                return [
+                    ...nds.map((n) => ({ ...n, selected: false })),
+                    newNode,
+                ];
+            });
         },
-        [generateNodeId, setNodes, handleParameterChange, handleEmitMidi],
+        [generateNodeId, setNodes, handleParameterChange, handleEmitMidi]
     );
 
-    // Web MIDI integration
-    const nodesRef = React.useRef(nodes);
+    // Helpers for selection and geometry
+    const getSelectedGraph = useCallback(() => {
+        const selectedNodes = nodesRef.current.filter((n) => n.selected);
+        const selectedIds = new Set(selectedNodes.map((n) => n.id));
+        const selectedEdges = edgesRef.current.filter(
+            (e) => selectedIds.has(e.source) && selectedIds.has(e.target)
+        );
+        return { selectedNodes, selectedEdges };
+    }, []);
+
+    const getViewportCenterFlow = useCallback(() => {
+        const inst = rfInstanceRef.current;
+        if (!inst) return { x: 0, y: 0 };
+        const container =
+            (inst as unknown as { wrapper?: HTMLDivElement }).wrapper ||
+            (document.querySelector(".react-flow") as HTMLDivElement | null);
+        const rect = container?.getBoundingClientRect();
+        const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+        const cy = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
+        const screenToFlow = (
+            inst as unknown as {
+                screenToFlowPosition?: (p: { x: number; y: number }) => {
+                    x: number;
+                    y: number;
+                };
+            }
+        ).screenToFlowPosition;
+        if (typeof screenToFlow === "function")
+            return screenToFlow({ x: cx, y: cy });
+        return inst.project({ x: cx, y: cy });
+    }, []);
+
+    const getSelectionCentroid = (nodesList: Node[]) => {
+        if (!nodesList.length) return { x: 0, y: 0 };
+        const sx = nodesList.reduce((acc, n) => acc + (n.position?.x || 0), 0);
+        const sy = nodesList.reduce((acc, n) => acc + (n.position?.y || 0), 0);
+        return { x: sx / nodesList.length, y: sy / nodesList.length };
+    };
+
+    const duplicateGraph = useCallback(
+        (
+            nodesToCopy: Node[],
+            edgesToCopy: Edge[],
+            centerInViewport: boolean
+        ) => {
+            if (!nodesToCopy.length) return;
+            const idMap = new Map<string, string>();
+            nodesToCopy.forEach((n) => idMap.set(n.id, generateNodeId()));
+            const centerTarget = centerInViewport
+                ? getViewportCenterFlow()
+                : null;
+            const centroid = getSelectionCentroid(nodesToCopy);
+            const bump = centerInViewport
+                ? 0
+                : ((pasteBumpRef.current = (pasteBumpRef.current + 1) % 5),
+                  24 + 6 * pasteBumpRef.current);
+            const newNodes: Node[] = nodesToCopy.map((n) => {
+                const delta = {
+                    x: (n.position?.x || 0) - centroid.x,
+                    y: (n.position?.y || 0) - centroid.y,
+                };
+                const base =
+                    centerInViewport && centerTarget
+                        ? {
+                              x: centerTarget.x + delta.x,
+                              y: centerTarget.y + delta.y,
+                          }
+                        : {
+                              x: (n.position?.x || 0) + bump,
+                              y: (n.position?.y || 0) + bump,
+                          };
+                const clonedData = {
+                    ...(n.data as unknown as Record<string, unknown>),
+                } as unknown as Node["data"];
+                return {
+                    ...n,
+                    id: idMap.get(n.id)!,
+                    position: base,
+                    selected: true,
+                    data: clonedData,
+                } as Node;
+            });
+            const newEdges: Edge[] = edgesToCopy
+                .map((e) => {
+                    const s = idMap.get(e.source);
+                    const t = idMap.get(e.target);
+                    if (!s || !t) return null;
+                    return {
+                        ...e,
+                        id: `${s}-${t}-${e.sourceHandle || ""}-${
+                            e.targetHandle || ""
+                        }-${Math.random().toString(36).slice(2, 8)}`,
+                        source: s,
+                        target: t,
+                    } as Edge;
+                })
+                .filter(Boolean) as Edge[];
+            setNodes((prev) => {
+                const cleared = prev.map(
+                    (n) => ({ ...(n as Node), selected: false } as Node)
+                );
+                return [...cleared, ...newNodes];
+            });
+            setEdges((prev) => [...prev, ...newEdges]);
+        },
+        [getViewportCenterFlow, generateNodeId, setNodes, setEdges]
+    );
+
+    const duplicateSelection = useCallback(
+        (centerInViewport: boolean) => {
+            const { selectedNodes, selectedEdges } = getSelectedGraph();
+            duplicateGraph(selectedNodes, selectedEdges, centerInViewport);
+        },
+        [getSelectedGraph, duplicateGraph]
+    );
+
+    // Keyboard shortcuts: Copy, Paste, Duplicate
     React.useEffect(() => {
-        nodesRef.current = nodes;
-    }, [nodes]);
+        const isEditableTarget = (el: EventTarget | null) => {
+            const t = el as HTMLElement | null;
+            if (!t) return false;
+            const tag = (t.tagName || "").toLowerCase();
+            if (["input", "textarea", "select"].includes(tag)) return true;
+            if ((t as HTMLElement).isContentEditable) return true;
+            return false;
+        };
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (isEditableTarget(e.target)) return;
+            const meta = e.metaKey || e.ctrlKey;
+            const key = e.key.toLowerCase();
+            if (meta && key === "c") {
+                const { selectedNodes, selectedEdges } = getSelectedGraph();
+                if (!selectedNodes.length) return;
+                clipboardRef.current = {
+                    nodes: selectedNodes,
+                    edges: selectedEdges,
+                };
+                // prevent default OS copy of DOM selection
+                e.preventDefault();
+            } else if (meta && key === "v") {
+                if (clipboardRef.current) {
+                    const { nodes: cn, edges: ce } = clipboardRef.current;
+                    duplicateGraph(cn, ce, true);
+                    e.preventDefault();
+                }
+            } else if (meta && key === "d") {
+                duplicateSelection(false);
+                e.preventDefault();
+            }
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [duplicateSelection, getSelectedGraph, duplicateGraph]);
+
+    // Web MIDI integration (uses nodesRef defined above)
     React.useEffect(() => {
         let mounted = true;
         const STATUS_PREFIX = "[MIDI]";
@@ -249,8 +643,8 @@ export default function AudioNodesEditor() {
                 prev.map((n) =>
                     n.type === "midi-input"
                         ? { ...n, data: { ...n.data, status } }
-                        : n,
-                ),
+                        : n
+                )
             );
         };
         const setErrorAll = (error: string) => {
@@ -258,8 +652,8 @@ export default function AudioNodesEditor() {
                 prev.map((n) =>
                     n.type === "midi-input"
                         ? { ...n, data: { ...n.data, error } }
-                        : n,
-                ),
+                        : n
+                )
             );
         };
 
@@ -272,7 +666,7 @@ export default function AudioNodesEditor() {
             "protocol=",
             location.protocol,
             "host=",
-            location.host,
+            location.host
         );
         if (!secure) {
             setStatusAll("insecure-context");
@@ -358,8 +752,8 @@ export default function AudioNodesEditor() {
                 prev.map((n) =>
                     n.type === "midi-input"
                         ? { ...n, data: { ...n.data, error: undefined } }
-                        : n,
-                ),
+                        : n
+                )
             );
             publishDevices(access);
             const updateInputHandlers = () => {
@@ -534,19 +928,19 @@ export default function AudioNodesEditor() {
                     STATUS_PREFIX,
                     "requestMIDIAccess failed",
                     name,
-                    message,
+                    message
                 );
                 const classified =
                     name === "NotAllowedError" || name === "SecurityError"
                         ? "denied"
                         : name === "TypeError"
-                          ? "unsupported"
-                          : "error";
+                        ? "unsupported"
+                        : "error";
                 setStatusAll(classified);
                 setErrorAll(
                     name === "TypeError"
                         ? "TypeError (maybe blocked flag or experimental feature disabled)"
-                        : name,
+                        : name
                 );
             } finally {
                 requesting = false;
@@ -611,13 +1005,15 @@ export default function AudioNodesEditor() {
                                 : { stroke: "#555", strokeWidth: 2 }
                         }
                         nodeTypes={nodeTypes}
-                        proOptions={{ hideAttribution: true }}
                         minZoom={0.03}
                         maxZoom={3}
                         className="react-flow-dark h-full w-full"
                         isValidConnection={isValidConnection}
                         onInit={(instance) => {
                             rfInstanceRef.current = instance;
+                        }}
+                        proOptions={{
+                            hideAttribution: true
                         }}
                     >
                         <MiniMap

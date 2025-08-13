@@ -29,6 +29,7 @@ export class AudioManager {
     private isInitialized = false;
     private wasmReady = false; // set true when worklet reports ready
     private sampleRate = 44100;
+    private timebaseTimer: number | null = null;
     private audioNodes: Map<string, AudioNodeData> = new Map();
     private nodeConnections: Array<{
         from: string;
@@ -164,6 +165,25 @@ export class AudioManager {
                 "AudioWorklet initialized at sampleRate",
                 this.sampleRate,
             );
+            // Periodic timebase sync (helps long sessions)
+            try {
+                if (this.timebaseTimer != null) {
+                    clearInterval(this.timebaseTimer);
+                    this.timebaseTimer = null;
+                }
+                this.timebaseTimer = window.setInterval(() => {
+                    if (!this.audioWorklet || !this.audioContext) return;
+                    const perfNowMs = performance.now();
+                    const audioCurrentTimeSec = this.audioContext.currentTime;
+                    try {
+                        this.audioWorklet.port.postMessage({
+                            type: "timebase",
+                            perfNowMs,
+                            audioCurrentTimeSec,
+                        });
+                    } catch {}
+                }, 1000);
+            } catch {}
             return true;
         } catch (error) {
             console.error("Failed to initialize audio:", error);
@@ -199,6 +219,10 @@ export class AudioManager {
             if (this.audioContext) {
                 this.audioContext.close();
                 this.audioContext = null;
+            }
+            if (this.timebaseTimer != null) {
+                try { clearInterval(this.timebaseTimer); } catch {}
+                this.timebaseTimer = null;
             }
         } finally {
             this.isInitialized = false;

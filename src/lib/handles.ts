@@ -3,6 +3,7 @@ export type HandleRole =
     | "audio-in"
     | "audio-out"
     | "param-in"
+    | "param-out"
     | "midi-out"
     | "midi-in"
     | "unknown";
@@ -64,6 +65,27 @@ export function getHandleRole(
             // Backward compat: original implementation used id "midi" for both; now we split.
             if (handleId === "midi") return "midi-in";
             if (handleId === "midi-out") return "midi-out";
+            return "unknown";
+        case "value-bool":
+            if (handleId === "output" || handleId == null) return "param-out";
+            if (handleId === "value") return "param-in"; // allow overriding via link too
+            return "unknown";
+        case "value-number":
+            if (handleId === "output" || handleId == null) return "param-out";
+            if (["value", "min", "max", "step", "ranged"].includes(handleId || ""))
+                return "param-in";
+            return "unknown";
+        case "value-string":
+            if (handleId === "output" || handleId == null) return "param-out";
+            if (handleId === "value") return "param-in";
+            return "unknown";
+        case "value-text":
+            if (handleId === "output" || handleId == null) return "param-out";
+            if (handleId === "value") return "param-in";
+            return "unknown";
+        case "value-select":
+            if (handleId === "output" || handleId == null) return "param-out";
+            if (handleId === "value" || handleId === "options") return "param-in";
             return "unknown";
         default:
             return "unknown";

@@ -70,6 +70,23 @@ export function getDefaultNodeData(
                 passOther: true,
                 onParameterChange,
             };
+        case "value-bool":
+            return { value: false, onParameterChange };
+        case "value-number":
+            return {
+                value: 0,
+                ranged: false,
+                min: 0,
+                max: 100,
+                step: 1,
+                onParameterChange,
+            };
+        case "value-string":
+            return { value: "", onParameterChange };
+        case "value-text":
+            return { value: "", onParameterChange };
+        case "value-select":
+            return { value: "", options: "", onParameterChange };
         default:
             return { onParameterChange };
     }

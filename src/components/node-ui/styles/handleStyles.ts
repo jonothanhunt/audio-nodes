@@ -21,38 +21,25 @@ export function makeHandleStyle({
     accentColor,
     baseBg = baseBgDefault,
 }: MakeHandleStyleArgs): React.CSSProperties {
-    // Adjust bool size down to 20 (same as string) from previous 22
-    const size =
-        variant === "audio"
-            ? 18
-            : variant === "string"
-              ? 20
-              : variant === "bool"
-                ? 20
-                : 16;
-    const isSvgVariant = variant === "string" || variant === "bool";
+    // Match original container sizes to restore handle positions
+    const size = variant === "audio" ? 18 : variant === "midi" ? 16 : 20;
+    const topAdjust = 0; // container remains centered; inner SVG handles the shape
     const base: React.CSSProperties = {
-        top,
+        top: top + topAdjust,
         transform: "translateY(-50%)",
-        [side]: -(size / 2),
+    [side]: -(size / 2),
         width: size,
         height: size,
-        background: isSvgVariant
-            ? "transparent"
-            : connected
-              ? accentColor
-              : baseBg,
-        border: isSvgVariant ? "none" : `1px solid ${accentColor}`,
-        borderRadius: variant === "audio" ? 9999 : 2,
+        background: "transparent",
+        border: "none",
+        borderRadius: 0,
         boxShadow: "none",
         transition: "background 140ms, box-shadow 140ms, filter 140ms",
         cursor: "crosshair",
         position: "absolute",
         "--fill": (connected ? accentColor : baseBg) as string,
     } as React.CSSProperties;
-    if (variant === "numeric")
-        base.transform = "translateY(-50%) rotate(45deg)";
-    if (variant === "bool") base.borderRadius = 0;
+    // Container remains unrotated for all variants; shapes drawn via inner SVG
     return base;
 }
 
@@ -60,6 +47,66 @@ export function renderHandleInner(
     variant: HandleVariant,
     accentColor: string,
 ): React.ReactNode {
+    if (variant === "audio") {
+        return React.createElement(
+            "svg",
+            {
+                width: "100%",
+                height: "100%",
+                viewBox: "0 0 100 100",
+                preserveAspectRatio: "xMidYMid meet",
+                style: { pointerEvents: "none" },
+            },
+            React.createElement("circle", {
+                cx: 50,
+                cy: 50,
+                r: 44,
+                fill: "var(--fill)",
+                stroke: accentColor,
+                strokeWidth: 6,
+            }),
+        );
+    }
+    if (variant === "midi") {
+            return React.createElement(
+                "svg",
+                {
+                    width: "100%",
+                    height: "100%",
+                    viewBox: "0 0 100 100",
+                    preserveAspectRatio: "xMidYMid meet",
+                    style: { pointerEvents: "none" },
+                },
+                React.createElement("rect", {
+                    x: 10,
+                    y: 10,
+                    width: 80,
+                    height: 80,
+                    fill: "var(--fill)",
+                    stroke: accentColor,
+                    strokeWidth: 6,
+                }),
+            );
+    }
+    if (variant === "numeric") {
+        return React.createElement(
+            "svg",
+            {
+                width: "100%",
+                height: "100%",
+                viewBox: "0 0 100 100",
+                preserveAspectRatio: "xMidYMid meet",
+                style: { pointerEvents: "none" },
+            },
+            React.createElement("polygon", {
+                points: "50,5 95,50 50,95 5,50",
+                fill: "var(--fill)",
+                stroke: accentColor,
+                strokeWidth: 7,
+                strokeLinejoin: "round",
+            }),
+        );
+    }
     if (variant === "string") {
         return React.createElement(
             "svg",

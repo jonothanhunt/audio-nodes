@@ -141,7 +141,7 @@ const MidiInputNode: React.FC<MidiInputNodeProps> = ({
                 <div className="grid grid-cols-[minmax(16rem,_auto)_auto] gap-y-2 gap-x-4">
                     {/* LEFT: inputs (no handles) */}
                     <div className="space-y-2 col-span-1">
-                        <div className="relative flex items-center">
+                        <div className="relative flex items-center h-8">
                             <label className={labelCls}>Device</label>
                             <select
                                 className={`${inputCls} w-40 text-xs nodrag`}
@@ -178,7 +178,7 @@ const MidiInputNode: React.FC<MidiInputNodeProps> = ({
                                 })}
                             </select>
                         </div>
-                        <div className="relative flex items-center">
+                        <div className="relative flex items-center h-8">
                             <label className={labelCls}>Channel</label>
                             <select
                                 className={`${inputCls} w-24 text-center nodrag`}
@@ -229,7 +229,7 @@ function MidiOutRow() {
     const { outputEl } = useNodeUI();
     return (
         <div
-            className="relative flex items-center justify-end"
+            className="relative flex items-center justify-end h-8"
             ref={(el) => outputEl(el)}
         >
             <span className="text-xs text-gray-300 mr-2">MIDI Out</span>
@@ -239,7 +239,7 @@ function MidiOutRow() {
 
 function StatusRow({ status, error }: { status?: string; error?: string }) {
     return (
-        <div className="relative flex items-center">
+    <div className="relative flex items-center h-8">
             <label className={labelCls}>Status</label>
             {status || error ? (
                 <div

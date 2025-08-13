@@ -81,8 +81,9 @@ export default function SequencerNode({
         if (!helpOpen) return;
         const onDocPointerDown = (e: PointerEvent) => {
             const t = e.target as Node | null;
-            if (buttonRef.current && buttonRef.current.contains(t as Node))
+            if (buttonRef.current && buttonRef.current.contains(t as Node)) {
                 return;
+            }
             setHelpOpen(false);
         };
         const opts: AddEventListenerOptions = { capture: true };
@@ -91,12 +92,17 @@ export default function SequencerNode({
             document.removeEventListener("pointerdown", onDocPointerDown, opts);
     }, [helpOpen]);
 
+    const isParamConnected = (key: string) => {
+        const fn = (data as { isParamConnected?: (k: string) => boolean })
+            .isParamConnected;
+        return typeof fn === "function" ? !!fn(key) : false;
+    };
     // Ensure defaults for scalars
     React.useEffect(() => {
         const ensure = (
             key: keyof SequencerNodeProps["data"],
             def: string | number | boolean,
-        ) => {
+    ) => {
             if ((data as Record<string, unknown>)[key] == null) {
                 onParameterChange(id, key as string, def);
             }
@@ -375,6 +381,7 @@ export default function SequencerNode({
             numericKeys={numericKeys}
             stringKeys={stringKeys}
             boolKeys={boolKeys}
+            isParamConnected={isParamConnected}
         >
             {selected && (
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-xs text-gray-500">
@@ -681,7 +688,7 @@ function MidiOutRow() {
     const { outputEl } = useNodeUI();
     return (
         <div
-            className="relative flex items-center justify-end"
+            className="relative flex items-center justify-end h-8"
             ref={(el) => outputEl(el)}
         >
             <span className="text-xs text-gray-300 mr-2">MIDI Out</span>

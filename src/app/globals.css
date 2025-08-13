@@ -131,3 +131,15 @@ body {
         font-weight: 100;
     }
 }
+
+/* Remove native number input spin buttons (which can appear as small +/- icons) */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type="number"] {
+    appearance: textfield;
+    -moz-appearance: textfield; /* Firefox */
+}

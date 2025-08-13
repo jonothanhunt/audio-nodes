@@ -252,7 +252,7 @@ const MidiTransposeNode: React.FC<MidiTransposeNodeProps> = ({
 function MidiInRow() {
     const { midiEl } = useNodeUI();
     return (
-        <div className="relative flex items-center" ref={(el) => midiEl(el)}>
+    <div className="relative flex items-center h-8" ref={(el) => midiEl(el)}>
             <label className={labelCls}>MIDI In</label>
             <span className="text-xs text-gray-400">Connect source</span>
         </div>
@@ -263,7 +263,7 @@ function MidiOutRow() {
     const { outputEl } = useNodeUI();
     return (
         <div
-            className="relative flex items-center justify-end"
+            className="relative flex items-center justify-end h-8"
             ref={(el) => outputEl(el)}
         >
             <span className="text-xs text-gray-300 mr-2">MIDI Out</span>

@@ -14,6 +14,7 @@ class EngineProcessor extends AudioWorkletProcessor {
 
         this._nodes = new Map(); // nodeId -> data
         this._connections = []; // { from, to, fromOutput, toInput }
+        this._paramCache = new Map(); // nodeId -> last param payload for quick lookup
 
         // Keep persistent WASM instances per node to maintain DSP state across blocks
         this._oscInstances = new Map(); // nodeId -> wasm.OscillatorNode
@@ -23,6 +24,15 @@ class EngineProcessor extends AudioWorkletProcessor {
 
         this._midiQueues = new Map(); // nodeId -> Array of events for next blocks
         this._timebase = { perfNowMs: 0, audioCurrentTimeSec: 0 };
+        // Reusable scratch buffers to avoid per-block allocations
+        this._scratch = {
+            temp: null,
+            inL: null,
+            inR: null,
+            sumL: null,
+            sumR: null,
+            size: 0,
+        };
 
         this.port.onmessage = (e) => this._handleMessage(e.data);
 
@@ -67,11 +77,11 @@ class EngineProcessor extends AudioWorkletProcessor {
             code = code.replace(/^export\s+class\s+/gm, "class ");
             code = code.replace(
                 /export\s*\{\s*initSync\s*\};?/gm,
-                "globalThis.__wbg_initSync = initSync;",
+                "globalThis.__wbg_initSync = initSync;"
             );
             code = code.replace(
                 /export\s+default\s+__wbg_init\s*;?/gm,
-                "globalThis.__wbg_init_default = __wbg_init;",
+                "globalThis.__wbg_init_default = __wbg_init;"
             );
             code = code.replace(/import\.meta\.url/g, "'/audio-engine-wasm/'");
             // Explicitly expose classes to globalThis
@@ -90,7 +100,7 @@ class EngineProcessor extends AudioWorkletProcessor {
             new Function(code)();
             if (typeof globalThis.__wbg_init_default !== "function") {
                 throw new Error(
-                    "WASM init function not found after transforming glue",
+                    "WASM init function not found after transforming glue"
                 );
             }
             await globalThis.__wbg_init_default(wasmBytes);
@@ -144,6 +154,9 @@ class EngineProcessor extends AudioWorkletProcessor {
                 const { nodeId, data } = msg;
                 this._nodes.set(nodeId, data);
                 try {
+                    this._paramCache.set(nodeId, data);
+                } catch {}
+                try {
                     this.port.postMessage({ type: "ackNode", nodeId });
                 } catch {}
                 break;
@@ -174,7 +187,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                                 c.from === nodeId &&
                                 (c.fromOutput === "midi-out" ||
                                     c.fromOutput === "midi" ||
-                                    c.fromOutput == null),
+                                    c.fromOutput == null)
                         );
                         if (downstream.length) {
                             for (const edge of downstream) {
@@ -250,6 +263,7 @@ class EngineProcessor extends AudioWorkletProcessor {
             case "clear": {
                 this._nodes.clear();
                 this._connections = [];
+                this._paramCache.clear?.();
                 for (const inst of this._oscInstances.values()) {
                     try {
                         inst.free?.();
@@ -294,7 +308,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                         c.from === sourceId &&
                         (c.fromOutput === "midi" ||
                             c.fromOutput === "midi-out" ||
-                            c.fromOutput == null),
+                            c.fromOutput == null)
                 );
                 for (const edge of midiEdges) {
                     const q = this._midiQueues.get(edge.to) || [];
@@ -328,7 +342,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                 this._timebase.perfNowMs / 1000;
             const eventTimeSec = atTimeMs / 1000 + workletPerfOffsetSec;
             const framesFromBlockStart = Math.floor(
-                (eventTimeSec - blockStartTimeSec) * sampleRate,
+                (eventTimeSec - blockStartTimeSec) * sampleRate
             );
             if (framesFromBlockStart < 0 || framesFromBlockStart >= blockSize)
                 return 0;
@@ -354,6 +368,15 @@ class EngineProcessor extends AudioWorkletProcessor {
 
         try {
             const blockSize = outL.length;
+            // Allocate scratch buffers once per block size change
+            if (this._scratch.size !== blockSize) {
+                this._scratch.temp = new Float32Array(blockSize);
+                this._scratch.inL = new Float32Array(blockSize);
+                this._scratch.inR = new Float32Array(blockSize);
+                this._scratch.sumL = new Float32Array(blockSize);
+                this._scratch.sumR = new Float32Array(blockSize);
+                this._scratch.size = blockSize;
+            }
             // Approximate current audio time for this block
             const blockStartTimeSec = this._timebase.audioCurrentTimeSec; // updated when host sends timebase; coarse but fine for scheduling
 
@@ -368,7 +391,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                         nodeId,
                         events,
                         blockStartTimeSec,
-                        blockSize,
+                        blockSize
                     );
                 } else if (nodeData.type === "midi-transpose") {
                     const events = queue.splice(0, queue.length);
@@ -377,12 +400,46 @@ class EngineProcessor extends AudioWorkletProcessor {
                         nodeData,
                         events,
                         blockStartTimeSec,
-                        blockSize,
+                        blockSize
                     );
                 } else {
                     queue.length = 0; // drop
                 }
             }
+
+            // Propagate param values along param edges
+            try {
+                const paramEdges = this._connections.filter(
+                    (c) =>
+                        c &&
+                        (c.fromOutput === "output" || c.fromOutput == null) &&
+                        c.toInput &&
+                        typeof c.toInput === "string" &&
+                        this._nodes.get(c.from) &&
+                        this._nodes.get(c.to)
+                );
+                for (const e of paramEdges) {
+                    const src = this._nodes.get(e.from) || {};
+                    const dst = this._nodes.get(e.to) || {};
+                    // Determine value to forward: by convention use 'value' when present, else try fromOutput key
+                    let v = undefined;
+                    if (Object.prototype.hasOwnProperty.call(src, "value")) {
+                        v = src.value;
+                    } else if (
+                        e.fromOutput &&
+                        Object.prototype.hasOwnProperty.call(src, e.fromOutput)
+                    ) {
+                        v = src[e.fromOutput];
+                    }
+                    if (v !== undefined) {
+                        // assign shallowly; avoid copying functions
+                        try {
+                            dst[e.toInput] = v;
+                            this._nodes.set(e.to, dst);
+                        } catch {}
+                    }
+                }
+            } catch {}
 
             this._processGraph(outL, outR);
 
@@ -468,7 +525,7 @@ class EngineProcessor extends AudioWorkletProcessor {
             synth.set_waveform?.(wf);
             if (typeof data.maxVoices === "number")
                 synth.set_max_voices?.(
-                    Math.max(1, Math.min(32, data.maxVoices | 0)),
+                    Math.max(1, Math.min(32, data.maxVoices | 0))
                 );
             if (
                 typeof data.attack === "number" ||
@@ -486,7 +543,7 @@ class EngineProcessor extends AudioWorkletProcessor {
             if (typeof data.glide === "number") synth.set_glide?.(data.glide);
             if (typeof data.gain === "number") synth.set_gain?.(data.gain);
 
-            const temp = new Float32Array(N);
+            const temp = this._scratch.temp;
             synth.process(temp);
             for (let i = 0; i < N; i++) {
                 const s = temp[i];
@@ -506,17 +563,6 @@ class EngineProcessor extends AudioWorkletProcessor {
         for (const ev of events) {
             const [status, d1, d2] = ev.data;
             const cmd = status & 0xf0;
-            if (cmd === 0x90 || cmd === 0x80) {
-                try {
-                    console.log(
-                        "[Worklet MIDI] synth",
-                        nodeId,
-                        cmd === 0x90 ? "NoteOn" : "NoteOff",
-                        d1,
-                        d2,
-                    );
-                } catch {}
-            }
             switch (cmd) {
                 case 0x90: // Note On
                     if ((d2 & 0x7f) > 0) {
@@ -562,7 +608,7 @@ class EngineProcessor extends AudioWorkletProcessor {
     _processTransposeMIDI(
         nodeId,
         data,
-        events /*, blockStartTimeSec, blockSize */,
+        events /*, blockStartTimeSec, blockSize */
     ) {
         const inst = this._getTransposeInstance(nodeId);
         if (!inst) return;
@@ -653,7 +699,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                         const res = inst.transform(
                             status,
                             origNote,
-                            d[2] & 0x7f,
+                            d[2] & 0x7f
                         );
                         if (res && res.length === 3)
                             outEvents.push({
@@ -667,7 +713,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                         const res = inst.transform(
                             status,
                             d[1] & 0x7f,
-                            d[2] & 0x7f,
+                            d[2] & 0x7f
                         );
                         if (res && res.length === 3)
                             outEvents.push({
@@ -687,7 +733,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                 c.from === nodeId &&
                 (c.fromOutput === "midi-out" ||
                     c.fromOutput === "midi" ||
-                    c.fromOutput == null),
+                    c.fromOutput == null)
         );
         for (const edge of downstream) {
             const q = this._midiQueues.get(edge.to) || [];
@@ -706,7 +752,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                 osc.amplitude = data.amplitude;
             osc.set_waveform(this._getWaveformIndex(data.waveform || "sine"));
 
-            const temp = new Float32Array(N);
+            const temp = this._scratch.temp;
             osc.process(temp);
             for (let i = 0; i < N; i++) {
                 const s = temp[i];
@@ -724,13 +770,15 @@ class EngineProcessor extends AudioWorkletProcessor {
             (c) =>
                 c.to === nodeId &&
                 c.toInput === "input" &&
-                (c.fromOutput === "output" || !c.fromOutput),
+                (c.fromOutput === "output" || !c.fromOutput)
         );
         if (inputs.length === 0) return;
 
         const N = outL.length;
-        const inL = new Float32Array(N);
-        const inR = new Float32Array(N);
+        const inL = this._scratch.inL;
+        const inR = this._scratch.inR;
+        inL.fill(0);
+        inR.fill(0);
 
         for (const c of inputs) {
             const src = this._nodes.get(c.from);
@@ -743,7 +791,7 @@ class EngineProcessor extends AudioWorkletProcessor {
             if (typeof data.feedback === "number") rev.feedback = data.feedback;
             if (typeof data.wetMix === "number") rev.wet_mix = data.wetMix;
 
-            const temp = new Float32Array(N);
+            const temp = this._scratch.temp;
             // Use left as mono input for now
             rev.process(inL, temp);
 
@@ -795,15 +843,17 @@ class EngineProcessor extends AudioWorkletProcessor {
 
         const N = outL.length;
         for (const { nodeId, data } of speakers) {
-            const sumL = new Float32Array(N);
-            const sumR = new Float32Array(N);
+            const sumL = this._scratch.sumL;
+            const sumR = this._scratch.sumR;
+            sumL.fill(0);
+            sumR.fill(0);
 
             // Find audio inputs wired into the speaker
             const inputs = this._connections.filter(
                 (c) =>
                     c.to === nodeId &&
                     c.toInput === "input" &&
-                    (c.fromOutput === "output" || !c.fromOutput),
+                    (c.fromOutput === "output" || !c.fromOutput)
             );
 
             for (const c of inputs) {

@@ -205,7 +205,7 @@ export default function SpeakerNode({ id, data, selected }: SpeakerNodeProps) {
 function AudioInRow() {
     const { midiEl } = useNodeUI(); // reuse midi slot for audio in alignment (single column)
     return (
-        <div className="relative flex items-center" ref={(el) => midiEl(el)}>
+    <div className="relative flex items-center h-8" ref={(el) => midiEl(el)}>
             <label className={labelCls}>Audio In</label>
             <span className="text-xs text-gray-400">Connect audio</span>
         </div>

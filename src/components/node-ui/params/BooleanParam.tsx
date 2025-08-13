@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
 import { ParamRow } from "../ParamRow";
+import { useNodeUI } from "../NodeUIProvider";
 
 interface BooleanParamProps {
     nodeId: string;
@@ -21,12 +22,15 @@ export function BooleanParam({
     value,
     onParameterChange,
 }: BooleanParamProps) {
+    const { isParamConnected } = useNodeUI();
+    const connected = isParamConnected?.(paramKey) ?? false;
     const stop = (e: React.SyntheticEvent) => {
         e.stopPropagation();
     };
     return (
         <ParamRow label={label} paramKey={paramKey}>
             <button
+                disabled={connected}
                 onClick={(e) => {
                     e.stopPropagation();
                     onParameterChange(nodeId, paramKey, !value);
