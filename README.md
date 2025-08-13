@@ -214,3 +214,93 @@ Tip: Most parameter changes flow through a common `onParameterChange(nodeId, key
 
 [Back to top](#audio-nodes)
 
+
+## Project plan (roadmap)
+
+This is a living checklist of planned features. Tick items will be updated as we land them. Feel free to open issues/PRs to discuss or contribute.
+
+### Core nodes
+
+- [ ] Arpeggiator node
+  - [ ] Modes (up, down, up-down, random, chord, custom)
+  - [ ] Rate (note value), gate, octave range, swing
+  - [ ] Latch/hold, tie overlaps
+  - [ ] Clock sync and reset input
+- [ ] Chords node
+  - [ ] Triads/7ths/extended chords, inversions, spread/voicing
+  - [ ] Key/scale awareness, Roman numerals input
+  - [ ] Arp/gate output option
+- [ ] Envelope node (mod)
+  - [ ] ADSR and multi-stage
+  - [ ] Trigger input, retrigger, one-shot/loop
+  - [ ] Param-out for modulation
+- [ ] Sampler node
+  - [ ] Load samples (drag & drop, file picker)
+  - [ ] Basic playback: one-shot, loop, start offset, length
+  - [ ] Multi-sample mapping by MIDI note/velocity
+  - [ ] Envelopes (ADSR), filter, gain
+  - [ ] Disk/HTTP streaming for long samples (progressive)
+  - [ ] WASM-side resampling/interpolation (high quality)
+- [ ] LFO node
+  - [ ] Shapes (sine, tri, saw, square, random S&H)
+  - [ ] Rate, sync, phase, offset, depth
+  - [ ] Param-out for modulation
+
+### Effects nodes
+
+- [ ] Delay (mono/stereo)
+  - [ ] Time (ms/sync), feedback, mix
+  - [ ] Ping-pong mode
+- [ ] Chorus/Flanger
+  - [ ] Rate, depth, feedback, mix
+- [ ] Phaser
+  - [ ] Stages, rate, depth, feedback, mix
+- [ ] Distortion/Saturation
+  - [ ] Drive, tone, mix; multiple curves
+- [ ] EQ (simple 3-band)
+  - [ ] Low/Mid/High gain, frequency, Q (where applicable)
+- [ ] Compressor
+  - [ ] Threshold, ratio, attack, release, makeup gain
+- [ ] Filter node (separate from synth)
+  - [ ] LP/HP/BP/Notch, cutoff, resonance, key track
+
+### Utilities and routing
+
+- [ ] Mixer node (multi-input)
+- [ ] Splitter/Merger nodes
+- [ ] Gain node
+- [ ] Meter/Scope/Analyzer (visualization)
+- [ ] MIDI utilities: Scale quantizer, Velocity curve, Channel filter
+
+### Editor UX
+
+- [x] Copy/Paste selection (Cmd/Ctrl+C, Cmd/Ctrl+V)
+- [x] Duplicate selection (Cmd/Ctrl+D)
+- [x] Spawn new nodes at viewport center
+- [ ] Multi-select marquee improvements
+- [ ] Align/distribute selected nodes
+- [ ] Snap grid settings and quick toggle
+- [ ] Keyboard shortcuts reference overlay
+- [ ] Context menu (right-click) for quick actions
+
+### Project system
+
+- [ ] Versioned project format with migrations — so older projects keep working as the app evolves
+- [ ] Asset management (samples), project-local asset store — keep audio files with the project for easy moving/sharing
+- [ ] Share/import projects via URL or file — quickly share patches or load presets from a link/file
+
+### Performance and engine
+
+- [ ] Audio engine profiling and benchmarks — measure where time goes to target the biggest speed-ups (recommended by AI)
+- [ ] SIMD builds (wasm32-simd128) where available — use special CPU instructions to process many samples at once for smoother playback (recommended by AI)
+- [ ] Worklet ring buffer optimizations — a faster pipe between the UI and the audio thread to reduce glitches and latency (recommended by AI)
+- [ ] Offline render/export to WAV — render your patch to an audio file you can download
+
+### Documentation
+
+- [ ] Node reference docs (per node)
+- [ ] Modulation/handles guide
+- [ ] Contributing guide
+- [ ] Architecture deep dive (engine + UI)
+
+Have an idea for a node or feature? Open an issue with [feature] in the title and describe the use case. Contributions welcome!
