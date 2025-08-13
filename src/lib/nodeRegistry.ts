@@ -1,12 +1,12 @@
-import { Volume2, Waves, Speaker, Music } from "lucide-react";
+import { Volume2, Waves, Speaker, Music, ToggleRight, Hash, List } from "lucide-react";
 import type { ReactElement } from "react";
 
-export type NodeCategory = "Synthesis" | "Effects" | "Sequencing" | "Utility";
+export type NodeCategory = "Synthesis" | "Effects" | "Sequencing" | "Utility" | "Value";
 
 // Category level visual & semantic config (single color now: accentColor)
 export interface CategoryDefinition {
     accentColor: string; // single canonical color per category
-    kind: "audio" | "midi" | "effect" | "utility" | "other";
+    kind: "audio" | "midi" | "effect" | "utility" | "value";
 }
 
 export const CATEGORY_DEFINITIONS: Record<NodeCategory, CategoryDefinition> = {
@@ -14,6 +14,7 @@ export const CATEGORY_DEFINITIONS: Record<NodeCategory, CategoryDefinition> = {
     Effects: { accentColor: "#3b82f6", kind: "effect" }, // blue
     Sequencing: { accentColor: "#f59e0b", kind: "midi" }, // amber
     Utility: { accentColor: "#10b981", kind: "utility" }, // green
+    Value: { accentColor: "#ef4444", kind: "value" }, // red accent
 };
 
 export interface NodeDefinition {
@@ -82,6 +83,39 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
         tag: "utility",
         icon: Speaker as unknown as NodeDefinition["icon"],
     },
+    // Value category
+    {
+        type: "value-bool",
+        name: "Bool",
+        description: "Boolean value source (on/off)",
+        category: "Value",
+        tag: "value",
+        icon: ToggleRight as unknown as NodeDefinition["icon"],
+    },
+    {
+        type: "value-number",
+        name: "Number",
+        description: "Number value source (with optional range)",
+        category: "Value",
+        tag: "value",
+        icon: Hash as unknown as NodeDefinition["icon"],
+    },
+    {
+        type: "value-text",
+        name: "Text",
+        description: "Free text value source",
+        category: "Value",
+        tag: "value",
+        icon: List as unknown as NodeDefinition["icon"],
+    },
+    {
+        type: "value-select",
+        name: "Select",
+        description: "Dropdown enum value source",
+        category: "Value",
+        tag: "value",
+        icon: List as unknown as NodeDefinition["icon"],
+    },
 ];
 
 export function getNodeDefinition(type?: string) {
@@ -99,13 +133,15 @@ export interface UnifiedNodeMeta {
 }
 
 export function getNodeMeta(type?: string): UnifiedNodeMeta {
-    const def = getNodeDefinition(type);
+    // Alias legacy types to preserve category tone and kind
+    const aliasType = type === "value-string" ? "value-text" : type;
+    const def = getNodeDefinition(aliasType);
     if (!def || !type) {
         return {
-            type: type || "unknown",
+            type: aliasType || "unknown",
             category: "Utility",
             accentColor: "#64748b",
-            kind: "other",
+            kind: "utility",
             base: "#64748b",
             accent: "#64748b",
         };
@@ -127,6 +163,7 @@ export function groupDefinitionsByCategory() {
         Effects: [],
         Sequencing: [],
         Utility: [],
+        Value: [],
     };
     for (const def of NODE_DEFINITIONS) {
         map[def.category].push(def);
@@ -144,6 +181,8 @@ export function getCategoryTone(category: NodeCategory) {
             return "amber";
         case "Utility":
             return "green";
+        case "Value":
+            return "red"; // red tone for Value nodes
         default:
             return "slate";
     }
