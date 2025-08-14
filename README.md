@@ -1,79 +1,49 @@
-# Audio Nodes
+<p align="center">
+  <img src="./audio-nodes.png" alt="Audio Nodes screenshot" width="640" />
+</p>
 
-[![node >=18](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org/)
-[![rust stable](https://img.shields.io/badge/rust-stable-orange)](https://www.rust-lang.org/)
-[![wasm-pack](https://img.shields.io/badge/wasm--pack-ready-purple)](https://github.com/rustwasm/wasm-pack)
+<h1 align="center">Audio Nodes</h1>
 
-A visual audio playground where you build sound by connecting blocks (nodes). It runs in your browser. Under the hood, the sound engine is written in [Rust](https://www.rust-lang.org/) and compiled to [WebAssembly (WASM)](https://webassembly.org/) for speed; the UI is built with [Next.js](https://nextjs.org/) ([React](https://react.dev/)) and [React Flow](https://reactflow.dev).
+<p align="center">
+  <a href="https://nodejs.org/"><img alt="node >=18" src="https://img.shields.io/badge/node-%3E%3D18-brightgreen" /></a>
+  <a href="https://www.rust-lang.org/"><img alt="rust stable" src="https://img.shields.io/badge/rust-stable-orange" /></a>
+  <a href="https://github.com/rustwasm/wasm-pack"><img alt="wasm-pack" src="https://img.shields.io/badge/wasm--pack-ready-purple" /></a>
+</p>
 
-Live site: https://audio-nodes.jonothan.dev
+<p align="center"><strong>Modular audio & MIDI playground in the browser.</strong><br/>Rust + WebAssembly DSP core • Next.js UI • React Flow graph</p>
 
-I love node‑based creative workflows and making music—so this project is a good opportunity to learn Rust/WASM while making something fun and useful.
+<p align="center"><a href="https://audio-nodes.jonothan.dev">audio-nodes.jonothan.dev</a></p>
 
-![Audio Nodes demo](./audio-nodes.png)
+## Table of Contents
 
-
-## Index
-
-- [Introduction](#introduction)
-  - [What is it?](#what-is-it)
-  - [How it works](#how-it-works)
-- [Developer Guide](#developer-guide)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-  - [Build the Audio Engine (WASM)](#build-the-audio-engine-wasm)
-  - [Run the app](#run-the-app)
-  - [Project structure](#project-structure)
-  - [Architecture overview](#architecture-overview)
-    - [Audio processing pipeline](#audio-processing-pipeline)
-    - [MIDI system](#midi-system)
-    - [Beat-only transport & scheduling](#beat-only-transport--scheduling)
-    - [UI layer & design language](#ui-layer--design-language)
-  - [Authoring nodes](#authoring-nodes)
-    - [High-level: audio vs UI responsibilities](#high-level-audio-vs-ui-responsibilities)
-    - [Central node metadata registry](#central-node-metadata-registry)
-    - [NodeSpec & NodeShell](#nodespec--nodeshell)
-    - [Parameters vs streaming IO](#parameters-vs-streaming-io)
-    - [Creating a new node (checklist)](#creating-a-new-node-checklist)
-    - [Sequencer example (timed/MIDI)](#sequencer-example-timedmidi)
-    - [Reverb example (audio effect)](#reverb-example-audio-effect)
-  - [Troubleshooting](#troubleshooting)
-- [Available nodes](#available-nodes)
+1. [Introduction](#introduction)
+2. [Quick Start](#quick-start)
+3. [Project Structure](#project-structure)
+4. [Technical Rundown](#technical-rundown)
+5. [Authoring a Node](#authoring-a-node)
+6. [Troubleshooting](#troubleshooting)
+7. [Roadmap & TODO](#roadmap--todo)
+8. [Contributing](#contributing)
+9. [License](#license)
 
 ---
 
 ## Introduction
 
-### What is it?
+Design synth / effect / MIDI chains visually (e.g. MIDI In → Synth → Reverb → Speaker). Patch cables, tweak parameters, and the low‑latency Rust/WASM engine reacts instantly. All inside your browser – no install besides dependencies.
 
-Audio Nodes lets you create simple synth and effect chains by connecting visual blocks: for example, MIDI Input → Synthesizer → Reverb → Speaker. You can tweak parameters in real time and hear the result instantly.
-### Panic Button
-Panic (All Notes Off / flush): The transport pill includes a Panic button which sends All Notes Off to every synth, clears active sequencer notes, and clears arpeggiator active outputs to recover from any hanging notes.
-
-- In: MIDI or generated notes (Sequencer)
-- Process: Oscillator/Synth, Reverb, Transpose, etc.
-- Out: Speaker (final output)
-
-> [!IMPORTANT]
-> Audio is silent unless at least one Speaker node is present. Only audio reaching a Speaker input is heard.
-
-### How it works
-
-- Each block (node) does one job (make sound, change sound, or route sound).
-- You drag cables between nodes to define the flow.
-- The final node “Speaker” is the output to your device—connect to it to hear anything.
-- Everything runs in your browser.
+I love node‑based creative workflows and making music—so this project is a good opportunity for me to learn Rust/WASM while making something fun and useful.
 
 ---
 
-## Developer Guide
+## Quick Start
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) 18+
-- [Rust](https://www.rust-lang.org/) + [wasm-pack](https://rustwasm.github.io/wasm-pack/)
+- Node.js 18+
+- Rust toolchain + wasm-pack
 
-### Installation
+### Install
 
 ```bash
 git clone <repository-url>
@@ -83,415 +53,178 @@ npm install
 
 ### Build the Audio Engine (WASM)
 
-Builds the Rust engine and copies wasm-bindgen outputs into both `public/audio-engine-wasm/` and `src/audio-engine-wasm/`:
+Compiles the Rust crate and copies wasm-bindgen artifacts into `public/audio-engine-wasm/` (served) and `src/audio-engine-wasm/` (type usage).
 
 ```bash
 npm run build:wasm
 ```
 
-### Run the app
+### Run
 
 ```bash
 npm run dev
-# open http://localhost:3000
+# then open http://localhost:3000
 ```
 
-> [!TIP]
-> If audio doesn’t start, interact with the page (click) to allow the browser to start the AudioContext.
+Tip: If the browser blocks autoplay, click anywhere to unlock the AudioContext.
 
-### Project structure
+---
+
+## Project Structure
 
 ```
 audio-nodes/
 ├── public/
-│   ├── worklets/
-│   │   └── audio-engine-processor.js      # AudioWorkletProcessor (runs DSP)
-│   ├── audio-engine-wasm/                 # wasm-bindgen output served by Next.js
-│   │   ├── audio_engine.js
-│   │   ├── audio_engine_bg.wasm
-│   │   └── *.d.ts / package.json
-│   └── projects/
-│       └── default-project.json           # Example project
+│   ├── worklets/                # AudioWorkletProcessor script
+│   ├── audio-engine-wasm/       # Served WASM bundle
+│   └── projects/                # Example / default project JSON
 ├── src/
-│   ├── app/                               # Next.js App Router
-│   │   ├── page.tsx
-│   │   ├── layout.tsx
-│   │   └── globals.css
-│   ├── components/
-│   │   ├── nodes/                         # Node UI components (React)
-│   │   │   ├── MidiInputNode.tsx
-│   │   │   ├── MidiTransposeNode.tsx
-│   │   │   ├── OscillatorNode.tsx
-│   │   │   ├── ReverbNode.tsx
-│   │   │   ├── SequencerNode.tsx
-│   │   │   ├── SpeakerNode.tsx
-│   │   │   └── SynthesizerNode.tsx
-│   │   ├── node-ui/                       # Handle layer + shared node UI
-│   │   ├── edges/                         # Custom React Flow edges
-│   │   ├── AudioNodesEditor.tsx           # Main editor
-│   │   ├── NodeLibrary.tsx                # Node palette/library
-│   │   ├── SaveLoadPanel.tsx              # Project persistence UI
-│   │   └── TitleBarCreds.tsx              # Header/nav
-│   ├── hooks/
-│   │   ├── useAudioEngine.ts              # Bootstraps worklet + wasm in page
-│   │   ├── useGraph.ts                    # Graph state (React Flow)
-│   │   ├── useProjectPersistence.ts       # Save/load (file + localStorage)
-│   │   └── useWasm.ts                     # WASM loader glue
-│   ├── lib/
-│   │   ├── audioManager.ts                # Manages worklet graph + messages
-│   │   ├── handles.ts
-│   │   ├── nodeRegistry.ts                # Metadata (colors, categories)
-│   │   ├── nodes.ts                       # Node type defaults and helpers
-│   │   └── utils.ts
-│   ├── types/
-│   │   └── project.ts
-│   └── audio-engine-wasm/                 # Local copy of wasm-bindgen pkg
-├── audio-engine/                          # Rust audio processing engine
-│   ├── src/
-│   │   ├── nodes/
-│   │   │   ├── oscillator.rs
-│   │   │   ├── reverb.rs
-│   │   │   ├── speaker.rs
-│   │   │   ├── synth.rs
-│   │   │   └── transpose.rs
-│   │   └── lib.rs
-│   ├── Cargo.toml
-│   └── pkg/                               # wasm-pack build output
-├── build-wasm.sh                           # Builds + copies wasm artifacts
-└── README.md
+│   ├── app/                     # Next.js App Router entry
+│   ├── components/              # React components (nodes, editor, UI chrome)
+│   ├── hooks/                   # Engine, graph, persistence hooks
+│   ├── lib/                     # Core managers, registry, helpers
+│   ├── types/                   # Shared TypeScript types
+│   └── audio-engine-wasm/       # Local copy of wasm-bindgen pkg (types)
+├── audio-engine/                # Rust DSP crate (compiled to WASM)
+└── build-wasm.sh                # Convenience build + copy script
 ```
 
-### Architecture overview
+---
 
-#### Audio processing pipeline
+## Technical Rundown
 
-- DSP implemented in Rust, compiled with [wasm-bindgen](https://rustwasm.github.io/wasm-bindgen/) to WASM.
-- Main thread spins up an [AudioWorkletNode](https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletNode), fetches glue (`audio_engine.js`) + `.wasm` from `public/audio-engine-wasm/`, then posts to the worklet.
-- The [AudioWorkletProcessor](https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletProcessor) initializes the WASM and processes audio off the main thread.
-- UI sends node graph updates and parameter changes via `postMessage` to the worklet.
-- [Web Audio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API) is used for transport/output (context + destination). All synthesis/effects/mixing happen in WASM.
+### Architecture Overview
 
-#### MIDI system
+Layered for clarity & iteration speed:
+- Rust (WASM): Sample‑level DSP (osc, synth voice mgmt, FX). Compiled via wasm-bindgen.
+- AudioWorkletProcessor: Owns the instantiated WASM module, executes the per‑block render, routes audio/MIDI, advances the global beat clock, dispatches transport events.
+- Main thread (AudioManager): Maintains the declarative graph & param state; serializes diffs to the worklet; exposes subscription helpers.
+- React UI: Graph editing (React Flow), parameter panels (auto‑generated from NodeSpec), custom node UIs (sequencer grid, etc.).
 
-- Raw MIDI bytes for universal compatibility.
-- Optional sample‑accurate scheduling using `atFrame` (0..blockSize‑1) or time‑based `atTimeMs`.
-- Routing rule: `midi-out → midi-in` only.
-- Worklet maintains per‑node MIDI queues and routes messages accordingly.
+### Audio Processing Pipeline
+1. User edits graph in React → diff sent to worklet.
+2. Worklet resolves a topological order and pulls audio upstream each block.
+3. WASM node implementations render into small buffers; results mix/flow downstream.
+4. Output written to the worklet's output channels → system audio.
 
-#### Beat-only transport & scheduling
+### Transport & Scheduling (Beat‑Only)
+- Single global beat clock (no bars / signatures) encourages polymeter & drifting patterns.
+- BPM changes, sequencer starts, rate changes & global sync requests are quantized to the next beat boundary for deterministic alignment.
+- Sequencers accumulate fractional beats; when threshold reached, they advance a step and emit events (used by UI for visual feedback / grid highlight).
 
-The engine uses a single always-running global clock measured only in absolute beats (no bars/time-signatures). This keeps polymeter/polyrhythm options open (different sequencer lengths & rate multipliers can drift and phase naturally) without enforcing 4/4 or similar.
+### MIDI & Routing
+- Raw MIDI bytes (status, data1, data2) for maximum flexibility.
+- Edges are type‑safe: audio↔audio, midi↔midi (no implicit conversions).
+- Worklet maintains per‑node MIDI queues processed each render quantum.
 
-Core transport fields (worklet):
+### Node Metadata & UI Generation
+- Visual/descriptive metadata lives centrally in `nodeRegistry.ts` (no duplication).
+- Functional specs (params, IO, help text) live in each node component via a `NodeSpec` object.
+- `NodeShell` consumes both to render a consistent layout (handles + param rows + help popover) while allowing custom children for rich UIs.
 
-```
-{
-  bpm: number,
-  frameCounter: number,       // absolute audio frames processed
-  framesPerBeat: number,      // derived from bpm & sampleRate
-  nextBeatFrame: number,      // frame index of upcoming beat boundary
-  beatIndex: number,          // absolute beat counter (0,1,2,...)
-  pendingBpm: number|null,    // scheduled BPM to apply
-  pendingBpmBeat: number|null,// beat index when new BPM takes effect
-  syncAllNextBeat: boolean    // flag to reset all sequencers at next beat
-}
-```
+### Parameters vs Streaming IO
+- Parameters: Discrete control events (numbers, bools, selects...) posted only when changed.
+- Streaming IO: Continuous audio or MIDI buffers routed every block.
+This separation keeps bandwidth low and timing precise.
 
-Sequencers register with an internal map storing (rateMultiplier, isPlaying, pendingStartBeat, pendingRate, stepIndex, beatsAccum).
+---
 
-Scheduling loop each render block:
-1. While `nextBeatFrame` falls inside the current audio block: emit a `beat` message, apply any pending BPM, apply pending per-sequencer rate changes, process syncAll request, start any sequencers whose `pendingStartBeat` just arrived, emit initial step events.
-2. Advance `nextBeatFrame += framesPerBeat` until it lies in the future block.
-3. For each playing sequencer accumulate fractional beats (`beatsAccum += blockBeats`). When `beatsAccum >= (1 / rateMultiplier)` advance step, wrap by sequence length, emit `sequencerStep`.
+## Authoring a Node
 
-All BPM changes, rate changes, sync, and sequencer starts are quantized to the next beat boundary (never mid-step) to avoid timing jitter and preserve deterministic alignment.
+Minimal checklist:
+1. Registry: Add display entry (type, name, icon, color, description) to `nodeRegistry.ts`.
+2. DSP (if needed): Implement Rust node + export in `audio-engine/src/lib.rs`; rebuild (`npm run build:wasm`).
+3. Worklet: Create handling / instantiation logic if it's a new DSP or MIDI processor.
+4. UI: Create `src/components/nodes/<Name>Node.tsx` with a `NodeSpec` (params, inputs, outputs, help) and return `<NodeShell spec={spec} />`.
+5. Register component in the editor's `nodeTypes` map (unless auto-discovered).
+6. Test: Add node, connect cables, wiggle params, confirm console free of load errors.
+7. Persistence: Ensure sensible defaults so saved projects reload identically.
+8. (Optional) Custom UI: Provide `children` or hooks for grids, previews, advanced controls.
 
-#### UI layer & design language
+---
 
-- [React Flow](https://reactflow.dev) for node graph, [Tailwind CSS](https://tailwindcss.com/) for styling.
-- Two-column layout: inputs/params (left), outputs (right), both top‑aligned.
-- Handle shapes encode type: audio (circle), midi (square), numeric (diamond), boolean (triangle), string/enum (pentagon).
-- Accent color used for borders, titles, active handles.
+## Troubleshooting
 
-### Authoring nodes
+| Symptom | Fix |
+|---------|-----|
+| Silence | Ensure a Speaker node is in the chain & receiving audio. |
+| Audio won’t start | Click the page (user gesture needed to start AudioContext). |
+| WASM 404 / load error | Run `npm run build:wasm` and verify files in `public/audio-engine-wasm/`. Hard refresh. |
+| Params not updating | Confirm node type spec keys match what worklet expects; check devtools messages. |
+| Timing feels off | Verify BPM change or sequencer start was scheduled before the desired beat (changes quantize to next beat). |
 
-#### High-level: audio vs UI responsibilities
+Still stuck? Open an issue with console logs + reproduction steps.
 
-| Layer | Responsibilities |
-|-------|------------------|
-| Rust (WASM) | Stateful DSP (oscillators, filters, effects), sample-level work, memory-efficient processing. |
-| AudioWorkletProcessor | Graph traversal, instantiating WASM node wrappers, routing audio/MIDI, global beat scheduling logic, quantized transport events. |
-| AudioManager (main thread) | Maintains graph model, serializes param changes to worklet, exposes subscription APIs (onBeat, onSequencerStep). |
-| React Node components | Declarative parameter UI, grid/visual logic (Sequencer), dispatch local param changes via `onParameterChange`. |
-| NodeShell framework | Shared layout, handles, help popover, param auto-rendering via NodeSpec. |
+---
 
-#### Central node metadata registry
+## Roadmap & TODO
 
-Display metadata (name, icon, description, category color) lives ONLY in `src/lib/nodeRegistry.ts`. Node components no longer repeat these. `getNodeMeta(type)` returns `{ displayName, icon, accentColor, description, kind }` and `NodeShell` consumes it for consistent UI.
+### Core / DSP
+- [ ] Delay (mono / ping‑pong)
+- [ ] Filter (standalone multi-mode)
+- [ ] Sampler (basic one‑shot / loop)
+- [ ] Envelope generator (ADSR) + modulation outputs
+- [ ] Chorus / Flanger / Phaser
+- [ ] Distortion / Saturation + simple tone shaping
+- [ ] EQ (3‑band) & Compressor
+- [ ] Offline render / export
+- [ ] SIMD exploration / profiling passes
 
-#### NodeSpec & NodeShell
+### Modulation & Control
+- [ ] LFO enhancements (random, S&H, preview)
+- [ ] Per‑destination modulation depth
+- [ ] Mod matrix / routing panel
 
-`NodeSpec` now only defines functional aspects (params, streaming IO, optional help & custom render hooks). No icon, no accent, usually no title.
-
-```ts
-const spec: NodeSpec = {
-  type: 'reverb',
-  params: [
-    { key: 'feedback', kind: 'number', default: 0.3, min: 0, max: 0.95, step: 0.01, label: 'Feedback' },
-    { key: 'wetMix',   kind: 'number', default: 0.3, min: 0, max: 1,    step: 0.01, label: 'Wet Mix' }
-  ],
-  inputs:  [{ id: 'input',  role: 'audio-in',  label: 'Audio In' }],
-  outputs: [{ id: 'output', role: 'audio-out', label: 'Audio Out' }],
-  help: {
-    description: 'Adds reverberation to the signal.',
-    inputs:  [{ name: 'Audio In', description: 'Incoming audio.' }],
-    outputs: [{ name: 'Audio Out', description: 'Processed audio.' }]
-  }
-};
-
-export default function ReverbNode({ id, data, selected }: ReverbNodeProps) {
-  return (
-    <NodeShell
-      id={id}
-      data={data}
-      spec={spec}
-      selected={selected}
-      onParameterChange={data.onParameterChange}
-    />
-  );
-}
-```
-
-Benefits:
-* Uniform layout & styling
-* Auto param default application (`useNodeSpec`)
-* Kind-driven param component selection
-* Centralized help popover + handles + accent color
-* Registry-driven icon/name (no duplication)
-* Hooks & `children` for custom UI (grids, previews)
-
-#### Parameters vs streaming IO
-
-Distinct concepts:
-* Params: Discrete control changes (numbers, bools, selects, text). They propagate through `onParameterChange` once per user edit and are posted to the worklet. They may expose param-input handles (future modulation system) but are not continuous sample streams.
-* Streaming IO: Audio or MIDI edges defined in `inputs` / `outputs` arrays. These drive per-block data flow.
-
-Why separate? Clear semantics (sample-stream vs control event) keeps scheduling deterministic and reduces accidental over-posting.
-
-#### Creating a new node (checklist)
-
-1. Registry: Add entry in `nodeRegistry.ts` (type, name, description, icon, category). No display props in the component.
-2. DSP (if needed): Implement Rust node + expose via `lib.rs`; rebuild WASM.
-3. Worklet: Instantiate/process in `audio-engine-processor.js` (audio or MIDI path).
-4. UI: Create `src/components/nodes/<Name>Node.tsx` with minimal `NodeSpec` (params, inputs/outputs, help) and return `<NodeShell />`.
-5. Register node component in editor `nodeTypes` (if not auto-wired).
-6. Verify in browser (add node, tweak params, inspect behavior/messages).
-7. Persistence: Ensure defaults present; project save/load should “just work”.
-8. Optional custom UI via `renderBeforeParams` / `renderAfterParams` or `children`.
-9. Docs/tests as complexity grows.
-
-#### Sequencer example (timed/MIDI)
-
-The Sequencer demonstrates custom UI + transport integration:
-* Spec defines From, To, Length, Play, Rate params.
-* A custom step grid is passed as `children` to `NodeShell`.
-* Play & Rate changes dispatch custom DOM events (`audioNodesSequencerPlayToggle`, `audioNodesSequencerRateChange`), which the editor converts into `audioManager.setSequencerPlay/Rate` messages.
-* Worklet maintains quantized start (`pendingStartBeat`) and per-beat step advancement using `rateMultiplier`.
-* Rate changes and starts apply exactly on the next global beat.
-
-Key sequencing fields (worklet per entry):
-```
-{
-  rateMultiplier, isPlaying,
-  pendingStartBeat, pendingRate,
-  stepIndex, beatsAccum, _startedOnce
-}
-```
-
-#### Reverb example (audio effect)
-
-Straightforward spec → NodeShell. DSP lives in Rust; worklet caches an instance per node ID, pulling/mixing upstream audio recursively. Parameters (feedback / wetMix) are posted only when changed, minimizing overhead.
-
-#### Transport interaction helpers
-
-`AudioManager` exposes:
-```ts
-audioManager.onBeat((beatIndex, bpm) => { /* UI updates */ });
-audioManager.syncAllNextBeat();
-audioManager.setBpm(138); // applies next beat
-audioManager.setSequencerPlay(nodeId, true);
-audioManager.setSequencerRate(nodeId, 0.5);
-```
-
-Avoid scheduling mid-beat where phase alignment matters—post changes early enough that they land on the boundary.
-
-### Troubleshooting
-
-- No sound? Add a Speaker node and ensure an audio signal reaches it.
-- Browser blocked audio start? Click anywhere (user gesture) to start the AudioContext.
-- WASM didn’t load? Run `npm run build:wasm` and check the console for network errors loading files in `public/audio-engine-wasm/`.
-
-[Back to top](#audio-nodes)
-
-
-## Next steps: Global tempo and sequencer sync (spec + implementation plan)
-
-Goal: Keep the system always-live and simple. Use a single global BPM with per-sequencer rate multipliers, quantized (next-beat) starts, and an optional "Sync all on next beat" action. Provide a subtle beat indicator near BPM.
-
-Outcome at a glance
-- One global BPM drives an always-running clock (hidden transport).
-- Sequencers have Rate multiplier only (no per-node BPM).
-- Play acts as a gate; starts are quantized to the next beat.
-- "Sync all on next beat" restarts all sequencers at step 0 on the next beat.
-- Beat LED flashes each beat; BPM changes apply on the next beat.
-
-Constraints
-- Keep UI minimal; no visible transport bar.
-- Preserve existing play wiring; just add quantization.
-- Avoid mid-block changes that cause timing jitter; schedule changes on beat boundaries.
-
-Implementation checklist (GitHub style)
-
-### 1. Worklet: global transport & scheduling (beat-only)
-- [x] Core transport timing & fields
-- [x] Beat emission & pending BPM application
-- [x] Sequencer registry with quantized start & rate changes
-- [x] Sync-all & step advancement logic
-- [x] Message handlers (BPM, rate, play, sync)
-- [x] Outbound events (beat, sequencerStep, syncScheduled)
-
-### 2. UI: Transport & controls
-- [x] Draggable transport pill (persisted)
-- [x] Beat LED pulse
-- [x] BPM input (quantized apply + keyboard inc/dec)
-- [x] Sync-all button
-- [x] Panic (All Notes Off) button
-- [x] WAV recording & preview modal (custom player)
-- [x] Master mute (with preview layer mute)
-
-### 3. Sequencer node UI changes
-- [x] Remove per-node BPM param
-- [x] Add Rate select (0.25x,0.5x,1x,2x,4x)
-- [x] Update help text for quantized start & rate
-- [x] Play toggle dispatches global play (quantized)
-- [x] Transient hint after changing rate while playing
-
-### 4. Data model & persistence
-- [x] Extend project schema: add transport { bpm }
-- [x] Add sequencer.rateMultiplier default 1.0
-- [x] Remove old per-node bpm field (migration)
-- [x] Load logic defaults missing rateMultiplier to 1.0
-- [x] Persist & restore actual transport BPM (stored on window & serialized)
-
-### 5. Node registry / defaults
-- [x] Central node metadata (single source of truth)
-- [x] Node components stripped of duplicate display data
-- [x] Registry-driven accent/icon/title resolution in NodeShell
-
-### Modulation
-
-Implemented LFO (sync via beats-per-cycle). Future: random/S&H, per-destination depth, waveform preview, advanced routing.
-
-### 6. Acceptance criteria verification
-- [x] Sequencers remain aligned long-term
-- [x] BPM change quantized
-- [x] Rate change quantized
-- [x] Sync-all restart accurate
-- [x] New sequencer joins on boundary
-- [x] Debounced rapid play toggles
-
-### 7. Edge case handling
-- [x] Immediate gate on stop
-- [x] Registry cleanup on removal
-- [x] Multi-sequencer stable performance
-
-### 8. Manual test plan execution
-- [x] Core manual tests executed (tempo, sync, alignment, recording, mute)
-
-### 9. Follow-ups (deferred)
-- [ ] Dotted/triplet multipliers (1.5x, 0.666x)
-- [ ] Per-node quantize options (Bar/Beat/1/8/1/16)
+### MIDI / Sequencing
+- [ ] Scale quantizer
+- [ ] Velocity curve
+- [ ] Channel filter
+- [ ] Arp pattern variations & direction modes
 - [ ] Alternate clock domains / Clock node
-- [ ] Variable time signatures & swing
 
-Development notes (pointers)
-- Worklet timing: `public/worklets/audio-engine-processor.js`
-- Messaging & orchestration: `src/lib/audioManager.ts`, `src/hooks/useAudioEngine.ts`
-- Sequencer UI: `src/components/nodes/SequencerNode.tsx`
-- Persistence: `src/hooks/useProjectPersistence.ts`, `src/types/project.ts`
-- Meta: `src/lib/nodeRegistry.ts` (categories & listing); param defaults live in each Node component's NodeSpec
-
-This checklist lets us tick progress transparently as each layer lands.
-
-
-## Project plan (roadmap)
-
-This is a living checklist of planned features. Tick items will be updated as we land them. Feel free to open issues/PRs to discuss or contribute.
-
-### Core nodes
-
-- [x] Arpeggiator (modes, rate, octaves, quantized play)
-- [x] LFO (initial shapes, sync, param-out)
-- [ ] LFO enhancements (random/S&H, preview, advanced routing)
-- [ ] Envelope (ADSR, multi-stage, trigger modes)
-- [ ] Sampler (load, playback modes, mapping, streaming)
-
-### Effects nodes
-
-- [ ] Delay (mono/stereo)
-  - [ ] Time (ms/sync), feedback, mix
-  - [ ] Ping-pong mode
-- [ ] Chorus/Flanger
-  - [ ] Rate, depth, feedback, mix
-- [ ] Phaser
-  - [ ] Stages, rate, depth, feedback, mix
-- [ ] Distortion/Saturation
-  - [ ] Drive, tone, mix; multiple curves
-- [ ] EQ (simple 3-band)
-  - [ ] Low/Mid/High gain, frequency, Q (where applicable)
-- [ ] Compressor
-  - [ ] Threshold, ratio, attack, release, makeup gain
-- [ ] Filter node (separate from synth)
-  - [ ] LP/HP/BP/Notch, cutoff, resonance, key track
-
-### Utilities and routing
-
-- [ ] Mixer node (multi-input)
-- [ ] Splitter/Merger nodes
+### Routing & Utility
 - [ ] Gain node
-- [ ] Meter/Scope/Analyzer (visualization)
-- [ ] MIDI utilities: Scale quantizer, Velocity curve, Channel filter
+- [ ] Mixer (summing + per‑channel mute/solo)
+- [ ] Meter / Analyzer / Scope
+- [ ] Splitter / Merger utilities
 
-### Editor UX
+### Editor / UX
+- [ ] Multi‑select improvements (box select refinements)
+- [ ] Snap grid toggle & alignment guides
+- [ ] Shortcut reference / quick help palette
+- [ ] Align / distribute commands
+- [ ] Context menu actions (duplicate, isolate, bypass)
+- [ ] Project sharing & asset management
 
-- [x] Copy/Paste selection (Cmd/Ctrl+C, Cmd/Ctrl+V)
-- [x] Duplicate selection (Cmd/Ctrl+D)
-- [x] Spawn new nodes at viewport center
-- [ ] Multi-select marquee improvements
-- [ ] Align/distribute selected nodes
-- [ ] Snap grid settings and quick toggle
-- [ ] Keyboard shortcuts reference overlay
-- [ ] Context menu (right-click) for quick actions
-
-### Project system
-
-- [ ] Versioned project format with migrations — so older projects keep working as the app evolves
-- [ ] Asset management (samples), project-local asset store — keep audio files with the project for easy moving/sharing
-- [ ] Share/import projects via URL or file — quickly share patches or load presets from a link/file
-
-### Performance and engine
-
-- [ ] Audio engine profiling and benchmarks — measure where time goes to target the biggest speed-ups (recommended by AI)
-- [ ] SIMD builds (wasm32-simd128) where available — use special CPU instructions to process many samples at once for smoother playback (recommended by AI)
-- [ ] Worklet ring buffer optimizations — a faster pipe between the UI and the audio thread to reduce glitches and latency (recommended by AI)
-- [ ] Offline render/export to WAV — render your patch to an audio file you can download
+### Transport & Timing
+- [ ] Dotted / triplet rate multipliers
+- [ ] Swing & per‑sequencer quantize options
+- [ ] Advanced LFO shapes & per‑destination depth curves
 
 ### Documentation
-
-- [x] Central registry & authoring instructions updated
-- [ ] Node reference docs (per node)
-- [ ] Modulation/handles guide
+- [ ] Per‑node reference pages
 - [ ] Contributing guide
-- [ ] Architecture deep dive (engine + UI)
+- [ ] Modulation guide
+- [ ] Deep dive (engine + scheduling)
 
-Have an idea for a node or feature? Open an issue with [feature] in the title and describe the use case. Contributions welcome!
+### Quality / Maintenance
+- [ ] Panic tests & regression checks
+- [ ] Ring buffer / allocation audit
+- [ ] CI build (lint + type + wasm)
+
+Completed (highlights):
+- [x] Rust WASM core (oscillator, poly synth, reverb)
+- [x] Beat scheduling & quantized events
+- [x] React Flow editor with persistence
+- [x] Parameter spec system + centralized registry
+- [x] WAV recording, master mute, panic, help popovers
+
+---
+
+## Contributing
+
+PRs and issues welcome. For sizeable DSP or architectural changes, open an issue first outlining intent + rough approach. Keep nodes focused (single responsibility) and prefer extending shared primitives where possible.
+
+---
+
+<sub>Built for fun, learning, and sonic experiments. Have ideas? Share them!</sub>
