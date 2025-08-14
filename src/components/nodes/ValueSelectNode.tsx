@@ -6,8 +6,8 @@ interface ValueSelectNodeProps { id: string; selected?: boolean; data: ValueSele
 
 const spec: NodeSpec = {
     type: 'value-select',
-    title: 'Select',
-    accentColor: '#6366f1',
+    // title omitted (registry provides)
+    // accentColor centralized in registry category (Value)
     params: [
         { key: 'value', kind: 'text', default: '', label: 'Value' },
         { key: 'options', kind: 'text', default: '', label: 'Options (CSV)' }
@@ -20,8 +20,7 @@ const spec: NodeSpec = {
             { name: 'Options (string)', description: 'Comma-separated list used for dropdown choices.' }
         ],
         outputs: [ { name: 'Select Out', description: 'Selected string value.' } ]
-    },
-    icon: undefined
+    }
 };
 
 export default function ValueSelectNode({ id, data, selected }: ValueSelectNodeProps) {

@@ -1,6 +1,5 @@
 "use client";
 import React from 'react';
-import { Sparkles } from 'lucide-react';
 import { NodeShell } from '../node-framework/NodeShell';
 import { NodeSpec } from '../node-framework/types';
 
@@ -17,10 +16,8 @@ interface ReverbNodeProps { id: string; selected?: boolean; data: ReverbNodeData
 // Node-local spec & help metadata (kept here so everything unique to this node stays in this file)
 const spec: NodeSpec = {
     type: 'reverb',
-    title: 'Reverb',
-    shortTitle: 'Reverb',
-    // accentColor is overridden via registry in NodeShell, but provide fallback
-    accentColor: '#3b82f6',
+    // title omitted (registry provides)
+    // accentColor & icon centralized in registry
     params: [
         { key: 'feedback', kind: 'number', default: 0.3, min: 0, max: 0.95, step: 0.01, label: 'Feedback' },
         { key: 'wetMix', kind: 'number', default: 0.3, min: 0, max: 1, step: 0.01, label: 'Wet Mix' },
@@ -38,7 +35,7 @@ const spec: NodeSpec = {
             { name: 'Audio Out', description: 'Processed audio signal.' }
         ]
     },
-    icon: Sparkles
+    // icon centralized in registry
 };
 
 export default function ReverbNode({ id, data, selected }: ReverbNodeProps) {

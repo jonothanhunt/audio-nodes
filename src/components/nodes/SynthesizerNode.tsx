@@ -1,6 +1,5 @@
 "use client";
 import React from 'react';
-import { Waves } from 'lucide-react';
 import { NodeShell } from '../node-framework/NodeShell';
 import { NodeSpec } from '../node-framework/types';
 
@@ -9,8 +8,8 @@ interface SynthNodeProps { id: string; selected?: boolean; data: SynthNodeData; 
 
 const spec: NodeSpec = {
     type: 'synth',
-    title: 'Synth',
-    accentColor: '#ec4899',
+    // title omitted (registry provides)
+    // accentColor & icon centralized in registry
     inputs: [ { id: 'midi', role: 'midi-in', label: 'MIDI In' } ],
     outputs: [ { id: 'output', role: 'audio-out', label: 'Audio Out' } ],
     params: [
@@ -40,7 +39,7 @@ const spec: NodeSpec = {
         ],
         outputs: [ { name: 'Audio Out', description: 'Synth audio output.' } ]
     },
-    icon: Waves
+    // icon centralized in registry
 };
 
 export default function SynthesizerNode({ id, data, selected }: SynthNodeProps) {

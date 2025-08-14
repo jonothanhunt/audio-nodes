@@ -303,8 +303,7 @@ export default function SequencerNode({ id, data, selected }: SequencerNodeProps
     // Node-local spec (params, help, IO) now dynamic for hint placement
     const spec: NodeSpec = React.useMemo(() => ({
         type: 'sequencer',
-        title: 'Sequencer', // full title (no shortTitle to show full name)
-        accentColor: '#f59e0b',
+    // title omitted (registry provides); accentColor centralized in registry
         params: [
             { key: 'fromNote', kind: 'select', default: 'C4', label: 'From', options: NOTE_OPTIONS },
             { key: 'toNote', kind: 'select', default: 'C5', label: 'To', options: NOTE_OPTIONS },

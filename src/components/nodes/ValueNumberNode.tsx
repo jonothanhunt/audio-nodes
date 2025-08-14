@@ -7,8 +7,8 @@ interface ValueNumberNodeProps { id: string; selected?: boolean; data: ValueNumb
 // We'll implement range support using additional params; slider min/max/step only applied when ranged=true
 const spec: NodeSpec = {
     type: 'value-number',
-    title: 'Number',
-    accentColor: '#0ea5e9',
+    // title omitted (registry provides)
+    // accentColor centralized in registry category (Value)
     params: [
         { key: 'value', kind: 'number', default: 0, label: 'Value' },
         { key: 'ranged', kind: 'bool', default: false, label: 'Use Range' },
@@ -24,8 +24,7 @@ const spec: NodeSpec = {
             { name: 'Range controls', description: 'Min/Max/Step used when Use Range is enabled.' }
         ],
         outputs: [ { name: 'Number Out', description: 'Current numeric value.' } ]
-    },
-        icon: undefined
+    }
 };
 
 export default function ValueNumberNode({ id, data, selected }: ValueNumberNodeProps) {

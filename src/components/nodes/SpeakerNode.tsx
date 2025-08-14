@@ -1,6 +1,5 @@
 "use client";
 import React from 'react';
-import { Speaker as SpeakerIcon } from 'lucide-react';
 import { NodeShell } from '../node-framework/NodeShell';
 import { NodeSpec } from '../node-framework/types';
 
@@ -9,8 +8,8 @@ interface SpeakerNodeProps { id: string; selected?: boolean; data: SpeakerNodeDa
 
 const spec: NodeSpec = {
     type: 'speaker',
-    title: 'Speaker',
-    accentColor: '#f59e0b',
+    // title omitted (registry provides)
+    // accentColor & icon centralized in registry
     inputs: [ { id: 'input', role: 'audio-in', label: 'Audio In' } ],
     params: [
         { key: 'volume', kind: 'number', default: 0.8, min: 0, max: 1, step: 0.01, label: 'Volume' },
@@ -25,7 +24,7 @@ const spec: NodeSpec = {
         ],
         outputs: []
     },
-    icon: SpeakerIcon
+    // icon centralized in registry
 };
 
 export default function SpeakerNode({ id, data, selected }: SpeakerNodeProps) {

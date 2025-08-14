@@ -47,7 +47,9 @@ export function NodeShell(props: NodeShellProps) {
 
   // Use category accent from registry if available
   const registryMeta = getNodeMeta(spec.type);
-  const accent = registryMeta.accentColor || spec.accentColor;
+  const accent = registryMeta.accentColor || spec.accentColor || '#64748b';
+  const EffectiveIcon = registryMeta.icon;
+  const effectiveTitle = registryMeta.displayName || spec.title || registryMeta.type;
 
   const [helpOpen, setHelpOpen] = React.useState(false);
   const helpBtnRef = React.useRef<HTMLButtonElement | null>(null);
@@ -60,8 +62,8 @@ export function NodeShell(props: NodeShellProps) {
       <div className="relative bg-gray-900 rounded-lg p-4 shadow-lg border" style={{ borderColor: accent }}>
         <div className="pointer-events-none absolute inset-0 rounded-lg" style={{ background: `linear-gradient(135deg, ${accent}26, transparent 65%)` }} />
         <div className="flex items-center gap-2 mb-3 relative">
-          {spec.icon && React.createElement(spec.icon, { className: 'w-4 h-4 -translate-y-0.5', style: { color: accent } })}
-          <span className="title-font text-base" style={{ color: accent }}>{spec.shortTitle || spec.title}</span>
+          {EffectiveIcon && React.createElement(EffectiveIcon, { className: 'w-4 h-4 -translate-y-0.5', style: { color: accent } })}
+          <span className="title-font text-base" style={{ color: accent }}>{effectiveTitle}</span>
           {spec.help && (
             <button
               ref={helpBtnRef}
@@ -75,12 +77,12 @@ export function NodeShell(props: NodeShellProps) {
               ?
             </button>
           )}
-          {spec.help && helpBtnRef && (
+      {spec.help && helpBtnRef && (
             <NodeHelpPopover
               open={helpOpen}
               onClose={() => setHelpOpen(false)}
               anchorRef={helpBtnRef as React.RefObject<HTMLElement>}
-              title={spec.title}
+        title={effectiveTitle}
               description={spec.help.description}
               inputs={spec.help.inputs}
               outputs={spec.help.outputs}

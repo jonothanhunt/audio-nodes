@@ -6,8 +6,8 @@ interface ValueStringNodeProps { id: string; selected?: boolean; data: ValueStri
 
 const spec: NodeSpec = {
     type: 'value-string',
-    title: 'String',
-    accentColor: '#a855f7',
+    // title omitted (registry provides)
+    // accentColor centralized in registry category (Value)
     params: [
         { key: 'value', kind: 'text', default: '', label: 'Value' },
         { key: 'options', kind: 'text', default: '', label: 'Options (CSV)' }
@@ -20,8 +20,7 @@ const spec: NodeSpec = {
             { name: 'Options (CSV)', description: 'Comma-separated list enabling dropdown selection.' }
         ],
         outputs: [ { name: 'String Out', description: 'String value for connected targets.' } ]
-    },
-    icon: undefined
+    }
 };
 
 export default function ValueStringNode({ id, data, selected }: ValueStringNodeProps) {

@@ -1,6 +1,5 @@
 "use client";
 import React from 'react';
-import { Shuffle } from 'lucide-react';
 import { NodeShell } from '../node-framework/NodeShell';
 import { NodeSpec } from '../node-framework/types';
 
@@ -20,8 +19,8 @@ const RATES = ['0.25','0.5','1','2','4'] as const; // matches sequencer allowed 
 
 const spec: NodeSpec = {
   type: 'arpeggiator',
-  title: 'Arpeggiator',
-  accentColor: '#f59e0b',
+  // title omitted (registry provides)
+  // accentColor & icon centralized in registry
   inputs: [ { id: 'midi-in', role: 'midi-in', label: 'MIDI In' } ],
   outputs: [ { id: 'midi-out', role: 'midi-out', label: 'MIDI Out' } ],
   params: [
@@ -41,7 +40,7 @@ const spec: NodeSpec = {
     ],
     outputs: [ { name: 'MIDI Out', description: 'Arpeggiated note stream.' } ]
   },
-  icon: Shuffle
+  // icon centralized in registry
 };
 
 export default function ArpeggiatorNode({ id, data, selected }: ArpeggiatorNodeProps) {

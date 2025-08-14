@@ -1,6 +1,5 @@
 "use client";
 import React from 'react';
-import { Waves } from 'lucide-react';
 import { NodeShell } from '../node-framework/NodeShell';
 import { NodeSpec } from '../node-framework/types';
 
@@ -9,9 +8,8 @@ interface LFONodeProps { id: string; selected?: boolean; data: LFONodeData; }
 
 const spec: NodeSpec = {
   type: 'lfo',
-  title: 'LFO',
-  shortTitle: 'LFO',
-  accentColor: '#10b981',
+  // title omitted (registry provides)
+  // accentColor & icon centralized in registry
   params: [
     { key: 'waveform', kind: 'select', default: 'sine', options: ['sine','triangle','saw','square'], label: 'Waveform' },
     { key: 'beatsPerCycle', kind: 'number', default: 1, min: 0.0625, max: 64, step: 0.0625, label: 'Beats/Cycle', description: 'LFO period length in beats' },
@@ -33,7 +31,7 @@ const spec: NodeSpec = {
     ],
     outputs: [ { name: 'LFO Out', description: 'Current modulation value (number).' } ]
   },
-  icon: Waves
+  // icon centralized in registry
 };
 
 export default function LFONode({ id, data, selected }: LFONodeProps) {

@@ -1,5 +1,4 @@
 import React from 'react';
-import { Keyboard } from 'lucide-react';
 import { NodeShell } from '../node-framework/NodeShell';
 import { NodeSpec } from '../node-framework/types';
 import { labelCls, inputCls } from '../node-ui/styles/inputStyles';
@@ -9,8 +8,8 @@ interface MidiInputNodeProps { id: string; selected?: boolean; data: MidiInputNo
 
 const spec: NodeSpec = {
     type: 'midi-input',
-    title: 'MIDI In',
-    accentColor: '#0ea5e9',
+    // title omitted (registry provides)
+    // accentColor & icon centralized in registry
         outputs: [ { id: 'midi', role: 'midi-out', label: 'MIDI Out' } ],
             params: [
                 { key: 'deviceId', kind: 'text', default: '', label: 'Device', hidden: true },
@@ -23,7 +22,7 @@ const spec: NodeSpec = {
         inputs: [ { name: 'Device', description: 'Selected MIDI input (or All).' }, { name: 'Channel', description: 'Filter for a specific channel or All.' } ],
         outputs: [ { name: 'MIDI Out', description: 'Forwarded MIDI events.' } ]
     },
-        icon: Keyboard,
+    // icon centralized in registry
         paramHandles: false,
         renderBeforeParams: ({ data, update }) => {
             const devices = Array.isArray(data.devices) ? data.devices as Array<{id:string; name:string}> : [];

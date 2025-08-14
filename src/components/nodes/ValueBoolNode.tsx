@@ -6,16 +6,15 @@ interface ValueBoolNodeProps { id: string; selected?: boolean; data: ValueBoolDa
 
 const spec: NodeSpec = {
     type: 'value-bool',
-    title: 'Bool',
-    accentColor: '#22c55e',
+    // title omitted (registry provides)
+    // accentColor centralized in registry category (Value)
     params: [ { key: 'value', kind: 'bool', default: false, label: 'Value' } ],
         outputs: [ { id: 'param-out', role: 'param-out', label: 'Bool Out' } ],
     help: {
         description: 'Boolean value generator; exposes its current state as a param output.',
         inputs: [ { name: 'Value (bool)', description: 'Optional param input overriding local toggle.' } ],
         outputs: [ { name: 'Bool Out', description: 'Boolean value for connected targets.' } ]
-    },
-    icon: undefined
+    }
 };
 
 export default function ValueBoolNode({ id, data, selected }: ValueBoolNodeProps) {

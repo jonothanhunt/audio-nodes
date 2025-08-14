@@ -1,6 +1,5 @@
 "use client";
 import React from 'react';
-import { ArrowUpDown } from 'lucide-react';
 import { NodeShell } from '../node-framework/NodeShell';
 import { NodeSpec } from '../node-framework/types';
 
@@ -9,8 +8,8 @@ interface MidiTransposeNodeProps { id: string; selected?: boolean; data: MidiTra
 
 const spec: NodeSpec = {
     type: 'midi-transpose',
-    title: 'Transpose',
-    accentColor: '#10b981',
+    // title omitted (registry provides)
+    // accentColor & icon centralized in registry
     inputs: [ { id: 'midi', role: 'midi-in', label: 'MIDI In' } ],
     outputs: [ { id: 'midi-out', role: 'midi-out', label: 'MIDI Out' } ],
     params: [
@@ -29,7 +28,7 @@ const spec: NodeSpec = {
         ],
         outputs: [ { name: 'MIDI Out', description: 'Transposed (and optionally clamped) MIDI note events.' } ]
     },
-    icon: ArrowUpDown
+    // icon centralized in registry
 };
 
 export default function MidiTransposeNode({ id, data, selected }: MidiTransposeNodeProps) {

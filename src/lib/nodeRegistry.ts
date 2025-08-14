@@ -45,7 +45,7 @@ export const NODE_CATEGORIES: CategoryEntry[] = [
             { type: "sequencer", name: "Sequencer", description: "Step sequencer (MIDI out)", tag: "midi", icon: Music },
             { type: "arpeggiator", name: "Arpeggiator", description: "Arpeggiates held chord notes", tag: "midi", icon: Music },
             { type: "midi-input", name: "MIDI In", description: "Hardware MIDI input", tag: "midi", icon: Music },
-            { type: "midi-transpose", name: "MIDI Transpose", description: "Shift note pitch ± semitones", tag: "midi", icon: Music },
+            { type: "midi-transpose", name: "Transpose", description: "Shift note pitch ± semitones", tag: "midi", icon: Music },
         ],
     },
     {
@@ -82,28 +82,30 @@ for (const cat of NODE_CATEGORIES) {
 export interface UnifiedNodeMeta {
     type: string;
     category: NodeCategoryName;
-    accentColor: string; // alias for color
+    accentColor: string; // category color
     kind: CategoryEntry["kind"];
-    base?: string; // backward compat (same as accentColor)
-    accent?: string; // backward compat (same as accentColor)
+    displayName?: string;
+    icon?: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+    description?: string;
 }
 
 export function getNodeMeta(type?: string): UnifiedNodeMeta {
     if (!type) {
-        return { type: "unknown", category: "Utility", accentColor: "#64748b", kind: "utility", base: "#64748b", accent: "#64748b" };
+        return { type: "unknown", category: "Utility", accentColor: "#64748b", kind: "utility" };
     }
     const resolved = TYPE_ALIASES[type] || type;
     const entry = NODE_TYPE_MAP[resolved];
     if (!entry) {
-        return { type: resolved, category: "Utility", accentColor: "#64748b", kind: "utility", base: "#64748b", accent: "#64748b" };
+        return { type: resolved, category: "Utility", accentColor: "#64748b", kind: "utility" };
     }
     return {
         type: entry.def.type,
         category: entry.category.name,
         accentColor: entry.category.color,
-        kind: entry.category.kind,
-        base: entry.category.color,
-        accent: entry.category.color,
+    kind: entry.category.kind,
+        displayName: entry.def.name,
+        icon: entry.def.icon,
+        description: entry.def.description,
     };
 }
 

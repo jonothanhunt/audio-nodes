@@ -1,6 +1,5 @@
 "use client";
 import React from 'react';
-import { Waves } from 'lucide-react';
 import { NodeShell } from '../node-framework/NodeShell';
 import { NodeSpec } from '../node-framework/types';
 
@@ -9,9 +8,8 @@ interface OscillatorNodeProps { id: string; selected?: boolean; data: Oscillator
 
 const spec: NodeSpec = {
     type: 'oscillator',
-        title: 'Oscillator',
-        shortTitle: 'Oscillator',
-    accentColor: '#6366f1',
+    // title omitted (registry provides)
+    // accentColor & icon centralized in registry
     params: [
         { key: 'frequency', kind: 'number', default: 440, min: 20, max: 2000, step: 1, label: 'Frequency', description: 'Pitch in Hz', badge: 'Hz' },
         { key: 'amplitude', kind: 'number', default: 0.5, min: 0, max: 1, step: 0.01, label: 'Amplitude', description: 'Output level 0-1' },
@@ -27,7 +25,7 @@ const spec: NodeSpec = {
         ],
         outputs: [ { name: 'Audio Out', description: 'Oscillator audio signal.' } ]
     },
-    icon: Waves
+    // icon centralized in registry
 };
 
 export default function OscillatorNode({ id, data, selected }: OscillatorNodeProps) {

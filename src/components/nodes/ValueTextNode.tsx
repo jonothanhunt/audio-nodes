@@ -6,16 +6,15 @@ interface ValueTextNodeProps { id: string; selected?: boolean; data: ValueTextDa
 
 const spec: NodeSpec = {
     type: 'value-text',
-    title: 'Text',
-    accentColor: '#64748b',
+    // title omitted (registry provides)
+    // accentColor centralized in registry category (Value)
     params: [ { key: 'value', kind: 'text', default: '', label: 'Value' } ],
         outputs: [ { id: 'param-out', role: 'param-out', label: 'Text Out' } ],
     help: {
         description: 'Free-typed string value; exposes current text as param output.',
         inputs: [ { name: 'Value (string)', description: 'Optional param input overriding local text.' } ],
         outputs: [ { name: 'Text Out', description: 'String value for connected targets.' } ]
-    },
-    icon: undefined
+    }
 };
 
 export default function ValueTextNode({ id, data, selected }: ValueTextNodeProps) {

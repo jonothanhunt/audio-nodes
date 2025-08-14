@@ -39,9 +39,8 @@ export interface IOHandleSpec {
 
 export interface NodeSpec {
   type: string;
-  title: string;
-  accentColor: string;
-  icon?: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+  title?: string; // optional; registry displayName used if absent
+  accentColor?: string; // deprecated: prefer registry category color
   // params: Scalar control values (number/bool/select/text). Each param can optionally expose a
   // param-handle (handle=true) so another node can modulate it. These are NOT streaming data;
   // they change discretely and are forwarded to the engine via onParameterChange.
@@ -53,10 +52,9 @@ export interface NodeSpec {
   // 'param-in' etc., but current split keeps scalar vs streaming responsibilities distinct.
   inputs?: IOHandleSpec[]; // streaming inputs (audio/midi)
   outputs?: IOHandleSpec[]; // streaming outputs (audio/midi)
-  shortTitle?: string;
-  category?: string;
-  description?: string;
-  docsUrl?: string;
+  category?: string; // deprecated (registry supplies)
+  description?: string; // deprecated (registry supplies)
+  docsUrl?: string; // optional external docs link
   help?: {
     description: string;
     inputs: { name: string; description: string }[];
