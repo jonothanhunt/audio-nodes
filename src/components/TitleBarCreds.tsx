@@ -44,7 +44,7 @@ export default function TitleBarCreds() {
                     target="_blank"
                     rel="noopener noreferrer"
                 >
-                    <span>about</span>
+                    <span>GitHub</span>
                     <ArrowUpRight
                         className="w-3.5 h-3.5 opacity-80"
                         aria-hidden="true"
