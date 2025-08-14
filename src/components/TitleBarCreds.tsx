@@ -20,7 +20,7 @@ export default function TitleBarCreds() {
                 >
                     <span>Audio Nodes</span>
                     <span className="text-xl bg-purple-600 mb-1 px-1 pt-2 pb-1 rounded-md inline-flex items-center leading-none self-center h-fit">
-                        beta
+                        alpha
                     </span>
                 </Link>
             </h1>
