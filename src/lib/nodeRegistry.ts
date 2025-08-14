@@ -1,197 +1,112 @@
 import { Volume2, Waves, Speaker, Music, ToggleRight, Hash, List } from "lucide-react";
-import type { ReactElement } from "react";
 
-export type NodeCategory = "Synthesis" | "Effects" | "Sequencing" | "Utility" | "Value";
+export type NodeCategoryName = "Synthesis" | "Effects" | "Sequencing" | "Utility" | "Value";
 
-// Category level visual & semantic config (single color now: accentColor)
-export interface CategoryDefinition {
-    accentColor: string; // single canonical color per category
-    kind: "audio" | "midi" | "effect" | "utility" | "value";
-}
-
-export const CATEGORY_DEFINITIONS: Record<NodeCategory, CategoryDefinition> = {
-    Synthesis: { accentColor: "#8b5cf6", kind: "audio" }, // purple
-    Effects: { accentColor: "#3b82f6", kind: "effect" }, // blue
-    Sequencing: { accentColor: "#f59e0b", kind: "midi" }, // amber
-    Utility: { accentColor: "#10b981", kind: "utility" }, // green
-    Value: { accentColor: "#ef4444", kind: "value" }, // red accent
-};
-
-export interface NodeDefinition {
+export interface NodeEntry {
     type: string;
     name: string;
     description: string;
-    category: NodeCategory;
-    tag: string; // short label
-    icon: (props: { className?: string }) => ReactElement;
+    tag: string;
+    // Use React component type so consumers can pass standard svg props incl. style
+    icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
 }
 
-export const NODE_DEFINITIONS: NodeDefinition[] = [
+export interface CategoryEntry {
+    name: NodeCategoryName;
+    color: string; // single canonical color per category
+    kind: "audio" | "midi" | "effect" | "utility" | "value";
+    nodes: NodeEntry[];
+}
+
+// Single authoritative registry structure (array of categories each with nodes)
+export const NODE_CATEGORIES: CategoryEntry[] = [
     {
-        type: "oscillator",
-        name: "Oscillator",
-        description: "Basic waveform generator",
-        category: "Synthesis",
-        tag: "synthesis",
-        icon: Volume2 as unknown as NodeDefinition["icon"],
+        name: "Synthesis",
+        color: "#8b5cf6",
+        kind: "audio",
+        nodes: [
+            { type: "oscillator", name: "Oscillator", description: "Basic waveform generator", tag: "synthesis", icon: Volume2 },
+            { type: "synth", name: "Synth", description: "Poly synth (MIDI in → audio out)", tag: "synthesis", icon: Volume2 },
+        ],
     },
     {
-        type: "synth",
-        name: "Synth",
-        description: "Poly synth (MIDI in → audio out)",
-        category: "Synthesis",
-        tag: "synthesis",
-        icon: Volume2 as unknown as NodeDefinition["icon"],
+        name: "Effects",
+        color: "#3b82f6",
+        kind: "effect",
+        nodes: [
+            { type: "reverb", name: "Reverb", description: "Spatial reverberation", tag: "effect", icon: Waves },
+        ],
     },
     {
-        type: "reverb",
-        name: "Reverb",
-        description: "Spatial reverberation",
-        category: "Effects",
-        tag: "effect",
-        icon: Waves as unknown as NodeDefinition["icon"],
+        name: "Sequencing",
+        color: "#f59e0b",
+        kind: "midi",
+        nodes: [
+            { type: "sequencer", name: "Sequencer", description: "Step sequencer (MIDI out)", tag: "midi", icon: Music },
+            { type: "arpeggiator", name: "Arpeggiator", description: "Arpeggiates held chord notes", tag: "midi", icon: Music },
+            { type: "midi-input", name: "MIDI In", description: "Hardware MIDI input", tag: "midi", icon: Music },
+            { type: "midi-transpose", name: "MIDI Transpose", description: "Shift note pitch ± semitones", tag: "midi", icon: Music },
+        ],
     },
     {
-        type: "sequencer",
-        name: "Sequencer",
-        description: "Step sequencer (MIDI out)",
-        category: "Sequencing",
-        tag: "midi",
-        icon: Music as unknown as NodeDefinition["icon"],
+        name: "Utility",
+        color: "#10b981",
+        kind: "utility",
+        nodes: [
+            { type: "speaker", name: "Speaker", description: "Audio output", tag: "utility", icon: Speaker },
+            { type: "lfo", name: "LFO", description: "Low frequency modulator (beat-synced)", tag: "utility", icon: Waves },
+        ],
     },
     {
-        type: "arpeggiator",
-        name: "Arpeggiator",
-        description: "Arpeggiates held chord notes",
-        category: "Sequencing",
-        tag: "midi",
-        icon: Music as unknown as NodeDefinition["icon"],
-    },
-    {
-        type: "midi-input",
-        name: "MIDI In",
-        description: "Hardware MIDI input",
-        category: "Sequencing",
-        tag: "midi",
-        icon: Music as unknown as NodeDefinition["icon"],
-    },
-    {
-        type: "midi-transpose",
-        name: "MIDI Transpose",
-        description: "Shift note pitch ± semitones",
-        category: "Sequencing",
-        tag: "midi",
-        icon: Music as unknown as NodeDefinition["icon"],
-    },
-    {
-        type: "speaker",
-        name: "Speaker",
-        description: "Audio output",
-        category: "Utility",
-        tag: "utility",
-        icon: Speaker as unknown as NodeDefinition["icon"],
-    },
-    // Value category
-    {
-        type: "value-bool",
-        name: "Bool",
-        description: "Boolean value source (on/off)",
-        category: "Value",
-        tag: "value",
-        icon: ToggleRight as unknown as NodeDefinition["icon"],
-    },
-    {
-        type: "value-number",
-        name: "Number",
-        description: "Number value source (with optional range)",
-        category: "Value",
-        tag: "value",
-        icon: Hash as unknown as NodeDefinition["icon"],
-    },
-    {
-        type: "value-text",
-        name: "Text",
-        description: "Free text value source",
-        category: "Value",
-        tag: "value",
-        icon: List as unknown as NodeDefinition["icon"],
-    },
-    {
-        type: "value-select",
-        name: "Select",
-        description: "Dropdown enum value source",
-        category: "Value",
-        tag: "value",
-        icon: List as unknown as NodeDefinition["icon"],
+        name: "Value",
+        color: "#ef4444",
+        kind: "value",
+        nodes: [
+            { type: "value-bool", name: "Bool", description: "Boolean value source (on/off)", tag: "value", icon: ToggleRight },
+            { type: "value-number", name: "Number", description: "Number value source (with optional range)", tag: "value", icon: Hash },
+            { type: "value-text", name: "Text", description: "Free text value source", tag: "value", icon: List },
+            { type: "value-select", name: "Select", description: "Dropdown enum value source", tag: "value", icon: List },
+        ],
     },
 ];
 
-export function getNodeDefinition(type?: string) {
-    return NODE_DEFINITIONS.find((d) => d.type === type);
+// Build fast lookup maps
+const TYPE_ALIASES: Record<string, string> = { "value-string": "value-text" };
+export const NODE_TYPE_MAP: Record<string, { def: NodeEntry; category: CategoryEntry }> = {};
+for (const cat of NODE_CATEGORIES) {
+    for (const def of cat.nodes) {
+        NODE_TYPE_MAP[def.type] = { def, category: cat };
+    }
 }
 
 export interface UnifiedNodeMeta {
     type: string;
-    category: NodeCategory;
-    accentColor: string; // single color
-    kind: CategoryDefinition["kind"];
-    // Backwards compatibility alias (deprecated): base & accent map to accentColor
-    base?: string;
-    accent?: string;
+    category: NodeCategoryName;
+    accentColor: string; // alias for color
+    kind: CategoryEntry["kind"];
+    base?: string; // backward compat (same as accentColor)
+    accent?: string; // backward compat (same as accentColor)
 }
 
 export function getNodeMeta(type?: string): UnifiedNodeMeta {
-    // Alias legacy types to preserve category tone and kind
-    const aliasType = type === "value-string" ? "value-text" : type;
-    const def = getNodeDefinition(aliasType);
-    if (!def || !type) {
-        return {
-            type: aliasType || "unknown",
-            category: "Utility",
-            accentColor: "#64748b",
-            kind: "utility",
-            base: "#64748b",
-            accent: "#64748b",
-        };
+    if (!type) {
+        return { type: "unknown", category: "Utility", accentColor: "#64748b", kind: "utility", base: "#64748b", accent: "#64748b" };
     }
-    const cat = CATEGORY_DEFINITIONS[def.category];
+    const resolved = TYPE_ALIASES[type] || type;
+    const entry = NODE_TYPE_MAP[resolved];
+    if (!entry) {
+        return { type: resolved, category: "Utility", accentColor: "#64748b", kind: "utility", base: "#64748b", accent: "#64748b" };
+    }
     return {
-        type: def.type,
-        category: def.category,
-        accentColor: cat.accentColor,
-        kind: cat.kind,
-        base: cat.accentColor,
-        accent: cat.accentColor,
+        type: entry.def.type,
+        category: entry.category.name,
+        accentColor: entry.category.color,
+        kind: entry.category.kind,
+        base: entry.category.color,
+        accent: entry.category.color,
     };
 }
 
-export function groupDefinitionsByCategory() {
-    const map: Record<NodeCategory, NodeDefinition[]> = {
-        Synthesis: [],
-        Effects: [],
-        Sequencing: [],
-        Utility: [],
-        Value: [],
-    };
-    for (const def of NODE_DEFINITIONS) {
-        map[def.category].push(def);
-    }
-    return map;
-}
+// Convenience: flattened list if needed by search components
+export const ALL_NODE_DEFS: NodeEntry[] = NODE_CATEGORIES.flatMap(c => c.nodes);
 
-export function getCategoryTone(category: NodeCategory) {
-    switch (category) {
-        case "Synthesis":
-            return "purple";
-        case "Effects":
-            return "blue";
-        case "Sequencing":
-            return "amber";
-        case "Utility":
-            return "green";
-        case "Value":
-            return "red"; // red tone for Value nodes
-        default:
-            return "slate";
-    }
-}

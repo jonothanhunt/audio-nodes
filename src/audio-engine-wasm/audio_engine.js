@@ -1,25 +1,13 @@
 let wasm;
 
-const cachedTextDecoder =
-    typeof TextDecoder !== "undefined"
-        ? new TextDecoder("utf-8", { ignoreBOM: true, fatal: true })
-        : {
-              decode: () => {
-                  throw Error("TextDecoder not available");
-              },
-          };
+const cachedTextDecoder = (typeof TextDecoder !== 'undefined' ? new TextDecoder('utf-8', { ignoreBOM: true, fatal: true }) : { decode: () => { throw Error('TextDecoder not available') } } );
 
-if (typeof TextDecoder !== "undefined") {
-    cachedTextDecoder.decode();
-}
+if (typeof TextDecoder !== 'undefined') { cachedTextDecoder.decode(); };
 
 let cachedUint8ArrayMemory0 = null;
 
 function getUint8ArrayMemory0() {
-    if (
-        cachedUint8ArrayMemory0 === null ||
-        cachedUint8ArrayMemory0.byteLength === 0
-    ) {
+    if (cachedUint8ArrayMemory0 === null || cachedUint8ArrayMemory0.byteLength === 0) {
         cachedUint8ArrayMemory0 = new Uint8Array(wasm.memory.buffer);
     }
     return cachedUint8ArrayMemory0;
@@ -27,9 +15,7 @@ function getUint8ArrayMemory0() {
 
 function getStringFromWasm0(ptr, len) {
     ptr = ptr >>> 0;
-    return cachedTextDecoder.decode(
-        getUint8ArrayMemory0().subarray(ptr, ptr + len),
-    );
+    return cachedTextDecoder.decode(getUint8ArrayMemory0().subarray(ptr, ptr + len));
 }
 
 function getArrayU8FromWasm0(ptr, len) {
@@ -40,10 +26,7 @@ function getArrayU8FromWasm0(ptr, len) {
 let cachedFloat32ArrayMemory0 = null;
 
 function getFloat32ArrayMemory0() {
-    if (
-        cachedFloat32ArrayMemory0 === null ||
-        cachedFloat32ArrayMemory0.byteLength === 0
-    ) {
+    if (cachedFloat32ArrayMemory0 === null || cachedFloat32ArrayMemory0.byteLength === 0) {
         cachedFloat32ArrayMemory0 = new Float32Array(wasm.memory.buffer);
     }
     return cachedFloat32ArrayMemory0;
@@ -58,14 +41,12 @@ function passArrayF32ToWasm0(arg, malloc) {
     return ptr;
 }
 
-const AudioEngineFinalization =
-    typeof FinalizationRegistry === "undefined"
-        ? { register: () => {}, unregister: () => {} }
-        : new FinalizationRegistry((ptr) =>
-              wasm.__wbg_audioengine_free(ptr >>> 0, 1),
-          );
+const AudioEngineFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_audioengine_free(ptr >>> 0, 1));
 
 export class AudioEngine {
+
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
         this.__wbg_ptr = 0;
@@ -110,14 +91,57 @@ export class AudioEngine {
     }
 }
 
-const MidiTransposeNodeFinalization =
-    typeof FinalizationRegistry === "undefined"
-        ? { register: () => {}, unregister: () => {} }
-        : new FinalizationRegistry((ptr) =>
-              wasm.__wbg_miditransposenode_free(ptr >>> 0, 1),
-          );
+const LfoNodeFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_lfonode_free(ptr >>> 0, 1));
+
+export class LfoNode {
+
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        LfoNodeFinalization.unregister(this);
+        return ptr;
+    }
+
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_lfonode_free(ptr, 0);
+    }
+    /**
+     * @param {number} sample_rate
+     */
+    constructor(sample_rate) {
+        const ret = wasm.lfonode_new(sample_rate);
+        this.__wbg_ptr = ret >>> 0;
+        LfoNodeFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * @param {number} beats_per_cycle
+     * @param {number} waveform_index
+     * @param {number} phase_offset
+     */
+    set_params(beats_per_cycle, waveform_index, phase_offset) {
+        wasm.lfonode_set_params(this.__wbg_ptr, beats_per_cycle, waveform_index, phase_offset);
+    }
+    /**
+     * @param {number} block_samples
+     * @param {number} bpm
+     * @returns {number}
+     */
+    next_value(block_samples, bpm) {
+        const ret = wasm.lfonode_next_value(this.__wbg_ptr, block_samples, bpm);
+        return ret;
+    }
+}
+
+const MidiTransposeNodeFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_miditransposenode_free(ptr >>> 0, 1));
 
 export class MidiTransposeNode {
+
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
         this.__wbg_ptr = 0;
@@ -142,13 +166,7 @@ export class MidiTransposeNode {
      * @param {boolean} pass_through_non_note
      */
     set_params(semitones, clamp_low, clamp_high, pass_through_non_note) {
-        wasm.miditransposenode_set_params(
-            this.__wbg_ptr,
-            semitones,
-            clamp_low,
-            clamp_high,
-            pass_through_non_note,
-        );
+        wasm.miditransposenode_set_params(this.__wbg_ptr, semitones, clamp_low, clamp_high, pass_through_non_note);
     }
     /**
      * @param {number} status
@@ -157,26 +175,19 @@ export class MidiTransposeNode {
      * @returns {Uint8Array}
      */
     transform(status, data1, data2) {
-        const ret = wasm.miditransposenode_transform(
-            this.__wbg_ptr,
-            status,
-            data1,
-            data2,
-        );
+        const ret = wasm.miditransposenode_transform(this.__wbg_ptr, status, data1, data2);
         var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
         return v1;
     }
 }
 
-const OscillatorNodeFinalization =
-    typeof FinalizationRegistry === "undefined"
-        ? { register: () => {}, unregister: () => {} }
-        : new FinalizationRegistry((ptr) =>
-              wasm.__wbg_oscillatornode_free(ptr >>> 0, 1),
-          );
+const OscillatorNodeFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_oscillatornode_free(ptr >>> 0, 1));
 
 export class OscillatorNode {
+
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
         this.__wbg_ptr = 0;
@@ -239,14 +250,12 @@ export class OscillatorNode {
     }
 }
 
-const ReverbNodeFinalization =
-    typeof FinalizationRegistry === "undefined"
-        ? { register: () => {}, unregister: () => {} }
-        : new FinalizationRegistry((ptr) =>
-              wasm.__wbg_reverbnode_free(ptr >>> 0, 1),
-          );
+const ReverbNodeFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_reverbnode_free(ptr >>> 0, 1));
 
 export class ReverbNode {
+
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
         this.__wbg_ptr = 0;
@@ -306,14 +315,12 @@ export class ReverbNode {
     }
 }
 
-const SpeakerNodeFinalization =
-    typeof FinalizationRegistry === "undefined"
-        ? { register: () => {}, unregister: () => {} }
-        : new FinalizationRegistry((ptr) =>
-              wasm.__wbg_speakernode_free(ptr >>> 0, 1),
-          );
+const SpeakerNodeFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_speakernode_free(ptr >>> 0, 1));
 
 export class SpeakerNode {
+
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
         this.__wbg_ptr = 0;
@@ -341,7 +348,7 @@ export class SpeakerNode {
      * @returns {number}
      */
     get volume() {
-        const ret = wasm.oscillatornode_frequency(this.__wbg_ptr);
+        const ret = wasm.speakernode_volume(this.__wbg_ptr);
         return ret;
     }
     /**
@@ -366,25 +373,16 @@ export class SpeakerNode {
         const len0 = WASM_VECTOR_LEN;
         var ptr1 = passArrayF32ToWasm0(output, wasm.__wbindgen_malloc);
         var len1 = WASM_VECTOR_LEN;
-        wasm.speakernode_process(
-            this.__wbg_ptr,
-            ptr0,
-            len0,
-            ptr1,
-            len1,
-            output,
-        );
+        wasm.speakernode_process(this.__wbg_ptr, ptr0, len0, ptr1, len1, output);
     }
 }
 
-const SynthNodeFinalization =
-    typeof FinalizationRegistry === "undefined"
-        ? { register: () => {}, unregister: () => {} }
-        : new FinalizationRegistry((ptr) =>
-              wasm.__wbg_synthnode_free(ptr >>> 0, 1),
-          );
+const SynthNodeFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_synthnode_free(ptr >>> 0, 1));
 
 export class SynthNode {
+
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
         this.__wbg_ptr = 0;
@@ -437,13 +435,7 @@ export class SynthNode {
      * @param {number} release
      */
     set_adsr(attack, decay, sustain, release) {
-        wasm.synthnode_set_adsr(
-            this.__wbg_ptr,
-            attack,
-            decay,
-            sustain,
-            release,
-        );
+        wasm.synthnode_set_adsr(this.__wbg_ptr, attack, decay, sustain, release);
     }
     /**
      * @param {number} time_ms
@@ -474,16 +466,15 @@ export class SynthNode {
 }
 
 async function __wbg_load(module, imports) {
-    if (typeof Response === "function" && module instanceof Response) {
-        if (typeof WebAssembly.instantiateStreaming === "function") {
+    if (typeof Response === 'function' && module instanceof Response) {
+        if (typeof WebAssembly.instantiateStreaming === 'function') {
             try {
                 return await WebAssembly.instantiateStreaming(module, imports);
+
             } catch (e) {
-                if (module.headers.get("Content-Type") != "application/wasm") {
-                    console.warn(
-                        "`WebAssembly.instantiateStreaming` failed because your server does not serve Wasm with `application/wasm` MIME type. Falling back to `WebAssembly.instantiate` which is slower. Original error:\n",
-                        e,
-                    );
+                if (module.headers.get('Content-Type') != 'application/wasm') {
+                    console.warn("`WebAssembly.instantiateStreaming` failed because your server does not serve Wasm with `application/wasm` MIME type. Falling back to `WebAssembly.instantiate` which is slower. Original error:\n", e);
+
                 } else {
                     throw e;
                 }
@@ -492,11 +483,13 @@ async function __wbg_load(module, imports) {
 
         const bytes = await module.arrayBuffer();
         return await WebAssembly.instantiate(bytes, imports);
+
     } else {
         const instance = await WebAssembly.instantiate(module, imports);
 
         if (instance instanceof WebAssembly.Instance) {
             return { instance, module };
+
         } else {
             return instance;
         }
@@ -506,15 +499,13 @@ async function __wbg_load(module, imports) {
 function __wbg_get_imports() {
     const imports = {};
     imports.wbg = {};
-    imports.wbg.__wbg_log_12e85d2f2217123e = function (arg0, arg1) {
+    imports.wbg.__wbg_log_12e85d2f2217123e = function(arg0, arg1) {
         console.log(getStringFromWasm0(arg0, arg1));
     };
-    imports.wbg.__wbindgen_copy_to_typed_array = function (arg0, arg1, arg2) {
-        new Uint8Array(arg2.buffer, arg2.byteOffset, arg2.byteLength).set(
-            getArrayU8FromWasm0(arg0, arg1),
-        );
+    imports.wbg.__wbindgen_copy_to_typed_array = function(arg0, arg1, arg2) {
+        new Uint8Array(arg2.buffer, arg2.byteOffset, arg2.byteLength).set(getArrayU8FromWasm0(arg0, arg1));
     };
-    imports.wbg.__wbindgen_init_externref_table = function () {
+    imports.wbg.__wbindgen_init_externref_table = function() {
         const table = wasm.__wbindgen_export_0;
         const offset = table.grow(4);
         table.set(0, undefined);
@@ -522,21 +513,25 @@ function __wbg_get_imports() {
         table.set(offset + 1, null);
         table.set(offset + 2, true);
         table.set(offset + 3, false);
+        ;
     };
-    imports.wbg.__wbindgen_throw = function (arg0, arg1) {
+    imports.wbg.__wbindgen_throw = function(arg0, arg1) {
         throw new Error(getStringFromWasm0(arg0, arg1));
     };
 
     return imports;
 }
 
-function __wbg_init_memory(imports, memory) {}
+function __wbg_init_memory(imports, memory) {
+
+}
 
 function __wbg_finalize_init(instance, module) {
     wasm = instance.exports;
     __wbg_init.__wbindgen_wasm_module = module;
     cachedFloat32ArrayMemory0 = null;
     cachedUint8ArrayMemory0 = null;
+
 
     wasm.__wbindgen_start();
     return wasm;
@@ -545,13 +540,12 @@ function __wbg_finalize_init(instance, module) {
 function initSync(module) {
     if (wasm !== undefined) return wasm;
 
-    if (typeof module !== "undefined") {
+
+    if (typeof module !== 'undefined') {
         if (Object.getPrototypeOf(module) === Object.prototype) {
-            ({ module } = module);
+            ({module} = module)
         } else {
-            console.warn(
-                "using deprecated parameters for `initSync()`; pass a single object instead",
-            );
+            console.warn('using deprecated parameters for `initSync()`; pass a single object instead')
         }
     }
 
@@ -571,35 +565,27 @@ function initSync(module) {
 async function __wbg_init(module_or_path) {
     if (wasm !== undefined) return wasm;
 
-    if (typeof module_or_path !== "undefined") {
+
+    if (typeof module_or_path !== 'undefined') {
         if (Object.getPrototypeOf(module_or_path) === Object.prototype) {
-            ({ module_or_path } = module_or_path);
+            ({module_or_path} = module_or_path)
         } else {
-            console.warn(
-                "using deprecated parameters for the initialization function; pass a single object instead",
-            );
+            console.warn('using deprecated parameters for the initialization function; pass a single object instead')
         }
     }
 
-    if (typeof module_or_path === "undefined") {
-        module_or_path = new URL("audio_engine_bg.wasm", import.meta.url);
+    if (typeof module_or_path === 'undefined') {
+        module_or_path = new URL('audio_engine_bg.wasm', import.meta.url);
     }
     const imports = __wbg_get_imports();
 
-    if (
-        typeof module_or_path === "string" ||
-        (typeof Request === "function" && module_or_path instanceof Request) ||
-        (typeof URL === "function" && module_or_path instanceof URL)
-    ) {
+    if (typeof module_or_path === 'string' || (typeof Request === 'function' && module_or_path instanceof Request) || (typeof URL === 'function' && module_or_path instanceof URL)) {
         module_or_path = fetch(module_or_path);
     }
 
     __wbg_init_memory(imports);
 
-    const { instance, module } = await __wbg_load(
-        await module_or_path,
-        imports,
-    );
+    const { instance, module } = await __wbg_load(await module_or_path, imports);
 
     return __wbg_finalize_init(instance, module);
 }

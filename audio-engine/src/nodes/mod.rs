@@ -3,9 +3,11 @@ pub mod reverb;
 pub mod speaker;
 pub mod synth;
 pub mod transpose;
+pub mod lfo;
 
 pub use oscillator::OscillatorNode;
 pub use reverb::ReverbNode;
 pub use speaker::SpeakerNode;
 pub use synth::SynthNode;
 pub use transpose::MidiTransposeNode;
+pub use lfo::LfoNode;

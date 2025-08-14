@@ -92,6 +92,11 @@ export function getHandleRole(
             if (handleId === "output" || handleId == null) return "param-out";
             if (handleId === "value" || handleId === "options") return "param-in";
             return "unknown";
+        case "lfo":
+            // Expose a param-out for modulation value and param-ins for its own params if needed
+            if (handleId === "output" || handleId == null) return "param-out";
+            if (["waveform","beatsPerCycle","depth","offset","bipolar","phase"].includes(handleId || "")) return "param-in";
+            return "unknown";
         default:
             return "unknown";
     }

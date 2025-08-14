@@ -1,10 +1,6 @@
 import React from "react";
 import { Search } from "lucide-react";
-import {
-    groupDefinitionsByCategory,
-    getCategoryTone,
-    getNodeMeta,
-} from "@/lib/nodeRegistry";
+import { NODE_CATEGORIES } from "@/lib/nodeRegistry";
 
 interface NodeLibraryProps {
     onAddNode: (type: string) => void;
@@ -14,15 +10,10 @@ export default function NodeLibrary({ onAddNode }: NodeLibraryProps) {
     const [searchTerm, setSearchTerm] = React.useState("");
     const [selectedCategory, setSelectedCategory] = React.useState("All");
 
-    const grouped = React.useMemo(() => groupDefinitionsByCategory(), []);
-    const categories = [
-        "All",
-        "Synthesis",
-        "Effects",
-        "Sequencing",
-        "Utility",
-        "Value",
-    ];
+    const categories = React.useMemo(
+        () => ["All", ...NODE_CATEGORIES.map((c) => c.name)],
+        []
+    );
 
     return (
         <div className="w-full h-full flex flex-col">
@@ -54,108 +45,36 @@ export default function NodeLibrary({ onAddNode }: NodeLibraryProps) {
                 </div>
             </div>
             <div className="flex-1 overflow-y-auto space-y-3">
-                {Object.entries(grouped).map(([cat, defs]) => {
-                    if (selectedCategory !== "All" && selectedCategory !== cat)
-                        return null;
-                    const visible = defs.filter((d) =>
-                        d.name.toLowerCase().includes(searchTerm.toLowerCase())
-                    );
+                {NODE_CATEGORIES.map((cat) => {
+                    if (selectedCategory !== "All" && selectedCategory !== cat.name) return null;
+                    const visible = cat.nodes.filter((d) => d.name.toLowerCase().includes(searchTerm.toLowerCase()));
                     if (!visible.length) return null;
                     return (
-                        <div key={cat}>
-                            <h3 className="text-xs font-medium text-gray-400 mb-2 tracking-wide uppercase">
-                                {cat}
-                            </h3>
+                        <div key={cat.name}>
+                            <h3 className="text-xs font-medium text-gray-400 mb-2 tracking-wide uppercase">{cat.name}</h3>
                             <div className="space-y-2">
                                 {visible.map((d) => {
-                                    const tone = getCategoryTone(
-                                        getNodeMeta(d.type).category
-                                    );
-                                    const styles: Record<
-                                        string,
-                                        {
-                                            border: string;
-                                            hoverBorder: string;
-                                            title: string;
-                                            icon: string;
-                                            gradientFrom: string;
-                                        }
-                                    > = {
-                                        purple: {
-                                            border: "border-purple-500/30",
-                                            hoverBorder:
-                                                "hover:border-purple-500",
-                                            title: "text-purple-400",
-                                            icon: "text-purple-400",
-                                            gradientFrom: "from-purple-500/10",
-                                        },
-                                        blue: {
-                                            border: "border-blue-500/30",
-                                            hoverBorder:
-                                                "hover:border-blue-500",
-                                            title: "text-blue-400",
-                                            icon: "text-blue-400",
-                                            gradientFrom: "from-blue-500/10",
-                                        },
-                                        green: {
-                                            border: "border-green-500/30",
-                                            hoverBorder:
-                                                "hover:border-green-500",
-                                            title: "text-green-400",
-                                            icon: "text-green-400",
-                                            gradientFrom: "from-green-500/10",
-                                        },
-                                        amber: {
-                                            border: "border-amber-500/30",
-                                            hoverBorder:
-                                                "hover:border-amber-500",
-                                            title: "text-amber-400",
-                                            icon: "text-amber-400",
-                                            gradientFrom: "from-amber-500/10",
-                                        },
-                                        slate: {
-                                            border: "border-slate-500/30",
-                                            hoverBorder:
-                                                "hover:border-slate-500",
-                                            title: "text-slate-400",
-                                            icon: "text-slate-400",
-                                            gradientFrom: "from-slate-500/10",
-                                        },
-                                        red: {
-                                            border: "border-red-500/30",
-                                            hoverBorder: "hover:border-red-500",
-                                            title: "text-red-400",
-                                            icon: "text-red-400",
-                                            gradientFrom: "from-red-500/10",
-                                        },
-                                    };
-                                    const s = styles[tone];
                                     const Icon = d.icon;
+                                    const borderColor = cat.color + '4D'; // ~30% opacity
+                                    const gradientFrom = cat.color + '1A'; // ~10% opacity
                                     return (
                                         <button
                                             key={d.type}
                                             onClick={() => onAddNode(d.type)}
-                                            className={`relative w-full p-3 rounded-lg border ${s.border} ${s.hoverBorder} bg-gray-900 shadow-lg transition-colors`}
+                                            className={`relative w-full p-3 rounded-lg border bg-gray-900 shadow-lg transition-colors hover:border-white/40`}
+                                            style={{ borderColor }}
                                         >
                                             <div
-                                                className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${s.gradientFrom} via-transparent to-transparent rounded-lg`}
+                                                className={`pointer-events-none absolute inset-0 bg-gradient-to-br via-transparent to-transparent rounded-lg`}
+                                                style={{ background: `linear-gradient(135deg, ${gradientFrom}, transparent 65%)` }}
                                             />
                                             <div className="relative flex items-start gap-3">
-                                                <Icon
-                                                    className={`w-4 h-4 ${s.icon} flex-shrink-0 mt-0.5`}
-                                                />
+                                                <Icon className={`w-4 h-4 flex-shrink-0 mt-0.5`} style={{ color: cat.color }} />
                                                 <div className="flex-1 text-left">
                                                     <div className="flex items-center justify-between mb-1">
-                                                        <span
-                                                            className={`title-font ${s.title} text-base`}
-                                                        >
-                                                            {d.name}
-                                                        </span>
-                                                        {/* <span className="text-xs text-gray-300 bg-black/20 px-1.5 py-0.5 rounded">{d.tag}</span> */}
+                                                        <span className={`title-font text-base`} style={{ color: cat.color }}>{d.name}</span>
                                                     </div>
-                                                    <p className="text-xs text-gray-300">
-                                                        {d.description}
-                                                    </p>
+                                                    <p className="text-xs text-gray-300">{d.description}</p>
                                                 </div>
                                             </div>
                                         </button>

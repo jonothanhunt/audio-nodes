@@ -281,9 +281,9 @@ Why separate? Clear semantics (sample-stream vs control event) keeps scheduling 
   - Create `src/components/nodes/<YourNode>.tsx`.
   - Define `spec: NodeSpec` with params & IO.
   - Export component returning `<NodeShell ... />` with `onParameterChange`.
-5. Defaults/registry:
-  - Add defaults in `src/lib/nodes.ts` (returned by `getDefaultNodeData`).
-  - (Optional) Add accent color / category in `nodeRegistry.ts`.
+5. Defaults:
+  - Rely on each node's `NodeSpec.params[].default` (applied automatically by `useNodeSpec`).
+  - (Optional) Add category metadata / icon in `nodeRegistry.ts` only.
 6. Wiring:
   - Ensure `AudioNodesEditor` includes the component in `nodeTypes`.
 7. Test:
@@ -397,8 +397,19 @@ Implementation checklist (GitHub style)
 - [x] Persist & restore actual transport BPM (stored on window & serialized)
 
 ### 5. Node registry / defaults
-- [x] Set default rateMultiplier in `nodes.ts`
+- [x] Sequencer rateMultiplier default via NodeSpec
 - [ ] (If needed) nodeRegistry metadata update (not required yet)
+
+### Modulation
+
+Initial LFO node implemented (beat-synced):
+
+- Waveforms: sine, triangle, saw, square
+- Param: Beats/Cycle (period length in beats)
+- Additional params: depth, offset, bipolar toggle, phase
+- Output: single numeric param-out (LFO Out) that can feed any param-in (e.g. synth gain / ADSR)
+- Implementation: Rust `LfoNode` generates per-block value inside worklet; additive modulation applied before synth processing.
+- Future: per-destination depth, multiplicative modes, visual waveform preview, multiple simultaneous modulators summing.
 
 ### 6. Acceptance criteria verification
 - [ ] Two sequencers start together & remain aligned for >2 minutes
@@ -427,7 +438,7 @@ Development notes (pointers)
 - Messaging & orchestration: `src/lib/audioManager.ts`, `src/hooks/useAudioEngine.ts`
 - Sequencer UI: `src/components/nodes/SequencerNode.tsx`
 - Persistence: `src/hooks/useProjectPersistence.ts`, `src/types/project.ts`
-- Defaults/meta: `src/lib/nodes.ts`, `src/lib/nodeRegistry.ts`
+- Meta: `src/lib/nodeRegistry.ts` (categories & listing); param defaults live in each Node component's NodeSpec
 
 This checklist lets us tick progress transparently as each layer lands.
 
@@ -444,10 +455,6 @@ This is a living checklist of planned features. Tick items will be updated as we
   - [x] Octave range (1–4)
   - [x] Quantized start/stop & rate changes (next beat)
   - [ ] Swing
-  - [ ] Custom pattern mode
-  - [ ] Latch/hold (persist notes after key release)
-  - [ ] Tie overlaps / adjustable gate length
-  - [ ] External clock/reset input
 - [ ] Envelope node (mod)
   - [ ] ADSR and multi-stage
   - [ ] Trigger input, retrigger, one-shot/loop

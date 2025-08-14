@@ -21,6 +21,8 @@ class EngineProcessor extends AudioWorkletProcessor {
         this._reverbInstances = new Map(); // nodeId -> wasm.ReverbNode
         this._synthInstances = new Map(); // nodeId -> wasm.SynthNode (planned)
         this._transposeInstances = new Map(); // nodeId -> wasm.MidiTransposeNode
+    this._lfoInstances = new Map(); // nodeId -> wasm.LfoNode
+    this._modConnections = []; // derived modulation edges (lfo -> param)
 
         this._midiQueues = new Map(); // nodeId -> Array of events for next blocks
         this._timebase = { perfNowMs: 0, audioCurrentTimeSec: 0 };
@@ -125,6 +127,8 @@ class EngineProcessor extends AudioWorkletProcessor {
                 '\ntry { globalThis.SynthNode = typeof SynthNode !== "undefined" ? SynthNode : globalThis.SynthNode; } catch(_){}';
             code +=
                 '\ntry { globalThis.MidiTransposeNode = typeof MidiTransposeNode !== "undefined" ? MidiTransposeNode : globalThis.MidiTransposeNode; } catch(_){}';
+            code +=
+                '\ntry { globalThis.LfoNode = typeof LfoNode !== "undefined" ? LfoNode : globalThis.LfoNode; } catch(_){}';
             new Function(code)();
             if (typeof globalThis.__wbg_init_default !== "function") {
                 throw new Error(
@@ -139,6 +143,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                 SpeakerNode: globalThis.SpeakerNode,
                 SynthNode: globalThis.SynthNode,
                 MidiTransposeNode: globalThis.MidiTransposeNode,
+                LfoNode: globalThis.LfoNode,
             };
             if (typeof this._wasm.SynthNode !== "function") {
                 this.port.postMessage({
@@ -318,7 +323,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                 // If arpeggiator, ensure registry entry & update mode/octaves and persisted rate/play
                 if (data && data.type === 'arpeggiator') {
                     let e = this._arps.get(nodeId);
-                    if (!e) { e = { rateMultiplier:1,isPlaying:false,pendingStartBeat:null,pendingRate:null,beatsAccum:0,held:new Set(),order:[],dir:1,activeOut:new Set(),mode:'up',octaves:1 }; this._arps.set(nodeId, e);}            
+                    if (!e) { e = { rateMultiplier:1,isPlaying:false,pendingStartBeat:null,pendingRate:null,beatsAccum:0,held:new Set(),order:[],dir:1,activeOut:new Set(),mode:'up',octaves:1 }; this._arps.set(nodeId, e);}
                     const oldMode = e.mode;
                     const oldOct = e.octaves;
                     if (typeof data.rateMultiplier === 'number' && [0.25,0.5,1,2,4].includes(data.rateMultiplier)) e.rateMultiplier = data.rateMultiplier;
@@ -435,6 +440,17 @@ class EngineProcessor extends AudioWorkletProcessor {
                 this._connections = Array.isArray(connections)
                     ? connections
                     : [];
+                // Rebuild modulation connections: any edge from an lfo node to a param-in
+                this._modConnections = [];
+                for (const c of this._connections) {
+                    const src = this._nodes.get(c.from);
+                    const dst = this._nodes.get(c.to);
+                    if (src && src.type === 'lfo' && dst) {
+                        if (c.toInput && !['input','output','midi'].includes(c.toInput)) {
+                            this._modConnections.push({ from: c.from, to: c.to, targetParam: c.toInput });
+                        }
+                    }
+                }
                 try {
                     this.port.postMessage({
                         type: "ackConnections",
@@ -737,7 +753,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                     // Maintain held note set for arpeggiator
                     const events = queue.splice(0, queue.length);
                     let entry = this._arps.get(nodeId);
-                    if (!entry) { entry = { rateMultiplier:1,isPlaying:false,pendingStartBeat:null,pendingRate:null,beatsAccum:0,held:new Set(),order:[],dir:1,activeOut:new Set(),mode:'up',octaves:1 }; this._arps.set(nodeId, entry);}            
+                    if (!entry) { entry = { rateMultiplier:1,isPlaying:false,pendingStartBeat:null,pendingRate:null,beatsAccum:0,held:new Set(),order:[],dir:1,activeOut:new Set(),mode:'up',octaves:1 }; this._arps.set(nodeId, entry);}
                     for (const ev of events) {
                         const [status,d1,d2] = ev.data;
                         const cmd = status & 0xf0;
@@ -890,6 +906,17 @@ class EngineProcessor extends AudioWorkletProcessor {
         return inst;
     }
 
+    _getLfoInstance(nodeId) {
+        let inst = this._lfoInstances.get(nodeId);
+        if (!inst) {
+            const Ctor = this._wasm && this._wasm.LfoNode;
+            if (typeof Ctor !== 'function') return null;
+            try { inst = new Ctor(sampleRate); } catch { return null; }
+            this._lfoInstances.set(nodeId, inst);
+        }
+        return inst;
+    }
+
     _getTransposeInstance(nodeId) {
         let inst = this._transposeInstances.get(nodeId);
         if (!inst) {
@@ -907,6 +934,39 @@ class EngineProcessor extends AudioWorkletProcessor {
         const synth = this._getSynthInstance(nodeId);
         if (!synth) return;
         try {
+            // Apply modulation additive overrides (simple v1): gather lfo contributions for supported params
+            if (this._modConnections && this._modConnections.length) {
+                const relevant = this._modConnections.filter(m=> m.to === nodeId);
+                if (relevant.length) {
+                    // We'll build a temp param patch object
+                    const modAccum = {};
+                    for (const m of relevant) {
+                        const lfoNode = this._nodes.get(m.from);
+                        if (!lfoNode) continue;
+                        const inst = this._getLfoInstance(m.from);
+                        if (!inst) continue;
+                        // Derive beatsPerCycle, waveform, phase from node data, update inst params
+                        const beats = Number(lfoNode.beatsPerCycle) || 1;
+                        const wfMap = { sine:0, triangle:1, saw:2, square:3 };
+                        const wf = wfMap[lfoNode.waveform] ?? 0;
+                        const phase = Number(lfoNode.phase) || 0;
+                        try { inst.set_params(beats, wf, phase); } catch {}
+                        const raw = inst.next_value(N, this._transport.bpm);
+                        let depth = Number(lfoNode.depth); if (!isFinite(depth)) depth = 1;
+                        let offset = Number(lfoNode.offset); if (!isFinite(offset)) offset = 0;
+                        const bipolar = lfoNode.bipolar !== false; // default true
+                        let v = raw; // [-1,1]
+                        if (!bipolar) v = (v + 1) * 0.5; // [0,1]
+                        v = v * depth + offset; // scale and shift
+                        if (!modAccum[m.targetParam]) modAccum[m.targetParam] = 0;
+                        modAccum[m.targetParam] += v;
+                    }
+                    // Merge onto data (non-destructive): create shallow copy to not mutate original node data map
+                    if (Object.keys(modAccum).length) {
+                        data = { ...data, ...modAccum };
+                    }
+                }
+            }
             const wf = this._getWaveformIndex(data.waveform || "sawtooth");
             synth.set_waveform?.(wf);
             if (typeof data.maxVoices === "number")

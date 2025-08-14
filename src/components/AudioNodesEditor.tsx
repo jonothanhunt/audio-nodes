@@ -21,7 +21,7 @@ import SynthesizerNode from "./nodes/SynthesizerNode";
 import MidiInputNode from "@/components/nodes/MidiInputNode";
 import SaveLoadPanel from "@/components/SaveLoadPanel";
 import { useAudioEngine } from "@/hooks/useAudioEngine";
-import { getDefaultNodeData } from "@/lib/nodes";
+// nodes.ts removed – inline minimal initial data builder (handlers only; param defaults via NodeSpec)
 import { useProjectPersistence } from "@/hooks/useProjectPersistence";
 import { useGraph } from "@/hooks/useGraph";
 import MidiTransposeNode from "@/components/nodes/MidiTransposeNode";
@@ -35,6 +35,7 @@ import ValueStringNode from "./nodes/ValueStringNode";
 import ValueTextNode from "./nodes/ValueTextNode";
 import ValueSelectNode from "./nodes/ValueSelectNode";
 import TransportPill from "@/components/TransportPill";
+import LFONode from "@/components/nodes/LFONode";
 
 // Custom node registry
 const nodeTypes = {
@@ -51,6 +52,7 @@ const nodeTypes = {
     "value-string": ValueStringNode, // legacy
     "value-text": ValueTextNode,
     "value-select": ValueSelectNode,
+    lfo: LFONode,
 };
 
 export default function AudioNodesEditor() {
@@ -508,11 +510,14 @@ export default function AudioNodesEditor() {
                 id: generateNodeId(),
                 type,
                 position: pos,
-                data: getDefaultNodeData(
-                    type,
-                    handleParameterChange,
-                    handleEmitMidi
-                ),
+                data: (() => {
+                    interface BaseData { onParameterChange: typeof handleParameterChange; onEmitMidi?: typeof handleEmitMidi; }
+                    const base: BaseData = { onParameterChange: handleParameterChange };
+                    if (["sequencer", "arpeggiator", "midi-input"].includes(type)) {
+                        base.onEmitMidi = handleEmitMidi;
+                    }
+                    return base;
+                })(),
                 selected: true,
             };
             setNodes((nds) => {
