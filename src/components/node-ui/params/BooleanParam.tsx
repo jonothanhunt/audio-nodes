@@ -37,7 +37,8 @@ export function BooleanParam({
                 }}
                 onPointerDown={stop}
                 onMouseDown={stop}
-                className={`w-16 h-7 rounded border text-xs select-none nodrag flex items-center justify-center transition-colors ${value ? "bg-green-600 border-green-500 text-white" : "bg-gray-800 border-gray-600 text-gray-300"}`}
+                className={`w-16 h-7 rounded border text-xs select-none nodrag flex items-center justify-center transition-colors ${value ? "bg-green-600 border-green-500 text-white" : "bg-gray-800 border-gray-600 text-gray-300"} ${connected ? "opacity-60 cursor-not-allowed" : "hover:bg-gray-700"}`}
+                style={{ pointerEvents: connected ? "none" : undefined }}
             >
                 {value ? "On" : "Off"}
             </button>

@@ -21,4 +21,5 @@ export interface ProjectSaveFile {
     nodes: SavedNode[];
     edges: SavedEdge[];
     viewport?: Viewport;
+    transport?: { bpm?: number };
 }

@@ -31,6 +31,14 @@ export function useProjectPersistence(
 ) {
     const makeSaveObject = React.useCallback((): ProjectSaveFile => {
         const viewport = rfInstanceRef.current?.getViewport();
+        // Attempt to read global BPM from window (TransportPill drives audioManager which holds bpm)
+        let transportBpm: number | undefined;
+        try {
+            const anyWin = window as unknown as { __audioNodesTransportBpm?: number };
+            if (typeof anyWin.__audioNodesTransportBpm === "number") {
+                transportBpm = anyWin.__audioNodesTransportBpm;
+            }
+        } catch {}
         return {
             version: 1,
             createdAt: new Date().toISOString(),
@@ -52,6 +60,7 @@ export function useProjectPersistence(
                 targetHandle: e.targetHandle || undefined,
             })),
             viewport,
+            transport: transportBpm ? { bpm: transportBpm } : undefined,
         };
     }, [nodes, edges, rfInstanceRef]);
 
@@ -82,14 +91,29 @@ export function useProjectPersistence(
             const rawNodes = Array.isArray(maybe.nodes) ? maybe.nodes : [];
             const rawEdges = Array.isArray(maybe.edges) ? maybe.edges : [];
 
-            const loadedNodes: Node[] = rawNodes.map((n) => ({
-                id: String(n.id),
-                type: n.type,
-                position: n.position || { x: 0, y: 0 },
-                data: reattachHandlers(
-                    n.data as Record<string, unknown> | undefined,
-                ),
-            }));
+            const loadedNodes: Node[] = rawNodes.map((n) => {
+                const rawData = (n.data || {}) as Record<string, unknown>;
+                // Migration: if type=sequencer
+                if (n.type === "sequencer") {
+                    // If bpm present and rateMultiplier absent, drop bpm and set rateMultiplier=1
+                    if (
+                        Object.prototype.hasOwnProperty.call(rawData, "bpm") &&
+                        !Object.prototype.hasOwnProperty.call(rawData, "rateMultiplier")
+                    ) {
+                        delete rawData.bpm; // global BPM now
+                        rawData.rateMultiplier = 1;
+                    }
+                    if (!Object.prototype.hasOwnProperty.call(rawData, "rateMultiplier")) {
+                        rawData.rateMultiplier = 1;
+                    }
+                }
+                return {
+                    id: String(n.id),
+                    type: n.type,
+                    position: n.position || { x: 0, y: 0 },
+                    data: reattachHandlers(rawData),
+                } as Node;
+            });
 
             const loadedEdges: Edge[] = rawEdges.map((e) => ({
                 id:
@@ -114,6 +138,12 @@ export function useProjectPersistence(
                     { duration: 0 },
                 );
             }
+            // Apply transport BPM if present
+            try {
+                if (maybe.transport && typeof maybe.transport.bpm === "number") {
+                    (window as unknown as { __audioNodesTransportBpm?: number }).__audioNodesTransportBpm = maybe.transport.bpm;
+                }
+            } catch {}
             return true;
         },
         [setNodes, setEdges, reattachHandlers, rfInstanceRef],

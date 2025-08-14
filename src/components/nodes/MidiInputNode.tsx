@@ -1,259 +1,69 @@
-"use client";
+import React from 'react';
+import { Keyboard } from 'lucide-react';
+import { NodeShell } from '../node-framework/NodeShell';
+import { NodeSpec } from '../node-framework/types';
+import { labelCls, inputCls } from '../node-ui/styles/inputStyles';
 
-import React from "react";
-import { Keyboard } from "lucide-react";
-import { getNodeMeta } from "@/lib/nodeRegistry";
-import { NodeUIProvider, useNodeUI } from "../node-ui/NodeUIProvider";
-import { HandleLayer } from "../node-ui/HandleLayer";
-import { labelCls, inputCls } from "../node-ui/styles/inputStyles";
-import NodeHelpPopover, { HelpItem } from "../node-ui/NodeHelpPopover";
+interface MidiInputNodeData { deviceId?: string; channel?: number | 'all'; status?: string; devices?: Array<{id:string; name:string}>; error?: string; onParameterChange?: (nodeId: string, key: string, value: unknown)=>void; [k:string]: unknown; }
+interface MidiInputNodeProps { id: string; selected?: boolean; data: MidiInputNodeData; }
 
-interface MidiInputNodeProps {
-    id: string;
-    selected?: boolean;
-    data: {
-        onParameterChange?: (
-            nodeId: string,
-            parameter: string,
-            value: string | number | boolean,
-        ) => void;
-        onEmitMidi?: (
-            sourceId: string,
-            events: Array<{
-                data: [number, number, number];
-                atFrame?: number;
-                atTimeMs?: number;
-            }>,
-        ) => void;
-        deviceId?: string;
-        channel?: number | "all";
-        status?: string;
-        devices?: Array<{ id: string; name: string }>;
-        error?: string;
-    };
-}
-
-const MidiInputNode: React.FC<MidiInputNodeProps> = ({
-    id,
-    data,
-    selected,
-}) => {
-    const { accentColor } = getNodeMeta("midi-input");
-    const {
-        onParameterChange,
-        deviceId = "",
-        channel = "all",
-        status,
-        devices = [],
-        error,
-    } = data;
-
-    const stop = (e: React.SyntheticEvent) => {
-        e.stopPropagation();
-    };
-    const [helpOpen, setHelpOpen] = React.useState(false);
-    const helpBtnRef = React.useRef<HTMLButtonElement | null>(null);
-
-    return (
-        <NodeUIProvider accentColor={accentColor}>
-            {selected && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-xs text-gray-500">
-                    ID: {id}
+const spec: NodeSpec = {
+    type: 'midi-input',
+    title: 'MIDI In',
+    accentColor: '#0ea5e9',
+        outputs: [ { id: 'midi', role: 'midi-out', label: 'MIDI Out' } ],
+            params: [
+                { key: 'deviceId', kind: 'text', default: '', label: 'Device', hidden: true },
+                { key: 'channel', kind: 'text', default: 'all', label: 'Channel', hidden: true },
+                { key: 'status', kind: 'text', default: '', hidden: true },
+                { key: 'error', kind: 'text', default: '', hidden: true }
+            ],
+    help: {
+        description: 'Receives MIDI messages from a connected hardware or virtual device.',
+        inputs: [ { name: 'Device', description: 'Selected MIDI input (or All).' }, { name: 'Channel', description: 'Filter for a specific channel or All.' } ],
+        outputs: [ { name: 'MIDI Out', description: 'Forwarded MIDI events.' } ]
+    },
+        icon: Keyboard,
+        paramHandles: false,
+        renderBeforeParams: ({ data, update }) => {
+            const devices = Array.isArray(data.devices) ? data.devices as Array<{id:string; name:string}> : [];
+        const deviceId = String(data.deviceId || '');
+        const channel = data.channel ?? 'all';
+        const status = data.error ? undefined : data.status as string | undefined;
+        const error = data.error as string | undefined;
+        const stop = (e: React.SyntheticEvent)=> e.stopPropagation();
+        return (
+            <div className="flex flex-col gap-2">
+                <div className="relative flex items-center h-8">
+                    <label className={labelCls}>Device</label>
+                    <select className={`${inputCls} w-40 text-xs nodrag`} value={deviceId} onChange={e=>update('deviceId', e.target.value)} onPointerDown={stop} onMouseDown={stop} onClick={stop} onDoubleClick={stop}>
+                        <option value="">(All)</option>
+                        {devices.map((d, idx)=>{
+                            const optId = d.id || `dev-${idx}`;
+                            const label = d.name?.trim().length ? d.name : d.id?.trim().length ? d.id : `Device ${idx+1}`;
+                            return <option key={optId+idx} value={d.id}>{label}</option>;
+                        })}
+                    </select>
                 </div>
-            )}
-            <div
-                className={`relative bg-gray-900 rounded-lg p-4 shadow-lg border`}
-                style={{
-                    borderColor: accentColor,
-                    boxShadow: selected
-                        ? `0 0 0 1px ${accentColor}, 0 0 12px -2px ${accentColor}`
-                        : undefined,
-                }}
-            >
-                <div
-                    className="pointer-events-none absolute inset-0 rounded-lg"
-                    style={{
-                        background: `linear-gradient(135deg, ${accentColor}26, transparent 65%)`,
-                    }}
-                />
-                {/* Header */}
-                <div className="flex items-center gap-2 mb-3 relative">
-                    <Keyboard
-                        className="w-4 h-4 -translate-y-0.5"
-                        style={{ color: accentColor }}
-                    />
-                    <span
-                        className="title-font text-base"
-                        style={{ color: accentColor }}
-                    >
-                        MIDI In
-                    </span>
-                    <div className="ml-auto flex items-center">
-                        <button
-                            ref={helpBtnRef}
-                            type="button"
-                            aria-label="About this node"
-                            className="nodrag inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-gray-700 text-[11px] font-semibold border border-gray-300 shadow-sm hover:bg-gray-100"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setHelpOpen((v) => !v);
-                            }}
-                            onMouseDown={(e) => e.stopPropagation()}
-                            onPointerDown={(e) => e.stopPropagation()}
-                        >
-                            ?
-                        </button>
-                    </div>
+                <div className="relative flex items-center h-8">
+                    <label className={labelCls}>Channel</label>
+                    <select className={`${inputCls} w-24 text-center nodrag`} value={String(channel)} onChange={e=>update('channel', e.target.value === 'all' ? 'all' : parseInt(e.target.value,10))} onPointerDown={stop} onMouseDown={stop} onClick={stop} onDoubleClick={stop}>
+                        <option value="all">All</option>
+                        {Array.from({length:16}).map((_,i)=><option key={i} value={i+1}>{i+1}</option>)}
+                    </select>
                 </div>
-
-                <NodeHelpPopover
-                    open={helpOpen}
-                    onClose={() => setHelpOpen(false)}
-                    anchorRef={helpBtnRef as React.RefObject<HTMLElement>}
-                    title="MIDI In"
-                    description="Receives MIDI messages from a connected device. Optionally filter by channel."
-                    inputs={
-                        [
-                            {
-                                name: "Device",
-                                description:
-                                    "Select a specific MIDI input or use (All).",
-                            },
-                            {
-                                name: "Channel",
-                                description:
-                                    "Limit to a single channel or receive All.",
-                            },
-                        ] as HelpItem[]
-                    }
-                    outputs={
-                        [
-                            {
-                                name: "MIDI Out",
-                                description:
-                                    "Forwards received MIDI events to other nodes.",
-                            },
-                        ] as HelpItem[]
-                    }
-                />
-
-                {/* Two-column, top-aligned layout: LEFT inputs, RIGHT outputs */}
-                <div className="grid grid-cols-[minmax(16rem,_auto)_auto] gap-y-2 gap-x-4">
-                    {/* LEFT: inputs (no handles) */}
-                    <div className="space-y-2 col-span-1">
-                        <div className="relative flex items-center h-8">
-                            <label className={labelCls}>Device</label>
-                            <select
-                                className={`${inputCls} w-40 text-xs nodrag`}
-                                value={deviceId}
-                                onChange={(e) =>
-                                    onParameterChange?.(
-                                        id,
-                                        "deviceId",
-                                        e.target.value,
-                                    )
-                                }
-                                onPointerDown={stop}
-                                onMouseDown={stop}
-                                onClick={stop}
-                                onDoubleClick={stop}
-                            >
-                                <option value="">(All)</option>
-                                {devices.map((d, idx) => {
-                                    const optId = d.id || `dev-${idx}`;
-                                    const label =
-                                        d.name && d.name.trim().length > 0
-                                            ? d.name
-                                            : d.id && d.id.trim().length > 0
-                                              ? d.id
-                                              : `Device ${idx + 1}`;
-                                    return (
-                                        <option
-                                            key={optId + "-" + idx}
-                                            value={d.id}
-                                        >
-                                            {label}
-                                        </option>
-                                    );
-                                })}
-                            </select>
-                        </div>
-                        <div className="relative flex items-center h-8">
-                            <label className={labelCls}>Channel</label>
-                            <select
-                                className={`${inputCls} w-24 text-center nodrag`}
-                                value={String(channel)}
-                                onChange={(e) =>
-                                    onParameterChange?.(
-                                        id,
-                                        "channel",
-                                        e.target.value === "all"
-                                            ? "all"
-                                            : parseInt(e.target.value, 10),
-                                    )
-                                }
-                                onPointerDown={stop}
-                                onMouseDown={stop}
-                                onClick={stop}
-                                onDoubleClick={stop}
-                            >
-                                <option value="all">All</option>
-                                {Array.from({ length: 16 }).map((_, i) => (
-                                    <option key={i} value={i + 1}>
-                                        {i + 1}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                        <StatusRow status={status} error={error} />
-                    </div>
-
-                    {/* RIGHT: outputs (top-aligned) */}
-                    <div className="flex flex-col col-span-1">
-                        <MidiOutRow />
-                    </div>
+                <div className="relative flex items-center h-8">
+                    <label className={labelCls}>Status</label>
+                    {status || error ? (
+                        <div className={`text-xs ${error ? 'text-red-400':'text-gray-400'} truncate max-w-[7rem]`}>{error || status}</div>
+                    ) : <div className="text-xs text-gray-500">idle</div>}
                 </div>
             </div>
-
-            {/* Right-side MIDI Out handle (square) */}
-            <HandleLayer
-                includeMidiIn={false}
-                outputId="midi"
-                outputVariant="midi"
-            />
-        </NodeUIProvider>
-    );
+        );
+    }
 };
 
-function MidiOutRow() {
-    const { outputEl } = useNodeUI();
-    return (
-        <div
-            className="relative flex items-center justify-end h-8"
-            ref={(el) => outputEl(el)}
-        >
-            <span className="text-xs text-gray-300 mr-2">MIDI Out</span>
-        </div>
-    );
+export default function MidiInputNode({ id, data, selected }: MidiInputNodeProps) {
+    const { onParameterChange } = data;
+    return <NodeShell id={id} data={data} spec={spec} selected={selected} onParameterChange={(nid,key,value)=>onParameterChange?.(nid,key,value)} />;
 }
-
-function StatusRow({ status, error }: { status?: string; error?: string }) {
-    return (
-    <div className="relative flex items-center h-8">
-            <label className={labelCls}>Status</label>
-            {status || error ? (
-                <div
-                    className={`text-xs ${
-                        error ? "text-red-400" : "text-gray-400"
-                    } truncate max-w-[7rem]`}
-                >
-                    {error || status}
-                </div>
-            ) : (
-                <div className="text-xs text-gray-500">idle</div>
-            )}
-        </div>
-    );
-}
-
-export default MidiInputNode;

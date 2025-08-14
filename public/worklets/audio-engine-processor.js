@@ -40,6 +40,31 @@ class EngineProcessor extends AudioWorkletProcessor {
         this._initWasm();
 
         this._transposeNoteState = new Map(); // nodeId -> { active: Map<key, transposedNote>, lastSemitones: number }
+
+        // --- Global transport (beat-only, no bar/time-signature) ---
+        this._transport = {
+            bpm: 120,
+            frameCounter: 0,            // absolute frames
+            framesPerBeat: (60 / 120) * sampleRate,
+            nextBeatFrame: 0,           // frame index of upcoming beat boundary
+            beatIndex: 0,               // absolute beat counter
+            pendingBpm: null,           // bpm value waiting to apply
+            pendingBpmBeat: null,       // beat index at which to apply pending BPM
+            syncAllNextBeat: false,     // request to reset sequencers next beat
+        };
+
+    // --- Sequencer registry (global clock driven) ---
+    // Map<nodeId, {
+    //   rateMultiplier: number (0.25,0.5,1,2,4)
+    //   isPlaying: boolean
+    //   pendingStartBeat: number|null (quantized start at global beat index)
+    //   pendingRate: number|null (apply at next beat)
+    //   stepIndex: number
+    //   beatsAccum: number (accumulated beats toward next step)
+    //   activeNotes: Set<number> (MIDI notes currently on)
+    //   _startedOnce: boolean (internal guard to avoid duplicate initial step event)
+    // }>
+    this._sequencers = new Map();
     }
 
     async _initWasm() {
@@ -142,6 +167,80 @@ class EngineProcessor extends AudioWorkletProcessor {
         if (!msg || typeof msg !== "object") return;
         const { type } = msg;
         switch (type) {
+            case "setBpm": {
+                const bpm = Number(msg.bpm);
+                if (isFinite(bpm) && bpm >= 20 && bpm <= 300) {
+                    const t = this._transport;
+                    t.pendingBpm = bpm;
+                    t.pendingBpmBeat = t.beatIndex + 1; // apply next beat
+                }
+                break;
+            }
+            case "syncAllNextBeat": {
+                this._transport.syncAllNextBeat = true; // schedule sync on next beat
+                break;
+            }
+            case "setSequencerRate": {
+                const { nodeId, multiplier } = msg;
+                if (!nodeId) break;
+                const m = Number(multiplier);
+                if (![0.25, 0.5, 1, 2, 4].includes(m)) break;
+                let entry = this._sequencers.get(nodeId);
+                if (!entry) {
+                    entry = {
+                        rateMultiplier: 1,
+                        isPlaying: false,
+                        pendingStartBeat: null,
+                        pendingRate: null,
+                        stepIndex: 0,
+                        beatsAccum: 0,
+                        activeNotes: new Set(),
+                        _startedOnce: false,
+                    };
+                    this._sequencers.set(nodeId, entry);
+                }
+                // Apply at next beat to avoid mid-step timing discontinuity
+                entry.pendingRate = m;
+                break;
+            }
+            case "setSequencerPlay": {
+                const { nodeId, play } = msg;
+                if (!nodeId) break;
+                let entry = this._sequencers.get(nodeId);
+                if (!entry) {
+                    entry = {
+                        rateMultiplier: 1,
+                        isPlaying: false,
+                        pendingStartBeat: null,
+                        pendingRate: null,
+                        stepIndex: 0,
+                        beatsAccum: 0,
+                        activeNotes: new Set(),
+                        _startedOnce: false,
+                    };
+                    this._sequencers.set(nodeId, entry);
+                }
+                if (play) {
+                    // Quantize start to next beat for snappier response.
+                    if (!entry.isPlaying && entry.pendingStartBeat == null) {
+                        entry.pendingStartBeat = this._transport.beatIndex + 1;
+                    }
+                } else {
+                    // Stop immediately (gated) but do not reset step index; spec: Play false gates output w/o reset
+                    entry.isPlaying = false;
+                    entry.pendingStartBeat = null;
+                    // Send NoteOff for any active notes if we had generated some (future-proof)
+                    if (entry.activeNotes.size) {
+                        const outEvents = [];
+                        for (const midi of entry.activeNotes.values()) {
+                            outEvents.push({ data: [0x80, midi & 0x7f, 0] });
+                        }
+                        this._broadcastSequencerMIDI(nodeId, outEvents);
+                        entry.activeNotes.clear();
+                    }
+                }
+                break;
+            }
             case "bootstrapWasm": {
                 const { glue, wasm } = msg;
                 this._bootstrapFromMain(glue, wasm);
@@ -156,6 +255,31 @@ class EngineProcessor extends AudioWorkletProcessor {
                 try {
                     this._paramCache.set(nodeId, data);
                 } catch {}
+                // If this is a sequencer node, ensure a registry entry exists reflecting current persisted state.
+                if (data && data.type === "sequencer") {
+                    let entry = this._sequencers.get(nodeId);
+                    if (!entry) {
+                        entry = {
+                            rateMultiplier: 1,
+                            isPlaying: false,
+                            pendingStartBeat: null,
+                            pendingRate: null,
+                            stepIndex: 0,
+                            beatsAccum: 0,
+                            activeNotes: new Set(),
+                            _startedOnce: false,
+                        };
+                        this._sequencers.set(nodeId, entry);
+                    }
+                    // Apply persisted rateMultiplier immediately (will influence step duration)
+                    if (typeof data.rateMultiplier === "number" && [0.25,0.5,1,2,4].includes(data.rateMultiplier)) {
+                        entry.rateMultiplier = data.rateMultiplier;
+                    }
+                    // If project saved with playing=true, quantize start to next beat unless already scheduled/playing
+                    if (data.playing && !entry.isPlaying && entry.pendingStartBeat == null) {
+                        entry.pendingStartBeat = this._transport.beatIndex + 1;
+                    }
+                }
                 try {
                     this.port.postMessage({ type: "ackNode", nodeId });
                 } catch {}
@@ -164,6 +288,10 @@ class EngineProcessor extends AudioWorkletProcessor {
             case "removeNode": {
                 const { nodeId } = msg;
                 const oldData = this._nodes.get(nodeId);
+                // Clean up sequencer registry if present
+                if (this._sequencers.has(nodeId)) {
+                    this._sequencers.delete(nodeId);
+                }
                 // If removing a transpose node, send NoteOff for any active transformed notes downstream
                 if (oldData && oldData.type === "midi-transpose") {
                     const state = this._transposeNoteState.get(nodeId);
@@ -264,6 +392,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                 this._nodes.clear();
                 this._connections = [];
                 this._paramCache.clear?.();
+                this._sequencers.clear();
                 for (const inst of this._oscInstances.values()) {
                     try {
                         inst.free?.();
@@ -380,6 +509,84 @@ class EngineProcessor extends AudioWorkletProcessor {
             // Approximate current audio time for this block
             const blockStartTimeSec = this._timebase.audioCurrentTimeSec; // updated when host sends timebase; coarse but fine for scheduling
 
+            // --- Beat scheduling (beat-only, no bars) ---
+            const t = this._transport;
+            const blockStartFrame = t.frameCounter;
+            const blockEndFrame = blockStartFrame + blockSize;
+            if (t.nextBeatFrame < blockStartFrame) t.nextBeatFrame = blockStartFrame;
+            while (t.nextBeatFrame >= blockStartFrame && t.nextBeatFrame < blockEndFrame) {
+                // Apply pending BPM
+                if (t.pendingBpm != null && t.pendingBpmBeat === t.beatIndex) {
+                    t.bpm = t.pendingBpm;
+                    t.framesPerBeat = (60 / t.bpm) * sampleRate;
+                    t.pendingBpm = null;
+                    t.pendingBpmBeat = null;
+                }
+                try { this.port.postMessage({ type: "beat", beatIndex: t.beatIndex, bpm: t.bpm }); } catch {}
+                t.beatIndex += 1;
+                // Apply pending rate changes at beat boundary
+                for (const [, entry] of this._sequencers.entries()) {
+                    if (entry.pendingRate != null) { entry.rateMultiplier = entry.pendingRate; entry.pendingRate = null; }
+                }
+                // Global sync request
+                if (t.syncAllNextBeat) {
+                    try { this.port.postMessage({ type: "syncScheduled", beatIndex: t.beatIndex }); } catch {}
+                    for (const [nid, entry] of this._sequencers.entries()) {
+                        if (!entry.isPlaying) continue;
+                        entry.stepIndex = 0;
+                        entry.beatsAccum = 0;
+                        entry._startedOnce = true;
+                        try { this.port.postMessage({ type: "sequencerStep", nodeId: nid, stepIndex: 0 }); } catch {}
+                    }
+                    t.syncAllNextBeat = false;
+                }
+                // Start any newly scheduled sequencers
+                for (const [, entry] of this._sequencers.entries()) {
+                    if (entry.pendingStartBeat === t.beatIndex - 1) {
+                        entry.isPlaying = true;
+                        entry.stepIndex = 0;
+                        entry.beatsAccum = 0;
+                        entry.pendingStartBeat = null;
+                        entry._startedOnce = false;
+                    }
+                }
+                // Emit initial step events
+                for (const [nid, entry] of this._sequencers.entries()) {
+                    if (entry.isPlaying && entry._startedOnce === false) {
+                        entry._startedOnce = true;
+                        try { this.port.postMessage({ type: "sequencerStep", nodeId: nid, stepIndex: 0 }); } catch {}
+                    }
+                }
+                t.nextBeatFrame += t.framesPerBeat;
+                if (t.nextBeatFrame >= blockEndFrame) break;
+            }
+
+            // --- Sequencer step advancement (beat-fraction based) ---
+            // Design: each step lasts 1/rate beats (independent of sequence length).
+            // So at rate=1, one step per beat; longer sequences simply span more bars and drift naturally.
+            const beatsAdvanced = (blockSize / t.framesPerBeat);
+            if (this._sequencers.size) {
+                for (const [nid, entry] of this._sequencers.entries()) {
+                    if (!entry.isPlaying) continue;
+                    const rate = entry.rateMultiplier || 1;
+                    const stepDurationBeats = 1 / rate; // original intent
+                    entry.beatsAccum += beatsAdvanced;
+                    const nodeData = this._nodes.get(nid) || {};
+                    let length = Number(nodeData.length);
+                    if (!isFinite(length) || length < 1) length = 16;
+                    if (length > 256) length = 256;
+                    let advanced = false;
+                    while (entry.beatsAccum >= stepDurationBeats) {
+                        entry.beatsAccum -= stepDurationBeats;
+                        entry.stepIndex = (entry.stepIndex + 1) % length;
+                        advanced = true;
+                    }
+                    if (advanced) {
+                        try { this.port.postMessage({ type: "sequencerStep", nodeId: nid, stepIndex: entry.stepIndex }); } catch {}
+                    }
+                }
+            }
+
             // Drain and dispatch MIDI to nodes before audio rendering
             for (const [nodeId, queue] of this._midiQueues.entries()) {
                 if (!queue || queue.length === 0) continue;
@@ -445,6 +652,7 @@ class EngineProcessor extends AudioWorkletProcessor {
 
             // Advance coarse timebase by one block
             this._timebase.audioCurrentTimeSec += blockSize / sampleRate;
+            t.frameCounter += blockSize;
         } catch (err) {
             try {
                 this.port.postMessage({ type: "error", message: String(err) });
@@ -870,6 +1078,21 @@ class EngineProcessor extends AudioWorkletProcessor {
                 outL[i] += sumL[i] * gain;
                 outR[i] += sumR[i] * gain;
             }
+        }
+    }
+
+    // Broadcast MIDI events from a sequencer node to its downstream MIDI connections
+    _broadcastSequencerMIDI(nodeId, events) {
+        if (!Array.isArray(events) || !events.length) return;
+        const downstream = this._connections.filter(
+            (c) =>
+                c.from === nodeId &&
+                (c.fromOutput === "midi-out" || c.fromOutput === "midi" || c.fromOutput == null)
+        );
+        for (const edge of downstream) {
+            const q = this._midiQueues.get(edge.to) || [];
+            for (const ev of events) q.push(ev);
+            this._midiQueues.set(edge.to, q);
         }
     }
 }

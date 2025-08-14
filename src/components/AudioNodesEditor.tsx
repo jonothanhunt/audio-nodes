@@ -33,6 +33,7 @@ import ValueNumberNode from "./nodes/ValueNumberNode";
 import ValueStringNode from "./nodes/ValueStringNode";
 import ValueTextNode from "./nodes/ValueTextNode";
 import ValueSelectNode from "./nodes/ValueSelectNode";
+import TransportPill from "@/components/TransportPill";
 
 // Custom node registry
 const nodeTypes = {
@@ -64,6 +65,38 @@ export default function AudioNodesEditor() {
     } = useGraph();
     const { audioManager, audioInitialized, initializeAudio, sendMIDI } =
         useAudioEngine();
+    // (Transport pill state moved to TransportPill component)
+
+    // Bridge: dispatch sequencerStep events from audioManager to window so individual SequencerNode components can listen
+    React.useEffect(() => {
+        const off = audioManager.onSequencerStep((nodeId, stepIndex) => {
+            try {
+                const ev = new CustomEvent("audioNodesSequencerStep", { detail: { nodeId, stepIndex } });
+                window.dispatchEvent(ev);
+            } catch {}
+        });
+        return () => { try { off(); } catch {} };
+    }, [audioManager]);
+
+    // Listen for UI-triggered play/rate events from SequencerNode components and forward to audioManager
+    React.useEffect(() => {
+        const onPlayToggle = (e: Event) => {
+            const detail = (e as CustomEvent).detail as { nodeId: string; play: boolean };
+            if (!detail) return;
+            audioManager.setSequencerPlay(detail.nodeId, detail.play);
+        };
+        const onRateChange = (e: Event) => {
+            const detail = (e as CustomEvent).detail as { nodeId: string; rate: number };
+            if (!detail) return;
+            audioManager.setSequencerRate(detail.nodeId, detail.rate);
+        };
+        window.addEventListener("audioNodesSequencerPlayToggle", onPlayToggle as EventListener);
+        window.addEventListener("audioNodesSequencerRateChange", onRateChange as EventListener);
+        return () => {
+            window.removeEventListener("audioNodesSequencerPlayToggle", onPlayToggle as EventListener);
+            window.removeEventListener("audioNodesSequencerRateChange", onRateChange as EventListener);
+        };
+    }, [audioManager]);
     const rfInstanceRef = React.useRef<ReactFlowInstance | null>(null);
     const [connectingColor, setConnectingColor] = React.useState<string | null>(
         null
@@ -150,7 +183,7 @@ export default function AudioNodesEditor() {
                     return newNode;
                 });
 
-                // 2) If this node has param-out connections, broadcast to targets
+                // 2) If this node has param-out connections, broadcast to targets (Value nodes only)
                 const source = updated.find((n) => n.id === nodeId);
                 if (!source) return updated;
                 const sourceType = source.type || "unknown";
@@ -158,7 +191,6 @@ export default function AudioNodesEditor() {
                     "value"
                 ] as unknown;
 
-                // Only broadcast for Value nodes (bool/number/string)
                 const isValueNode = (sourceType || "").startsWith("value-");
                 if (!isValueNode) return updated;
 
@@ -185,7 +217,8 @@ export default function AudioNodesEditor() {
                         | number
                         | boolean
                         | undefined;
-                    if (v === undefined) v = value as string | number | boolean;
+                    if (v === undefined)
+                        v = value as string | number | boolean;
                     if (v === undefined) continue;
                     if (cur === v) continue;
                     // create new data object to ensure React Flow detects change
@@ -1044,6 +1077,8 @@ export default function AudioNodesEditor() {
                     </div>
                 </div>
             </div>
+            {/* Bottom-center Transport Pill */}
+            <TransportPill audioManager={audioManager} />
         </div>
     );
 }

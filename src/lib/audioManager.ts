@@ -30,6 +30,10 @@ export class AudioManager {
     private wasmReady = false; // set true when worklet reports ready
     private sampleRate = 44100;
     private timebaseTimer: number | null = null;
+    // Transport state (UI-observable)
+    private bpm = 120;
+    private beatListeners: Set<(beat: number, bpm: number) => void> = new Set();
+    private sequencerStepListeners: Set<(nodeId: string, stepIndex: number) => void> = new Set();
     private audioNodes: Map<string, AudioNodeData> = new Map();
     private nodeConnections: Array<{
         from: string;
@@ -148,6 +152,25 @@ export class AudioManager {
                     case "error":
                         console.error("[AudioWorklet]", msg.message);
                         break;
+                    case "beat": {
+                        const beat = Number(msg.beatIndex) || 0;
+                        const bpm = Number(msg.bpm) || this.bpm;
+                        this.bpm = bpm;
+                        this.beatListeners.forEach((cb) => { try { cb(beat, bpm); } catch {} });
+                        break;
+                    }
+                    case "sequencerStep": {
+                        const nid = String(msg.nodeId || "");
+                        const stepIndex = Number(msg.stepIndex) || 0;
+                        if (nid) {
+                            this.sequencerStepListeners.forEach((cb) => { try { cb(nid, stepIndex); } catch { /* ignore */ } });
+                        }
+                        break;
+                    }
+                    case "syncScheduled": {
+                        // Could surface a UI confirmation if desired
+                        break;
+                    }
                     default:
                         break;
                 }
@@ -348,4 +371,42 @@ export class AudioManager {
             console.error("Failed to bootstrap WASM into worklet:", err);
         }
     }
+
+    // --- Transport API ---
+    setBpm(next: number) {
+        const v = Math.max(20, Math.min(300, Math.round(next)));
+        this.bpm = v;
+        if (this.audioWorklet) {
+            this.audioWorklet.port.postMessage({ type: "setBpm", bpm: v });
+        }
+    }
+
+    syncAllNextBeat() {
+        if (this.audioWorklet) {
+            this.audioWorklet.port.postMessage({ type: "syncAllNextBeat" });
+        }
+    }
+
+    onBeat(cb: (beat: number, bpm: number) => void) {
+        this.beatListeners.add(cb);
+        return () => this.beatListeners.delete(cb);
+    }
+
+    onSequencerStep(cb: (nodeId: string, stepIndex: number) => void) {
+        this.sequencerStepListeners.add(cb);
+        return () => this.sequencerStepListeners.delete(cb);
+    }
+
+    setSequencerRate(nodeId: string, multiplier: number) {
+        if (!this.audioWorklet) return;
+        if (![0.25, 0.5, 1, 2, 4].includes(multiplier)) return;
+        this.audioWorklet.port.postMessage({ type: "setSequencerRate", nodeId, multiplier });
+    }
+
+    setSequencerPlay(nodeId: string, play: boolean) {
+        if (!this.audioWorklet) return;
+        this.audioWorklet.port.postMessage({ type: "setSequencerPlay", nodeId, play: !!play });
+    }
+
+    getBpm() { return this.bpm; }
 }

@@ -1,40 +1,25 @@
 "use client";
 
 import React from "react";
-import { Music } from "lucide-react";
-import { getNodeMeta } from "@/lib/nodeRegistry";
-import { NodeUIProvider, useNodeUI } from "../node-ui/NodeUIProvider";
-import { HandleLayer } from "../node-ui/HandleLayer";
-import { NumberParam } from "../node-ui/params/NumberParam";
-import { SelectParam } from "../node-ui/params/SelectParam";
-import { BooleanParam } from "../node-ui/params/BooleanParam";
-import NodeHelpPopover, { HelpItem } from "../node-ui/NodeHelpPopover";
+import { NodeShell } from "../node-framework/NodeShell";
+import { NodeSpec } from "../node-framework/types";
 
-interface SequencerNodeProps {
-    id: string;
-    selected?: boolean;
-    data: {
-        length?: number;
-        fromNote?: string; // e.g., 'C4'
-        toNote?: string; // e.g., 'C5'
-        bpm?: number;
-        playing?: boolean;
-        steps?: boolean[][]; // persisted grid [step][noteIdx]
-        onParameterChange: (
-            nodeId: string,
-            parameter: string,
-            value: string | number | boolean | boolean[][],
-        ) => void;
-        onEmitMidi?: (
-            sourceId: string,
-            events: Array<{
-                data: [number, number, number];
-                atFrame?: number;
-                atTimeMs?: number;
-            }>,
-        ) => void;
-    };
+interface SequencerNodeData {
+    length?: number;
+    fromNote?: string;
+    toNote?: string;
+    rateMultiplier?: number;
+    playing?: boolean;
+    steps?: boolean[][];
+    _connectedParams?: string[];
+    onParameterChange: (nodeId: string, parameter: string, value: string | number | boolean | boolean[][]) => void;
+    onEmitMidi?: (
+        sourceId: string,
+        events: Array<{ data: [number, number, number]; atFrame?: number; atTimeMs?: number }>,
+    ) => void;
+    [k: string]: unknown;
 }
+interface SequencerNodeProps { id: string; selected?: boolean; data: SequencerNodeData; }
 
 const NOTE_NAMES = [
     "C",
@@ -67,58 +52,26 @@ function noteToMidi(note: string): number {
     return (octave + 1) * 12 + idx;
 }
 
-export default function SequencerNode({
-    id,
-    data,
-    selected,
-}: SequencerNodeProps) {
-    const { accentColor } = getNodeMeta("sequencer");
+// (Spec now created inside component to allow dynamic renderAfterParams usage.)
+
+export default function SequencerNode({ id, data, selected }: SequencerNodeProps) {
     const { onParameterChange } = data;
-    const [helpOpen, setHelpOpen] = React.useState(false);
-    const buttonRef = React.useRef<HTMLButtonElement | null>(null);
-
+    // Defaults
     React.useEffect(() => {
-        if (!helpOpen) return;
-        const onDocPointerDown = (e: PointerEvent) => {
-            const t = e.target as Node | null;
-            if (buttonRef.current && buttonRef.current.contains(t as Node)) {
-                return;
-            }
-            setHelpOpen(false);
+        const ensure = (key: keyof SequencerNodeData, def: string | number | boolean) => {
+            if ((data as Record<string, unknown>)[key] == null) onParameterChange(id, key as string, def);
         };
-        const opts: AddEventListenerOptions = { capture: true };
-        document.addEventListener("pointerdown", onDocPointerDown, opts);
-        return () =>
-            document.removeEventListener("pointerdown", onDocPointerDown, opts);
-    }, [helpOpen]);
-
-    const isParamConnected = (key: string) => {
-        const fn = (data as { isParamConnected?: (k: string) => boolean })
-            .isParamConnected;
-        return typeof fn === "function" ? !!fn(key) : false;
-    };
-    // Ensure defaults for scalars
-    React.useEffect(() => {
-        const ensure = (
-            key: keyof SequencerNodeProps["data"],
-            def: string | number | boolean,
-    ) => {
-            if ((data as Record<string, unknown>)[key] == null) {
-                onParameterChange(id, key as string, def);
-            }
-        };
-        ensure("length", 16);
-        ensure("fromNote", "C4");
-        ensure("toNote", "C5");
-        ensure("bpm", 120);
-        ensure("playing", false);
+        ensure('length', 16);
+        ensure('fromNote', 'C4');
+        ensure('toNote', 'C5');
+        ensure('rateMultiplier', 1);
+        ensure('playing', false);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const lengthProp = data.length ?? 16;
-    const fromNoteProp = data.fromNote ?? "C4";
-    const toNoteProp = data.toNote ?? "C5";
-    const bpmProp = data.bpm ?? 120;
+    const fromNoteProp = data.fromNote ?? 'C4';
+    const toNoteProp = data.toNote ?? 'C5';
     const playingProp = data.playing ?? false;
 
     const lengthClamped = Math.max(
@@ -127,10 +80,6 @@ export default function SequencerNode({
             64,
             Number.isFinite(Number(lengthProp)) ? Number(lengthProp) : 16,
         ),
-    );
-    const bpmClamped = Math.max(
-        20,
-        Math.min(600, Number.isFinite(Number(bpmProp)) ? Number(bpmProp) : 120),
     );
 
     const fromMidiRaw = noteToMidi(fromNoteProp);
@@ -184,67 +133,45 @@ export default function SequencerNode({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // Playhead state
-    const [currentStep, setCurrentStep] = React.useState(0);
-    const timerRef = React.useRef<number | null>(null);
-    const prevStepRef = React.useRef<number>(0);
+    // Playhead state: start at -1 so first sequencerStep event to 0 triggers MIDI emission exactly on quantized start
+    const [currentStep, setCurrentStep] = React.useState(-1);
+    const prevStepRef = React.useRef<number>(-1);
+    const startedRef = React.useRef(false); // becomes true after first step event received
 
+    // External step updates now come from global transport via custom event listener
     React.useEffect(() => {
-        // Clear any existing timer
-        if (timerRef.current) {
-            window.clearInterval(timerRef.current);
-            timerRef.current = null;
-        }
-        if (playingProp) {
-            const intervalMs = Math.max(1, Math.round(60000 / bpmClamped));
-            timerRef.current = window.setInterval(() => {
-                setCurrentStep((prev) => (prev + 1) % lengthClamped);
-            }, intervalMs);
-        } else {
-            setCurrentStep(0);
-        }
-        return () => {
-            if (timerRef.current) {
-                window.clearInterval(timerRef.current);
-                timerRef.current = null;
-            }
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent).detail as { nodeId: string; stepIndex: number };
+            if (!detail || detail.nodeId !== id) return;
+            setCurrentStep(detail.stepIndex);
+            if (!startedRef.current) startedRef.current = true;
         };
-    }, [playingProp, bpmClamped, lengthClamped]);
+        window.addEventListener("audioNodesSequencerStep", handler as EventListener);
+        return () => window.removeEventListener("audioNodesSequencerStep", handler as EventListener);
+    }, [id]);
 
     // Emit MIDI on step change
     React.useEffect(() => {
         if (!data || typeof data.onEmitMidi !== "function") return;
+        if (!playingProp || !startedRef.current) return; // don't emit until quantized start
+        if (currentStep < 0) return;
         const emit = data.onEmitMidi as (
             sourceId: string,
-            events: Array<{
-                data: [number, number, number];
-                atFrame?: number;
-                atTimeMs?: number;
-            }>,
+            events: Array<{ data: [number, number, number]; atFrame?: number; atTimeMs?: number }>,
         ) => void;
-        if (!playingProp) return;
-
         const prev = prevStepRef.current;
         const curr = currentStep;
-
         const events: Array<{ data: [number, number, number] }> = [];
-        const channel = 0; // default MIDI channel 1
+        const channel = 0;
         const NOTE_ON = 0x90 | channel;
         const NOTE_OFF = 0x80 | channel;
-
         for (let noteIdx = 0; noteIdx < noteCount; noteIdx++) {
-            const wasOn = steps[prev]?.[noteIdx] || false;
+            const wasOn = prev >= 0 ? (steps[prev]?.[noteIdx] || false) : false;
             const isOn = steps[curr]?.[noteIdx] || false;
             const midiNote = bottomMidi + noteIdx;
-            if (isOn) {
-                // Retrigger even if it was already on in the previous step
-                events.push({ data: [NOTE_ON, midiNote, 100] });
-            }
-            if (wasOn && !isOn) {
-                events.push({ data: [NOTE_OFF, midiNote, 0] });
-            }
+            if (isOn) events.push({ data: [NOTE_ON, midiNote, 100] });
+            if (wasOn && !isOn) events.push({ data: [NOTE_OFF, midiNote, 0] });
         }
-
         if (events.length) emit(id, events);
         prevStepRef.current = curr;
     }, [currentStep, playingProp, bottomMidi, noteCount, steps, id, data]);
@@ -264,7 +191,7 @@ export default function SequencerNode({
             const channel = 0;
             const NOTE_OFF = 0x80 | channel;
             const events: Array<{ data: [number, number, number] }> = [];
-            const s = steps[currentStep] || [];
+            const s = currentStep >= 0 ? (steps[currentStep] || []) : [];
             for (let noteIdx = 0; noteIdx < noteCount; noteIdx++) {
                 if (s[noteIdx]) {
                     const midiNote = bottomMidi + noteIdx;
@@ -272,6 +199,8 @@ export default function SequencerNode({
                 }
             }
             if (events.length) emit(id, events);
+            // Reset started flag so re-playing will wait for next quantized step
+            startedRef.current = false;
         }
     }, [playingProp, data, steps, currentStep, noteCount, bottomMidi, id]);
 
@@ -368,199 +297,53 @@ export default function SequencerNode({
         setTimeout(() => onParameterChange(id, "steps", cleared), 0);
     };
 
-    const numericKeys = ["length", "bpm"];
-    const stringKeys = ["fromNote", "toNote"];
-    const boolKeys = ["playing"];
 
-    const get = (key: keyof SequencerNodeProps["data"]) =>
-        (data as Record<string, unknown>)[key];
+    const [rateHint, setRateHint] = React.useState(false);
 
-    return (
-        <NodeUIProvider
-            accentColor={accentColor}
-            numericKeys={numericKeys}
-            stringKeys={stringKeys}
-            boolKeys={boolKeys}
-            isParamConnected={isParamConnected}
-        >
-            {selected && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-xs text-gray-500">
-                    ID: {id}
-                </div>
-            )}
+    // Node-local spec (params, help, IO) now dynamic for hint placement
+    const spec: NodeSpec = React.useMemo(() => ({
+        type: 'sequencer',
+        title: 'Sequencer', // full title (no shortTitle to show full name)
+        accentColor: '#f59e0b',
+        params: [
+            { key: 'fromNote', kind: 'select', default: 'C4', label: 'From', options: NOTE_OPTIONS },
+            { key: 'toNote', kind: 'select', default: 'C5', label: 'To', options: NOTE_OPTIONS },
+            { key: 'length', kind: 'number', default: 16, min: 1, max: 64, step: 1, label: 'Length' },
+            { key: 'playing', kind: 'bool', default: false, label: 'Play' },
+            { key: 'rateMultiplier', kind: 'select', default: '1', label: 'Rate', options: ['0.25','0.5','1','2','4'] },
+        ],
+        inputs: [],
+        outputs: [{ id: 'midi-out', role: 'midi-out', label: 'MIDI Out' }],
+        help: {
+            description: 'Step sequencer that emits MIDI notes on the global transport. Toggle grid cells to enable notes.',
+            inputs: [
+                { name: 'From/To', description: 'MIDI note range displayed.' },
+                { name: 'Length', description: 'Steps per sequence (1–64).' },
+                { name: 'Play', description: 'Quantized start/stop with global bar.' },
+                { name: 'Rate', description: 'Speed multiplier vs global BPM.' },
+            ],
+            outputs: [{ name: 'MIDI Out', description: 'Emits Note On/Off each step.' }]
+        },
+        renderAfterParams: () => (
+            rateHint && playingProp ? <div className="text-[10px] text-amber-400/80 -mt-1 mb-1">Rate change applies next beat</div> : null
+        )
+    }), [rateHint, playingProp]);
 
-            <div
-                className={`relative bg-gray-900 rounded-lg p-4 shadow-lg border`}
-                style={{
-                    borderColor: accentColor,
-                    boxShadow: selected
-                        ? `0 0 0 1px ${accentColor}, 0 0 12px -2px ${accentColor}`
-                        : undefined,
-                }}
-            >
-                <div
-                    className="pointer-events-none absolute inset-0 rounded-lg"
-                    style={{
-                        background: `linear-gradient(135deg, ${accentColor}26, transparent 65%)`,
-                    }}
-                />
-                {/* Header */}
-                <div className="flex items-center gap-2 mb-3 relative">
-                    <Music
-                        className="w-4 h-4 -translate-y-0.5"
-                        style={{ color: accentColor }}
-                    />
-                    <span
-                        className="title-font text-base"
-                        style={{ color: accentColor }}
-                    >
-                        Sequencer
-                    </span>
-                    <div className="ml-auto flex items-center">
-                        <button
-                            type="button"
-                            aria-label="About this node"
-                            ref={buttonRef}
-                            className="nodrag inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-gray-700 text-[11px] font-semibold border border-gray-300 shadow-sm hover:bg-gray-100"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setHelpOpen((v) => !v);
-                            }}
-                            onMouseDown={(e) => e.stopPropagation()}
-                            onPointerDown={(e) => e.stopPropagation()}
-                        >
-                            ?
-                        </button>
-                    </div>
-                </div>
+    // Wrapper to intercept play & rate changes for events + hint
+    const handleParamChange = React.useCallback((nid: string, key: string, value: unknown) => {
+        onParameterChange(nid, key, key === 'rateMultiplier' ? Number(value) : value as (string|number|boolean|boolean[][]));
+        if (key === 'playing') {
+            try { window.dispatchEvent(new CustomEvent('audioNodesSequencerPlayToggle',{ detail:{ nodeId:nid, play:value }})); } catch {}
+        } else if (key === 'rateMultiplier') {
+            try { window.dispatchEvent(new CustomEvent('audioNodesSequencerRateChange',{ detail:{ nodeId:nid, rate:Number(value) }})); } catch {}
+            setRateHint(true);
+            window.setTimeout(()=>setRateHint(false),1600);
+        }
+    }, [onParameterChange]);
 
-                {/* Help Popover */}
-                <NodeHelpPopover
-                    open={helpOpen}
-                    onClose={() => setHelpOpen(false)}
-                    anchorRef={buttonRef as React.RefObject<HTMLElement>}
-                    title="Sequencer"
-                    description="Step sequencer that emits MIDI Note On/Off at a given BPM. Toggle cells to activate notes per step."
-                    inputs={
-                        [
-                            {
-                                name: "From/To",
-                                description:
-                                    "MIDI note range shown in the grid.",
-                            },
-                            {
-                                name: "Length",
-                                description: "Number of steps (1–64).",
-                            },
-                            {
-                                name: "Play",
-                                description: "Starts/stops the playhead.",
-                            },
-                            {
-                                name: "BPM",
-                                description: "Tempo for advancing steps.",
-                            },
-                        ] as HelpItem[]
-                    }
-                    outputs={
-                        [
-                            {
-                                name: "MIDI Out",
-                                description:
-                                    "Note On/Off for active cells at each step.",
-                            },
-                        ] as HelpItem[]
-                    }
-                    align="right"
-                />
-
-                {/* Controls + Output label */}
-                <div className="grid grid-cols-[minmax(16rem,_auto)_auto] gap-y-2 gap-x-4">
-                    <div className="space-y-2 col-span-1">
-                        <SelectParam
-                            nodeId={id}
-                            paramKey="fromNote"
-                            label="From"
-                            value={String(get("fromNote") ?? "C4")}
-                            options={NOTE_OPTIONS}
-                            onParameterChange={
-                                onParameterChange as (
-                                    nid: string,
-                                    param: string,
-                                    value: string,
-                                ) => void
-                            }
-                            widthClass="w-24"
-                        />
-                        <SelectParam
-                            nodeId={id}
-                            paramKey="toNote"
-                            label="To"
-                            value={String(get("toNote") ?? "C5")}
-                            options={NOTE_OPTIONS}
-                            onParameterChange={
-                                onParameterChange as (
-                                    nid: string,
-                                    param: string,
-                                    value: string,
-                                ) => void
-                            }
-                            widthClass="w-24"
-                        />
-                        <NumberParam
-                            nodeId={id}
-                            paramKey="length"
-                            label="Length"
-                            value={Number(get("length") ?? 16)}
-                            min={1}
-                            max={64}
-                            step={1}
-                            onParameterChange={
-                                onParameterChange as (
-                                    nid: string,
-                                    param: string,
-                                    value: number,
-                                ) => void
-                            }
-                        />
-                        <BooleanParam
-                            nodeId={id}
-                            paramKey="playing"
-                            label="Play"
-                            value={Boolean(get("playing") ?? false)}
-                            onParameterChange={
-                                onParameterChange as (
-                                    nid: string,
-                                    param: string,
-                                    value: boolean,
-                                ) => void
-                            }
-                        />
-                        <NumberParam
-                            nodeId={id}
-                            paramKey="bpm"
-                            label="BPM"
-                            value={Number(get("bpm") ?? 120)}
-                            min={20}
-                            max={600}
-                            step={1}
-                            onParameterChange={
-                                onParameterChange as (
-                                    nid: string,
-                                    param: string,
-                                    value: number,
-                                ) => void
-                            }
-                        />
-                    </div>
-                    <div className="flex flex-col col-span-1">
-                        <MidiOutRow />
-                    </div>
-                </div>
-
-                {/* Step Grid */}
-                <div className="mt-6">
-                    <div className="flex">
+        const grid = (
+            <div className="mt-6">
+                <div className="flex">
                         {/* Labels column (note names) */}
                         <div className="flex flex-col-reverse gap-1 mr-1">
                             {Array.from({ length: noteCount }).map(
@@ -593,7 +376,7 @@ export default function SequencerNode({
                             {Array.from({ length: lengthClamped }).map(
                                 (_, stepIdx) => {
                                     const showPlayhead =
-                                        playingProp && stepIdx === currentStep;
+                                        playingProp && currentStep >= 0 && stepIdx === currentStep;
                                     return (
                                         <div
                                             key={stepIdx}
@@ -650,48 +433,40 @@ export default function SequencerNode({
                                                         />
                                                     );
                                                 })}
-                                            </div>
-                                        </div>
-                                    );
+                                                    </div>
+                                                </div>
+                                            );
                                 },
                             )}
                         </div>
                     </div>
-                    <div className="mt-3 flex justify-start">
-                        <button
-                            type="button"
-                            className="nodrag inline-flex items-center px-2 py-1 rounded border border-gray-600 bg-gray-800 text-xs text-white hover:bg-gray-700"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handleClearGrid();
-                            }}
-                            onPointerDown={(e) => e.stopPropagation()}
-                            aria-label="Clear all steps"
-                        >
-                            Clear grid
-                        </button>
-                    </div>
+                <div className="mt-3 flex justify-start">
+                    <button
+                        type="button"
+                        className="nodrag inline-flex items-center px-2 py-1 rounded border border-gray-600 bg-gray-800 text-xs text-white hover:bg-gray-700"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleClearGrid();
+                        }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        aria-label="Clear all steps"
+                    >
+                        Clear grid
+                    </button>
                 </div>
             </div>
+        );
 
-            {/* Render handles: param handles on the left; only a MIDI Out on the right */}
-            <HandleLayer
-                includeMidiIn={false}
-                outputId="midi-out"
-                outputVariant="midi"
-            />
-        </NodeUIProvider>
-    );
+        return (
+            <NodeShell
+                id={id}
+                data={data as unknown as Record<string, unknown>}
+                spec={spec}
+                selected={selected}
+                onParameterChange={handleParamChange}
+            >
+                {grid}
+            </NodeShell>
+        );
 }
 
-function MidiOutRow() {
-    const { outputEl } = useNodeUI();
-    return (
-        <div
-            className="relative flex items-center justify-end h-8"
-            ref={(el) => outputEl(el)}
-        >
-            <span className="text-xs text-gray-300 mr-2">MIDI Out</span>
-        </div>
-    );
-}

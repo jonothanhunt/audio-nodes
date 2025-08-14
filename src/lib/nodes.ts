@@ -33,7 +33,7 @@ export function getDefaultNodeData(
                 length: 16,
                 fromNote: "C4",
                 toNote: "C5",
-                bpm: 120,
+                rateMultiplier: 1,
                 playing: false,
                 onParameterChange,
                 onEmitMidi,
