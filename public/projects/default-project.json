@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "createdAt": "2025-08-14T09:43:40.314Z",
+  "createdAt": "2025-08-14T16:54:26.452Z",
   "nodes": [
     {
       "id": "5",
       "type": "reverb",
       "position": {
-        "x": 1067.1314081434975,
-        "y": 583.6558161473566
+        "x": 1117.5677739661608,
+        "y": 612.4765966174499
       },
       "data": {
         "feedback": 0,
@@ -30,8 +30,8 @@
       "id": "7",
       "type": "synth",
       "position": {
-        "x": 402.34374856735394,
-        "y": 569.8533399054086
+        "x": 392.0483477330139,
+        "y": 514.2581753999727
       },
       "data": {
         "preset": "Init",
@@ -43,7 +43,7 @@
         "cutoff": 5606,
         "resonance": 1,
         "glide": 0,
-        "gain": 0.32,
+        "gain": 0.43,
         "maxVoices": 16
       }
     },
@@ -51,14 +51,14 @@
       "id": "8",
       "type": "sequencer",
       "position": {
-        "x": -252.04211773144567,
-        "y": 508.0950510025866
+        "x": -393.9722891874297,
+        "y": 528.0539813635842
       },
       "data": {
         "length": 16,
         "fromNote": "C3",
         "toNote": "C5",
-        "playing": false,
+        "playing": true,
         "steps": [
           [
             true,
@@ -298,7 +298,7 @@
             false,
             false,
             false,
-            true,
+            false,
             false,
             false,
             false
@@ -325,7 +325,7 @@
             false,
             false,
             false,
-            true,
+            false,
             false,
             false,
             false
@@ -352,7 +352,7 @@
             false,
             false,
             false,
-            true,
+            false,
             false,
             false,
             false
@@ -493,7 +493,196 @@
             false
           ]
         ],
-        "rateMultiplier": 2
+        "rateMultiplier": 1,
+        "_connectedParams": [
+          "playing"
+        ]
+      }
+    },
+    {
+      "id": "n-dffbc93d-a45f-4f08-8e46-790e500f2e5a",
+      "type": "sequencer",
+      "position": {
+        "x": -421.9651759733989,
+        "y": -102.35502771228687
+      },
+      "data": {
+        "fromNote": "C4",
+        "toNote": "C5",
+        "length": 8,
+        "playing": true,
+        "rateMultiplier": 0.5,
+        "steps": [
+          [
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          [
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false
+          ],
+          [
+            true,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false
+          ],
+          [
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          [
+            true,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false
+          ],
+          [
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false
+          ],
+          [
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false
+          ],
+          [
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        ],
+        "_connectedParams": [
+          "playing"
+        ]
+      }
+    },
+    {
+      "id": "n-40d2c0e9-e5c3-4d28-9c56-16af8b965fa5",
+      "type": "synth",
+      "position": {
+        "x": 1067.1049613034936,
+        "y": -104.05765107527502
+      },
+      "data": {
+        "preset": "Init",
+        "waveform": "triangle",
+        "attack": 0.005,
+        "decay": 0.12,
+        "sustain": 0.7,
+        "release": 0.12,
+        "cutoff": 10000,
+        "resonance": 0.2,
+        "glide": 0,
+        "gain": 0.05,
+        "maxVoices": 8
+      }
+    },
+    {
+      "id": "n-2d1f965e-fefc-4387-99d7-c350663d97dc",
+      "type": "arpeggiator",
+      "position": {
+        "x": 320.7300677598337,
+        "y": -101.84326642054044
+      },
+      "data": {
+        "playing": true,
+        "rateMultiplier": 4,
+        "mode": "up",
+        "octaves": 4
+      }
+    },
+    {
+      "id": "n-3702b65b-370f-4c6e-aa61-41a23dff6ca1",
+      "type": "value-bool",
+      "position": {
+        "x": -1047.4096580206133,
+        "y": 11.130101485719827
+      },
+      "data": {
+        "value": true
       }
     }
   ],
@@ -518,12 +707,47 @@
       "target": "6",
       "sourceHandle": "output",
       "targetHandle": "input"
+    },
+    {
+      "id": "reactflow__edge-n-40d2c0e9-e5c3-4d28-9c56-16af8b965fa5output-5input",
+      "source": "n-40d2c0e9-e5c3-4d28-9c56-16af8b965fa5",
+      "target": "5",
+      "sourceHandle": "output",
+      "targetHandle": "input"
+    },
+    {
+      "id": "reactflow__edge-n-dffbc93d-a45f-4f08-8e46-790e500f2e5amidi-out-n-2d1f965e-fefc-4387-99d7-c350663d97dcmidi-in",
+      "source": "n-dffbc93d-a45f-4f08-8e46-790e500f2e5a",
+      "target": "n-2d1f965e-fefc-4387-99d7-c350663d97dc",
+      "sourceHandle": "midi-out",
+      "targetHandle": "midi-in"
+    },
+    {
+      "id": "reactflow__edge-n-2d1f965e-fefc-4387-99d7-c350663d97dcmidi-out-n-40d2c0e9-e5c3-4d28-9c56-16af8b965fa5midi",
+      "source": "n-2d1f965e-fefc-4387-99d7-c350663d97dc",
+      "target": "n-40d2c0e9-e5c3-4d28-9c56-16af8b965fa5",
+      "sourceHandle": "midi-out",
+      "targetHandle": "midi"
+    },
+    {
+      "id": "reactflow__edge-n-3702b65b-370f-4c6e-aa61-41a23dff6ca1param-out-n-dffbc93d-a45f-4f08-8e46-790e500f2e5aplaying",
+      "source": "n-3702b65b-370f-4c6e-aa61-41a23dff6ca1",
+      "target": "n-dffbc93d-a45f-4f08-8e46-790e500f2e5a",
+      "sourceHandle": "param-out",
+      "targetHandle": "playing"
+    },
+    {
+      "id": "reactflow__edge-n-3702b65b-370f-4c6e-aa61-41a23dff6ca1param-out-8playing",
+      "source": "n-3702b65b-370f-4c6e-aa61-41a23dff6ca1",
+      "target": "8",
+      "sourceHandle": "param-out",
+      "targetHandle": "playing"
     }
   ],
   "viewport": {
-    "x": 448.0911652710954,
-    "y": 197.40092592387174,
-    "zoom": 0.3617243192190524
+    "x": 620.9311383213903,
+    "y": 349.08319249595525,
+    "zoom": 0.2760425366565366
   },
   "transport": {
     "bpm": 120
