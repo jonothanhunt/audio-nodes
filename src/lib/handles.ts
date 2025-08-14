@@ -26,7 +26,7 @@ export function getHandleRole(
             return "unknown";
         case "speaker":
             if (handleId === "input") return "audio-in";
-            if (handleId === "volume") return "param-in";
+            if (handleId === "volume" || handleId === "muted") return "param-in"; // allow external modulation of volume & mute toggle
             return "unknown";
         case "sequencer":
             if (handleId === "midi-out" || handleId === "midi")
@@ -65,6 +65,7 @@ export function getHandleRole(
             // Backward compat: original implementation used id "midi" for both; now we split.
             if (handleId === "midi") return "midi-in";
             if (handleId === "midi-out") return "midi-out";
+            if (["semitones","clampLow","clampHigh","passOther"].includes(handleId || "")) return "param-in"; // expose transpose parameters
             return "unknown";
         case "arpeggiator":
             if (handleId === "midi-in" || handleId === "midi") return "midi-in";
@@ -72,7 +73,8 @@ export function getHandleRole(
             if (["playing","rateMultiplier","mode","octaves"].includes(handleId || "")) return "param-in";
             return "unknown";
         case "value-bool":
-            if (handleId === "output" || handleId == null) return "param-out";
+            // Historically used 'output'; current spec uses 'param-out'. Support both for backward compatibility.
+            if (handleId === "output" || handleId === "param-out" || handleId == null) return "param-out";
             if (handleId === "value") return "param-in"; // allow overriding via link too
             return "unknown";
         case "value-number":
