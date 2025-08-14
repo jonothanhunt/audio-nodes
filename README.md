@@ -46,6 +46,8 @@ I love node‑based creative workflows and making music—so this project is a g
 ### What is it?
 
 Audio Nodes lets you create simple synth and effect chains by connecting visual blocks: for example, MIDI Input → Synthesizer → Reverb → Speaker. You can tweak parameters in real time and hear the result instantly.
+### Panic Button
+Panic (All Notes Off / flush): The transport pill includes a Panic button which sends All Notes Off to every synth, clears active sequencer notes, and clears arpeggiator active outputs to recover from any hanging notes.
 
 - In: MIDI or generated notes (Sequencer)
 - Process: Oscillator/Synth, Reverb, Transpose, etc.
@@ -436,11 +438,16 @@ This is a living checklist of planned features. Tick items will be updated as we
 
 ### Core nodes
 
-- [ ] Arpeggiator node
-  - [ ] Modes (up, down, up-down, random, chord, custom)
-  - [ ] Rate (note value), gate, octave range, swing
-  - [ ] Latch/hold, tie overlaps
-  - [ ] Clock sync and reset input
+- [x] Arpeggiator node (basic)
+  - [x] Modes (up, down, up-down, random, chord)
+  - [x] Rate multiplier (shared beat-quantized system)
+  - [x] Octave range (1–4)
+  - [x] Quantized start/stop & rate changes (next beat)
+  - [ ] Swing
+  - [ ] Custom pattern mode
+  - [ ] Latch/hold (persist notes after key release)
+  - [ ] Tie overlaps / adjustable gate length
+  - [ ] External clock/reset input
 - [ ] Envelope node (mod)
   - [ ] ADSR and multi-stage
   - [ ] Trigger input, retrigger, one-shot/loop

@@ -60,6 +60,14 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
         icon: Music as unknown as NodeDefinition["icon"],
     },
     {
+        type: "arpeggiator",
+        name: "Arpeggiator",
+        description: "Arpeggiates held chord notes",
+        category: "Sequencing",
+        tag: "midi",
+        icon: Music as unknown as NodeDefinition["icon"],
+    },
+    {
         type: "midi-input",
         name: "MIDI In",
         description: "Hardware MIDI input",

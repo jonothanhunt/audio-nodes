@@ -138,14 +138,17 @@ export function TransportPill({ audioManager }: TransportPillProps) {
         {/* Sync Button */}
         <button
           type="button"
-          onClick={() => {
-            audioManager.syncAllNextBeat();
-          }}
+          onClick={() => { audioManager.syncAllNextBeat(); }}
           className="text-xs font-medium px-3 py-1 rounded-md bg-gray-700/70 hover:bg-gray-600 text-gray-100 border border-gray-600/60 focus:outline-none focus:ring-2 focus:ring-red-500/50"
           title="Sync all sequencers to next beat"
-        >
-          Sync sequencers
-        </button>
+        >Sync</button>
+        {/* Panic (All Notes Off) */}
+        <button
+          type="button"
+          onClick={() => { audioManager.panic(); }}
+          className="text-xs font-semibold px-3 py-1 rounded-md bg-red-600/80 hover:bg-red-600 text-white border border-red-500/70 focus:outline-none focus:ring-2 focus:ring-red-400/60"
+          title="Panic: Send All Notes Off to all synths and clear arps/sequencers"
+        >Panic</button>
       </div>
     </div>
   );

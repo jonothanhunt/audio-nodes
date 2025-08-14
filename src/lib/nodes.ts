@@ -38,6 +38,15 @@ export function getDefaultNodeData(
                 onParameterChange,
                 onEmitMidi,
             };
+        case "arpeggiator":
+            return {
+                playing: false,
+                rateMultiplier: 1,
+                mode: 'up',
+                octaves: 1,
+                onParameterChange,
+                onEmitMidi,
+            };
         case "synth":
             return {
                 preset: "Init",

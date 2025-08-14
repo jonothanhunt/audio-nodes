@@ -16,6 +16,7 @@ import OscillatorNode from "@/components/nodes/OscillatorNode";
 import ReverbNode from "@/components/nodes/ReverbNode";
 import SpeakerNode from "@/components/nodes/SpeakerNode";
 import SequencerNode from "@/components/nodes/SequencerNode";
+import ArpeggiatorNode from "@/components/nodes/ArpeggiatorNode";
 import SynthesizerNode from "./nodes/SynthesizerNode";
 import MidiInputNode from "@/components/nodes/MidiInputNode";
 import SaveLoadPanel from "@/components/SaveLoadPanel";
@@ -41,6 +42,7 @@ const nodeTypes = {
     reverb: ReverbNode,
     speaker: SpeakerNode,
     sequencer: SequencerNode,
+    arpeggiator: ArpeggiatorNode,
     synth: SynthesizerNode,
     "midi-input": MidiInputNode,
     "midi-transpose": MidiTransposeNode,
@@ -90,11 +92,25 @@ export default function AudioNodesEditor() {
             if (!detail) return;
             audioManager.setSequencerRate(detail.nodeId, detail.rate);
         };
+        const onArpPlay = (e: Event) => {
+            const detail = (e as CustomEvent).detail as { nodeId: string; play: boolean };
+            if (!detail) return;
+            audioManager.setArpPlay(detail.nodeId, detail.play);
+        };
+        const onArpRate = (e: Event) => {
+            const detail = (e as CustomEvent).detail as { nodeId: string; rate: number };
+            if (!detail) return;
+            audioManager.setArpRate(detail.nodeId, detail.rate);
+        };
         window.addEventListener("audioNodesSequencerPlayToggle", onPlayToggle as EventListener);
         window.addEventListener("audioNodesSequencerRateChange", onRateChange as EventListener);
+        window.addEventListener("audioNodesArpPlayToggle", onArpPlay as EventListener);
+        window.addEventListener("audioNodesArpRateChange", onArpRate as EventListener);
         return () => {
             window.removeEventListener("audioNodesSequencerPlayToggle", onPlayToggle as EventListener);
             window.removeEventListener("audioNodesSequencerRateChange", onRateChange as EventListener);
+            window.removeEventListener("audioNodesArpPlayToggle", onArpPlay as EventListener);
+            window.removeEventListener("audioNodesArpRateChange", onArpRate as EventListener);
         };
     }, [audioManager]);
     const rfInstanceRef = React.useRef<ReactFlowInstance | null>(null);

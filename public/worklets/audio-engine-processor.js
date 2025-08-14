@@ -65,6 +65,9 @@ class EngineProcessor extends AudioWorkletProcessor {
     //   _startedOnce: boolean (internal guard to avoid duplicate initial step event)
     // }>
     this._sequencers = new Map();
+    // --- Arpeggiator registry ---
+    // Map<nodeId, { rateMultiplier:number, isPlaying:boolean, pendingStartBeat:number|null, pendingRate:number|null, beatsAccum:number, held:Set<number>, order:number[], dir:1|-1, activeOut:Set<number>, mode:string, octaves:number }>
+    this._arps = new Map();
     }
 
     async _initWasm() {
@@ -241,6 +244,38 @@ class EngineProcessor extends AudioWorkletProcessor {
                 }
                 break;
             }
+            case 'setArpRate': {
+                const { nodeId, multiplier } = msg;
+                if (!nodeId) break;
+                const m = Number(multiplier);
+                if (![0.25,0.5,1,2,4].includes(m)) break;
+                let entry = this._arps.get(nodeId);
+                if (!entry) { entry = { rateMultiplier:1,isPlaying:false,pendingStartBeat:null,pendingRate:null,beatsAccum:0,held:new Set(),order:[],dir:1,activeOut:new Set(),mode:'up',octaves:1 }; this._arps.set(nodeId, entry); }
+                entry.pendingRate = m;
+                break;
+            }
+            case 'setArpPlay': {
+                const { nodeId, play } = msg;
+                if (!nodeId) break;
+                let entry = this._arps.get(nodeId);
+                if (!entry) { entry = { rateMultiplier:1,isPlaying:false,pendingStartBeat:null,pendingRate:null,beatsAccum:0,held:new Set(),order:[],dir:1,activeOut:new Set(),mode:'up',octaves:1 }; this._arps.set(nodeId, entry); }
+                if (play) {
+                    if (!entry.isPlaying && entry.pendingStartBeat == null) entry.pendingStartBeat = this._transport.beatIndex + 1;
+                } else {
+                    entry.isPlaying = false; entry.pendingStartBeat = null; entry.beatsAccum = 0; // send note off for any active notes
+                    if (entry.activeOut.size) {
+                        const offEvents = [];
+                        for (const n of entry.activeOut.values()) offEvents.push({ data:[0x80, n & 0x7f, 0] });
+                        this._broadcastArpMIDI(nodeId, offEvents);
+                        entry.activeOut.clear();
+                    }
+                }
+                break;
+            }
+            case 'panic': {
+                this._handlePanic();
+                break;
+            }
             case "bootstrapWasm": {
                 const { glue, wasm } = msg;
                 this._bootstrapFromMain(glue, wasm);
@@ -278,6 +313,26 @@ class EngineProcessor extends AudioWorkletProcessor {
                     // If project saved with playing=true, quantize start to next beat unless already scheduled/playing
                     if (data.playing && !entry.isPlaying && entry.pendingStartBeat == null) {
                         entry.pendingStartBeat = this._transport.beatIndex + 1;
+                    }
+                }
+                // If arpeggiator, ensure registry entry & update mode/octaves and persisted rate/play
+                if (data && data.type === 'arpeggiator') {
+                    let e = this._arps.get(nodeId);
+                    if (!e) { e = { rateMultiplier:1,isPlaying:false,pendingStartBeat:null,pendingRate:null,beatsAccum:0,held:new Set(),order:[],dir:1,activeOut:new Set(),mode:'up',octaves:1 }; this._arps.set(nodeId, e);}            
+                    const oldMode = e.mode;
+                    const oldOct = e.octaves;
+                    if (typeof data.rateMultiplier === 'number' && [0.25,0.5,1,2,4].includes(data.rateMultiplier)) e.rateMultiplier = data.rateMultiplier;
+                    if (data.playing && !e.isPlaying && e.pendingStartBeat == null) e.pendingStartBeat = this._transport.beatIndex + 1;
+                    if (typeof data.mode === 'string') e.mode = data.mode;
+                    if (typeof data.octaves === 'number') e.octaves = Math.max(1, Math.min(4, data.octaves|0));
+                    // If pattern topology changed, flush active notes to avoid hangs
+                    if (oldMode !== e.mode || oldOct !== e.octaves) {
+                        if (e.activeOut.size) {
+                            const offs = [];
+                            for (const n of e.activeOut.values()) offs.push({ data:[0x80, n & 0x7f, 0] });
+                            this._broadcastArpMIDI(nodeId, offs);
+                            e.activeOut.clear();
+                        }
                     }
                 }
                 try {
@@ -393,6 +448,8 @@ class EngineProcessor extends AudioWorkletProcessor {
                 this._connections = [];
                 this._paramCache.clear?.();
                 this._sequencers.clear();
+                this._arps.clear();
+                this._arps.clear();
                 for (const inst of this._oscInstances.values()) {
                     try {
                         inst.free?.();
@@ -528,6 +585,9 @@ class EngineProcessor extends AudioWorkletProcessor {
                 for (const [, entry] of this._sequencers.entries()) {
                     if (entry.pendingRate != null) { entry.rateMultiplier = entry.pendingRate; entry.pendingRate = null; }
                 }
+                for (const [, a] of this._arps.entries()) {
+                    if (a.pendingRate != null) { a.rateMultiplier = a.pendingRate; a.pendingRate = null; }
+                }
                 // Global sync request
                 if (t.syncAllNextBeat) {
                     try { this.port.postMessage({ type: "syncScheduled", beatIndex: t.beatIndex }); } catch {}
@@ -549,6 +609,9 @@ class EngineProcessor extends AudioWorkletProcessor {
                         entry.pendingStartBeat = null;
                         entry._startedOnce = false;
                     }
+                }
+                for (const [, a] of this._arps.entries()) {
+                    if (a.pendingStartBeat === t.beatIndex - 1) { a.isPlaying = true; a.beatsAccum = 0; a.pendingStartBeat = null; if (a.activeOut.size) { const offs=[]; for (const n of a.activeOut.values()) offs.push({data:[0x80,n&0x7f,0]}); this._broadcastArpMIDI(''+Math.random(), offs); a.activeOut.clear(); } }
                 }
                 // Emit initial step events
                 for (const [nid, entry] of this._sequencers.entries()) {
@@ -586,6 +649,67 @@ class EngineProcessor extends AudioWorkletProcessor {
                     }
                 }
             }
+            // Arpeggiator advancement
+            if (this._arps.size) {
+        for (const [nid, a] of this._arps.entries()) {
+                    if (!a.isPlaying) continue;
+                    a.beatsAccum += beatsAdvanced;
+                    const stepBeats = 1 / (a.rateMultiplier || 1);
+                    if (a.beatsAccum >= stepBeats) {
+                        a.beatsAccum -= stepBeats;
+            // build ordered note list (with octaves) from held set
+                        // held notes arrive via MIDI routing; maintain in a.held
+                        if (a.held.size === 0) { // no notes held, turn off any currently sounding
+                            if (a.activeOut.size) { const offs=[]; for (const n of a.activeOut.values()) offs.push({data:[0x80,n&0x7f,0]}); this._broadcastArpMIDI(nid, offs); a.activeOut.clear(); }
+                            continue; }
+                        const baseNotes = Array.from(a.held.values()).sort((x,y)=>x-y);
+                        let expanded = baseNotes.slice();
+                        const octs = Math.max(1, Math.min(4, a.octaves|0));
+                        if (octs > 1) {
+                            for (let o=1;o<octs;o++) {
+                                for (const n of baseNotes) { const nn = n + 12*o; if (nn <= 127) expanded.push(nn); }
+                            }
+                            expanded.sort((x,y)=>x-y);
+                        }
+                        if (a.mode === 'random') {
+                            const choice = expanded[Math.floor(Math.random()*expanded.length)];
+                            if (choice != null) this._arpApplyOutputSet(nid, a, new Set([choice]));
+                        } else if (a.mode === 'chord') {
+                            this._arpApplyOutputSet(nid, a, new Set(expanded));
+                        } else {
+                            // maintain traversal order
+                            if (!a.order.length) { a.order = expanded.slice(); a.dir = 1; }
+                            // remove notes not held anymore
+                            a.order = a.order.filter(n=>expanded.includes(n));
+                            // add new notes maintaining sort
+                            for (const n of expanded) if (!a.order.includes(n)) a.order.push(n);
+                            a.order.sort((x,y)=>x-y);
+                            if (a.mode === 'down') a.order.sort((x,y)=>y-x);
+                            if (a.mode === 'up-down') {
+                                // bounce between ends; use dir to step
+                                let lastIdx = -1;
+                                if (a.activeOut.size === 1) { const only = a.activeOut.values().next().value; lastIdx = a.order.indexOf(only); }
+                                let idx = lastIdx;
+                                if (idx < 0) idx = a.dir === 1 ? -1 : a.order.length; // start position before first/after last
+                                idx += a.dir;
+                                if (idx >= a.order.length) { a.dir = -1; idx = a.order.length - 2; }
+                                else if (idx < 0) { a.dir = 1; idx = 1; }
+                                const note = a.order[Math.max(0, Math.min(a.order.length-1, idx))];
+                                if (note != null) this._arpApplyOutputSet(nid, a, new Set([note]));
+                            } else {
+                                // linear (up or down already sorted)
+                                let lastIdx = -1;
+                                if (a.activeOut.size === 1) { const only = a.activeOut.values().next().value; lastIdx = a.order.indexOf(only); }
+                                let idx = lastIdx;
+                                idx += 1;
+                                if (idx >= a.order.length) idx = 0;
+                                const note = a.order[idx];
+                                if (note != null) this._arpApplyOutputSet(nid, a, new Set([note]));
+                            }
+                        }
+                    }
+                }
+            }
 
             // Drain and dispatch MIDI to nodes before audio rendering
             for (const [nodeId, queue] of this._midiQueues.entries()) {
@@ -609,6 +733,17 @@ class EngineProcessor extends AudioWorkletProcessor {
                         blockStartTimeSec,
                         blockSize
                     );
+                } else if (nodeData.type === 'arpeggiator') {
+                    // Maintain held note set for arpeggiator
+                    const events = queue.splice(0, queue.length);
+                    let entry = this._arps.get(nodeId);
+                    if (!entry) { entry = { rateMultiplier:1,isPlaying:false,pendingStartBeat:null,pendingRate:null,beatsAccum:0,held:new Set(),order:[],dir:1,activeOut:new Set(),mode:'up',octaves:1 }; this._arps.set(nodeId, entry);}            
+                    for (const ev of events) {
+                        const [status,d1,d2] = ev.data;
+                        const cmd = status & 0xf0;
+                        if (cmd === 0x90 && (d2 & 0x7f) > 0) entry.held.add(d1 & 0x7f);
+                        else if (cmd === 0x80 || (cmd === 0x90 && (d2 & 0x7f) === 0)) entry.held.delete(d1 & 0x7f);
+                    }
                 } else {
                     queue.length = 0; // drop
                 }
@@ -660,6 +795,49 @@ class EngineProcessor extends AudioWorkletProcessor {
         }
 
         return true;
+    }
+
+    _arpApplyOutputSet(nodeId, a, newSet) {
+        // Determine off/on differences
+        const offs = [];
+        for (const n of a.activeOut.values()) if (!newSet.has(n)) offs.push({ data:[0x80, n & 0x7f, 0] });
+        const ons = [];
+        for (const n of newSet.values()) if (!a.activeOut.has(n)) ons.push({ data:[0x90, n & 0x7f, 100] });
+        if (offs.length) this._broadcastArpMIDI(nodeId, offs);
+        if (ons.length) this._broadcastArpMIDI(nodeId, ons);
+        a.activeOut = newSet;
+        if (ons.length === 1) { try { this.port.postMessage({ type:'arpNote', nodeId, note: ons[0].data[1] }); } catch {} }
+    }
+
+    _broadcastArpMIDI(nodeId, events) {
+        if (!Array.isArray(events) || !events.length) return;
+        const downstream = this._connections.filter(c=> c.from === nodeId && (c.fromOutput === 'midi-out' || c.fromOutput === 'midi' || c.fromOutput == null));
+        for (const edge of downstream) {
+            const q = this._midiQueues.get(edge.to) || [];
+            for (const ev of events) q.push(ev);
+            this._midiQueues.set(edge.to, q);
+        }
+    }
+
+    _handlePanic() {
+        // Flush sequencer activeNotes (if any future use) & send All Notes Off to synths
+        for (const [nid, entry] of this._sequencers.entries()) {
+            if (entry.activeNotes && entry.activeNotes.size) {
+                const offs = [];
+                for (const n of entry.activeNotes.values()) offs.push({ data:[0x80, n & 0x7f, 0] });
+                this._broadcastSequencerMIDI(nid, offs);
+                entry.activeNotes.clear();
+            }
+        }
+        for (const [nid, a] of this._arps.entries()) {
+            if (a.activeOut && a.activeOut.size) {
+                const offs = [];
+                for (const n of a.activeOut.values()) offs.push({ data:[0x80, n & 0x7f, 0] });
+                this._broadcastArpMIDI(nid, offs);
+                a.activeOut.clear();
+            }
+        }
+        this._queueAllNotesOffToAllSynths();
     }
 
     _getWaveformIndex(w) {

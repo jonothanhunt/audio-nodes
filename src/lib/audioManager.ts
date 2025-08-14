@@ -34,6 +34,7 @@ export class AudioManager {
     private bpm = 120;
     private beatListeners: Set<(beat: number, bpm: number) => void> = new Set();
     private sequencerStepListeners: Set<(nodeId: string, stepIndex: number) => void> = new Set();
+    private arpTickListeners: Set<(nodeId: string, note: number) => void> = new Set();
     private audioNodes: Map<string, AudioNodeData> = new Map();
     private nodeConnections: Array<{
         from: string;
@@ -164,6 +165,14 @@ export class AudioManager {
                         const stepIndex = Number(msg.stepIndex) || 0;
                         if (nid) {
                             this.sequencerStepListeners.forEach((cb) => { try { cb(nid, stepIndex); } catch { /* ignore */ } });
+                        }
+                        break;
+                    }
+                    case "arpNote": {
+                        const nid = String(msg.nodeId || "");
+                        const note = Number(msg.note) || 0;
+                        if (nid) {
+                            this.arpTickListeners.forEach(cb=>{ try { cb(nid, note); } catch {} });
                         }
                         break;
                     }
@@ -397,6 +406,11 @@ export class AudioManager {
         return () => this.sequencerStepListeners.delete(cb);
     }
 
+    onArpNote(cb: (nodeId: string, note: number) => void) {
+        this.arpTickListeners.add(cb);
+        return () => this.arpTickListeners.delete(cb);
+    }
+
     setSequencerRate(nodeId: string, multiplier: number) {
         if (!this.audioWorklet) return;
         if (![0.25, 0.5, 1, 2, 4].includes(multiplier)) return;
@@ -406,6 +420,22 @@ export class AudioManager {
     setSequencerPlay(nodeId: string, play: boolean) {
         if (!this.audioWorklet) return;
         this.audioWorklet.port.postMessage({ type: "setSequencerPlay", nodeId, play: !!play });
+    }
+
+    setArpPlay(nodeId: string, play: boolean) {
+        if (!this.audioWorklet) return;
+        this.audioWorklet.port.postMessage({ type: 'setArpPlay', nodeId, play: !!play });
+    }
+
+    setArpRate(nodeId: string, multiplier: number) {
+        if (!this.audioWorklet) return;
+        if (![0.25,0.5,1,2,4].includes(multiplier)) return;
+        this.audioWorklet.port.postMessage({ type: 'setArpRate', nodeId, multiplier });
+    }
+
+    panic() {
+        if (!this.audioWorklet) return;
+        this.audioWorklet.port.postMessage({ type: 'panic' });
     }
 
     getBpm() { return this.bpm; }

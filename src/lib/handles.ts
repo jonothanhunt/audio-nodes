@@ -66,6 +66,11 @@ export function getHandleRole(
             if (handleId === "midi") return "midi-in";
             if (handleId === "midi-out") return "midi-out";
             return "unknown";
+        case "arpeggiator":
+            if (handleId === "midi-in" || handleId === "midi") return "midi-in";
+            if (handleId === "midi-out") return "midi-out";
+            if (["playing","rateMultiplier","mode","octaves"].includes(handleId || "")) return "param-in";
+            return "unknown";
         case "value-bool":
             if (handleId === "output" || handleId == null) return "param-out";
             if (handleId === "value") return "param-in"; // allow overriding via link too
