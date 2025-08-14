@@ -212,12 +212,12 @@ export default function AudioNodesEditor() {
                 const isValueNode = (sourceType || "").startsWith("value-");
                 if (!isValueNode) return updated;
 
-                const outHandle = "output"; // HandleLayer default
-                const outgoing = edgesRef.current.filter(
-                    (e) =>
-                        e.source === nodeId &&
-                        (e.sourceHandle || "output") === outHandle
-                );
+                // Collect edges where the source handle is classified as param-out (supports 'param-out' id as well as legacy 'output')
+                const outgoing = edgesRef.current.filter((e) => {
+                    if (e.source !== nodeId) return false;
+                    const role = getHandleRole(sourceType, e.sourceHandle || undefined);
+                    return role === "param-out";
+                });
                 if (!outgoing.length) return updated;
 
                 let changedAny = false;
