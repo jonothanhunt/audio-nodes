@@ -120,7 +120,8 @@ export function NodeShell(props: NodeShellProps) {
           </div>
         )}
       </div>
-  <HandleLayer includeMidiIn={!!primaryIn} inputHandleVariant={inVariant} inputHandleId={primaryIn?.id || 'midi'} includeParamTargets={spec.paramHandles !== false} outputId={primaryOut ? primaryOut.id : undefined} outputVariant={outVariant} />
+  {/* If there is no primaryOut we explicitly pass null so HandleLayer suppresses the default output handle (avoids phantom output on sink nodes like Speaker). */}
+  <HandleLayer includeMidiIn={!!primaryIn} inputHandleVariant={inVariant} inputHandleId={primaryIn?.id || 'midi'} includeParamTargets={spec.paramHandles !== false} outputId={primaryOut ? primaryOut.id : null} outputVariant={outVariant} />
     </NodeUIProvider>
   );
 }
