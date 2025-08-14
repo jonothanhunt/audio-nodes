@@ -31,6 +31,7 @@ I love node‑based creative workflows and making music—so this project is a g
     - [UI layer & design language](#ui-layer--design-language)
   - [Authoring nodes](#authoring-nodes)
     - [High-level: audio vs UI responsibilities](#high-level-audio-vs-ui-responsibilities)
+    - [Central node metadata registry](#central-node-metadata-registry)
     - [NodeSpec & NodeShell](#nodespec--nodeshell)
     - [Parameters vs streaming IO](#parameters-vs-streaming-io)
     - [Creating a new node (checklist)](#creating-a-new-node-checklist)
@@ -224,40 +225,50 @@ All BPM changes, rate changes, sync, and sequencer starts are quantized to the n
 | React Node components | Declarative parameter UI, grid/visual logic (Sequencer), dispatch local param changes via `onParameterChange`. |
 | NodeShell framework | Shared layout, handles, help popover, param auto-rendering via NodeSpec. |
 
+#### Central node metadata registry
+
+Display metadata (name, icon, description, category color) lives ONLY in `src/lib/nodeRegistry.ts`. Node components no longer repeat these. `getNodeMeta(type)` returns `{ displayName, icon, accentColor, description, kind }` and `NodeShell` consumes it for consistent UI.
+
 #### NodeSpec & NodeShell
 
-Nodes now use a declarative spec describing params & IO, rendered by `NodeShell`:
+`NodeSpec` now only defines functional aspects (params, streaming IO, optional help & custom render hooks). No icon, no accent, usually no title.
 
 ```ts
 const spec: NodeSpec = {
   type: 'reverb',
-  title: 'Reverb',
-  shortTitle: 'Reverb',
-  accentColor: '#3b82f6',
   params: [
-   { key: 'feedback', kind: 'number', default: 0.3, min: 0, max: 0.95, step: 0.01, label: 'Feedback' },
-   { key: 'wetMix',   kind: 'number', default: 0.3, min: 0, max: 1,    step: 0.01, label: 'Wet Mix' }
+    { key: 'feedback', kind: 'number', default: 0.3, min: 0, max: 0.95, step: 0.01, label: 'Feedback' },
+    { key: 'wetMix',   kind: 'number', default: 0.3, min: 0, max: 1,    step: 0.01, label: 'Wet Mix' }
   ],
   inputs:  [{ id: 'input',  role: 'audio-in',  label: 'Audio In' }],
   outputs: [{ id: 'output', role: 'audio-out', label: 'Audio Out' }],
   help: {
-   description: 'Adds reverberation to the signal.',
-   inputs:  [{ name: 'Audio In', description: 'Incoming audio.' }],
-   outputs: [{ name: 'Audio Out', description: 'Processed audio.' }]
+    description: 'Adds reverberation to the signal.',
+    inputs:  [{ name: 'Audio In', description: 'Incoming audio.' }],
+    outputs: [{ name: 'Audio Out', description: 'Processed audio.' }]
   }
 };
 
 export default function ReverbNode({ id, data, selected }: ReverbNodeProps) {
-  return <NodeShell id={id} data={data} spec={spec} selected={selected} onParameterChange={data.onParameterChange} />;
+  return (
+    <NodeShell
+      id={id}
+      data={data}
+      spec={spec}
+      selected={selected}
+      onParameterChange={data.onParameterChange}
+    />
+  );
 }
 ```
 
 Benefits:
-* Uniform layout & styling.
-* Auto default-param initialization.
-* Auto param component selection by `kind`.
-* Help popover + handle rendering centralized.
-* Optional `renderBeforeParams` / `renderAfterParams` hooks for custom inserts (e.g. sequencer hint text) and `children` for full-width custom UIs (e.g. step grid).
+* Uniform layout & styling
+* Auto param default application (`useNodeSpec`)
+* Kind-driven param component selection
+* Centralized help popover + handles + accent color
+* Registry-driven icon/name (no duplication)
+* Hooks & `children` for custom UI (grids, previews)
 
 #### Parameters vs streaming IO
 
@@ -269,28 +280,15 @@ Why separate? Clear semantics (sample-stream vs control event) keeps scheduling 
 
 #### Creating a new node (checklist)
 
-1. Decide category (generator, effect, midi, value, etc.).
-2. Add DSP support (Rust) if it introduces new processing:
-  - Implement struct + `process()` method in `audio-engine/src/nodes/`.
-  - Expose via `#[wasm_bindgen]` in `lib.rs`.
-  - Rebuild: `npm run build:wasm`.
-3. Worklet integration:
-  - Create instance map (like `_reverbInstances`) or reuse generic abstraction.
-  - Add processing in `_processGraph` (mixing / routing) or MIDI broadcast logic.
-4. UI spec:
-  - Create `src/components/nodes/<YourNode>.tsx`.
-  - Define `spec: NodeSpec` with params & IO.
-  - Export component returning `<NodeShell ... />` with `onParameterChange`.
-5. Defaults:
-  - Rely on each node's `NodeSpec.params[].default` (applied automatically by `useNodeSpec`).
-  - (Optional) Add category metadata / icon in `nodeRegistry.ts` only.
-6. Wiring:
-  - Ensure `AudioNodesEditor` includes the component in `nodeTypes`.
-7. Test:
-  - Add node, tweak params, verify worklet receives changes (use DevTools console logs if needed).
-8. Persist/migrate:
-  - If params stored in project, no extra work (generic persistence copies data minus functions).
-9. Document (README snippet or dedicated docs page).
+1. Registry: Add entry in `nodeRegistry.ts` (type, name, description, icon, category). No display props in the component.
+2. DSP (if needed): Implement Rust node + expose via `lib.rs`; rebuild WASM.
+3. Worklet: Instantiate/process in `audio-engine-processor.js` (audio or MIDI path).
+4. UI: Create `src/components/nodes/<Name>Node.tsx` with minimal `NodeSpec` (params, inputs/outputs, help) and return `<NodeShell />`.
+5. Register node component in editor `nodeTypes` (if not auto-wired).
+6. Verify in browser (add node, tweak params, inspect behavior/messages).
+7. Persistence: Ensure defaults present; project save/load should “just work”.
+8. Optional custom UI via `renderBeforeParams` / `renderAfterParams` or `children`.
+9. Docs/tests as complexity grows.
 
 #### Sequencer example (timed/MIDI)
 
@@ -355,32 +353,21 @@ Constraints
 Implementation checklist (GitHub style)
 
 ### 1. Worklet: global transport & scheduling (beat-only)
-- [x] Create Transport state in `audio-engine-processor.js`
-  - [x] Fields: sampleRate, blockSize, frameCounter (u64), bpm (f32), framesPerBeat, nextBeatFrame, beatIndex
-- [x] Emit beat events (with absolute beatIndex) when beat boundaries fall in a block
-- [x] Sequencer registry structure ({ nodeId, rateMultiplier, isPlaying, pendingStartBeat?, stepIndex })
-- [x] Apply pendingStartBeat at beat boundary (set stepIndex=0, isPlaying=true)
-- [x] Support syncAll flag: reset stepIndex=0 for all playing sequencers at next beat
-- [x] Step advancement logic honoring rateMultiplier (0.25x,0.5x,1x,2x,4x) against node length
-- [x] Message handlers:
-  - [x] setBpm { bpm } (schedule apply at next beat)
-  - [x] setSequencerRate { nodeId, multiplier }
-  - [x] setSequencerPlay { nodeId, play }
-  - [x] syncAllNextBeat {}
-- [x] Outbound events: beat, sequencerStep (periodic), syncScheduled
+- [x] Core transport timing & fields
+- [x] Beat emission & pending BPM application
+- [x] Sequencer registry with quantized start & rate changes
+- [x] Sync-all & step advancement logic
+- [x] Message handlers (BPM, rate, play, sync)
+- [x] Outbound events (beat, sequencerStep, syncScheduled)
 
-### 2. UI: BPM control, beat LED, sync-all button
-- [x] Create bottom-center "Transport Pill" bar (fixed, pointer-events auto, subtle shadow)
-  - [x] Position & style (rounded pill, blurred, centered)
-- [x] Inside pill: [ Beat LED ] [ BPM input ] [ Sync sequencers button ]
-  - [x] Beat LED flashes red for half beat
-  - [x] (Optional) Bar-one enhancement (glow on first beat)
-  - [x] Accessible name
-- [x] BPM input: numeric only, clearable, pending highlight until applied
-  - [x] Arrow key increments (Shift=±5)
-- [x] Sync button posts syncAllNextBeat
-- [x] Esc reverts edit
-- [x] Theme integration
+### 2. UI: Transport & controls
+- [x] Draggable transport pill (persisted)
+- [x] Beat LED pulse
+- [x] BPM input (quantized apply + keyboard inc/dec)
+- [x] Sync-all button
+- [x] Panic (All Notes Off) button
+- [x] WAV recording & preview modal (custom player)
+- [x] Master mute (with preview layer mute)
 
 ### 3. Sequencer node UI changes
 - [x] Remove per-node BPM param
@@ -397,35 +384,29 @@ Implementation checklist (GitHub style)
 - [x] Persist & restore actual transport BPM (stored on window & serialized)
 
 ### 5. Node registry / defaults
-- [x] Sequencer rateMultiplier default via NodeSpec
-- [ ] (If needed) nodeRegistry metadata update (not required yet)
+- [x] Central node metadata (single source of truth)
+- [x] Node components stripped of duplicate display data
+- [x] Registry-driven accent/icon/title resolution in NodeShell
 
 ### Modulation
 
-Initial LFO node implemented (beat-synced):
-
-- Waveforms: sine, triangle, saw, square
-- Param: Beats/Cycle (period length in beats)
-- Additional params: depth, offset, bipolar toggle, phase
-- Output: single numeric param-out (LFO Out) that can feed any param-in (e.g. synth gain / ADSR)
-- Implementation: Rust `LfoNode` generates per-block value inside worklet; additive modulation applied before synth processing.
-- Future: per-destination depth, multiplicative modes, visual waveform preview, multiple simultaneous modulators summing.
+Implemented LFO (sync via beats-per-cycle). Future: random/S&H, per-destination depth, waveform preview, advanced routing.
 
 ### 6. Acceptance criteria verification
-- [ ] Two sequencers start together & remain aligned for >2 minutes
-- [ ] BPM change applies exactly at beat boundary; no drift
-- [ ] Rate change applies at next beat correctly
-- [ ] Sync all causes aligned restart at beat boundary
-- [ ] New sequencer joins on beat boundary when Play enabled
-- [ ] Rapid play toggles collapse to one start event
+- [x] Sequencers remain aligned long-term
+- [x] BPM change quantized
+- [x] Rate change quantized
+- [x] Sync-all restart accurate
+- [x] New sequencer joins on boundary
+- [x] Debounced rapid play toggles
 
 ### 7. Edge case handling
-- [ ] Play false immediately gates output (without phase reset)
-- [ ] Removing a sequencer cleans registry entry
-- [ ] Adding multiple sequencers doesn’t degrade timing (O(1) or O(n) acceptable for small n)
+- [x] Immediate gate on stop
+- [x] Registry cleanup on removal
+- [x] Multi-sequencer stable performance
 
 ### 8. Manual test plan execution
-- [ ] Manual tests executed & documented in PR / notes
+- [x] Core manual tests executed (tempo, sync, alignment, recording, mute)
 
 ### 9. Follow-ups (deferred)
 - [ ] Dotted/triplet multipliers (1.5x, 0.666x)
@@ -449,27 +430,11 @@ This is a living checklist of planned features. Tick items will be updated as we
 
 ### Core nodes
 
-- [x] Arpeggiator node (basic)
-  - [x] Modes (up, down, up-down, random, chord)
-  - [x] Rate multiplier (shared beat-quantized system)
-  - [x] Octave range (1–4)
-  - [x] Quantized start/stop & rate changes (next beat)
-  - [ ] Swing
-- [ ] Envelope node (mod)
-  - [ ] ADSR and multi-stage
-  - [ ] Trigger input, retrigger, one-shot/loop
-  - [ ] Param-out for modulation
-- [ ] Sampler node
-  - [ ] Load samples (drag & drop, file picker)
-  - [ ] Basic playback: one-shot, loop, start offset, length
-  - [ ] Multi-sample mapping by MIDI note/velocity
-  - [ ] Envelopes (ADSR), filter, gain
-  - [ ] Disk/HTTP streaming for long samples (progressive)
-  - [ ] WASM-side resampling/interpolation (high quality)
-- [ ] LFO node
-  - [ ] Shapes (sine, tri, saw, square, random S&H)
-  - [ ] Rate, sync, phase, offset, depth
-  - [ ] Param-out for modulation
+- [x] Arpeggiator (modes, rate, octaves, quantized play)
+- [x] LFO (initial shapes, sync, param-out)
+- [ ] LFO enhancements (random/S&H, preview, advanced routing)
+- [ ] Envelope (ADSR, multi-stage, trigger modes)
+- [ ] Sampler (load, playback modes, mapping, streaming)
 
 ### Effects nodes
 
@@ -523,6 +488,7 @@ This is a living checklist of planned features. Tick items will be updated as we
 
 ### Documentation
 
+- [x] Central registry & authoring instructions updated
 - [ ] Node reference docs (per node)
 - [ ] Modulation/handles guide
 - [ ] Contributing guide
