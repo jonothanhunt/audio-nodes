@@ -55,6 +55,9 @@ class EngineProcessor extends AudioWorkletProcessor {
             syncAllNextBeat: false,     // request to reset sequencers next beat
         };
 
+    // --- Live capture (for WAV encoding on main thread) ---
+    this._captureActive = false; // when true we post raw PCM blocks to main thread
+
     // --- Sequencer registry (global clock driven) ---
     // Map<nodeId, {
     //   rateMultiplier: number (0.25,0.5,1,2,4)
@@ -528,6 +531,15 @@ class EngineProcessor extends AudioWorkletProcessor {
                 }
                 break;
             }
+            case 'startCapture': {
+                this._captureActive = true;
+                break;
+            }
+            case 'stopCapture': {
+                this._captureActive = false;
+                try { this.port.postMessage({ type:'captureStopped' }); } catch {}
+                break;
+            }
             default:
                 break;
         }
@@ -801,6 +813,16 @@ class EngineProcessor extends AudioWorkletProcessor {
 
             this._processGraph(outL, outR);
 
+            // If capturing, send a copy of this block to main thread (Float32 PCM)
+            if (this._captureActive) {
+                // Copy to new arrays to avoid transferring underlying output buffers
+                const left = new Float32Array(outL); // copy
+                const right = new Float32Array(outR);
+                try {
+                    this.port.postMessage({ type:'captureBlock', left, right }, [left.buffer, right.buffer]);
+                } catch {}
+            }
+
             // Advance coarse timebase by one block
             this._timebase.audioCurrentTimeSec += blockSize / sampleRate;
             t.frameCounter += blockSize;
@@ -964,6 +986,10 @@ class EngineProcessor extends AudioWorkletProcessor {
                     // Merge onto data (non-destructive): create shallow copy to not mutate original node data map
                     if (Object.keys(modAccum).length) {
                         data = { ...data, ...modAccum };
+                        // Throttle: send a lightweight preview of modulated numeric params (no more than once per block)
+                        try {
+                            this.port.postMessage({ type: 'modPreview', nodeId, data: modAccum });
+                        } catch {}
                     }
                 }
             }

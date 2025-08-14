@@ -1,6 +1,6 @@
 "use client";
 import React from 'react';
-import { Waves } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { NodeShell } from '../node-framework/NodeShell';
 import { NodeSpec } from '../node-framework/types';
 
@@ -38,7 +38,7 @@ const spec: NodeSpec = {
             { name: 'Audio Out', description: 'Processed audio signal.' }
         ]
     },
-    icon: Waves
+    icon: Sparkles
 };
 
 export default function ReverbNode({ id, data, selected }: ReverbNodeProps) {

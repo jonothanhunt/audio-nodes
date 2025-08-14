@@ -1,6 +1,6 @@
 "use client";
 import React from 'react';
-import { Volume2 } from 'lucide-react';
+import { Waves } from 'lucide-react';
 import { NodeShell } from '../node-framework/NodeShell';
 import { NodeSpec } from '../node-framework/types';
 
@@ -40,7 +40,7 @@ const spec: NodeSpec = {
         ],
         outputs: [ { name: 'Audio Out', description: 'Synth audio output.' } ]
     },
-    icon: Volume2
+    icon: Waves
 };
 
 export default function SynthesizerNode({ id, data, selected }: SynthNodeProps) {

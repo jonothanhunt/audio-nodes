@@ -35,6 +35,18 @@ export class AudioManager {
     private beatListeners: Set<(beat: number, bpm: number) => void> = new Set();
     private sequencerStepListeners: Set<(nodeId: string, stepIndex: number) => void> = new Set();
     private arpTickListeners: Set<(nodeId: string, note: number) => void> = new Set();
+    private recording: {
+    mediaRecorder: MediaRecorder | null; // retained for legacy shape; always null in WAV-only mode
+    chunks: Blob[]; // unused for WAV; kept to avoid breaking callers expecting property
+        startTime: number;
+        onStop?: (blob: Blob, durationSec: number) => void;
+        wav?: {
+            enabled: boolean;
+            pcmL: Float32Array[];
+            pcmR: Float32Array[];
+        };
+    } | null = null;
+    private modPreviewListeners: Set<(nodeId: string, data: Record<string, number>) => void> = new Set();
     private audioNodes: Map<string, AudioNodeData> = new Map();
     private nodeConnections: Array<{
         from: string;
@@ -42,6 +54,9 @@ export class AudioManager {
         fromOutput: string;
         toInput: string;
     }> = [];
+    private previewMuteDepth = 0;
+    private userMuted = false;
+    private masterGain: GainNode | null = null;
 
     constructor() {
         // Worklet loads WASM itself; nothing to do here.
@@ -176,6 +191,21 @@ export class AudioManager {
                         }
                         break;
                     }
+                    case 'modPreview': {
+                        const nid = String(msg.nodeId || '');
+                        if (nid && msg.data && typeof msg.data === 'object') {
+                            const clean: Record<string, number> = {};
+                            for (const [k,v] of Object.entries(msg.data)) {
+                                if (typeof v === 'number' && isFinite(v)) clean[k] = v;
+                            }
+                            this.modPreviewListeners.forEach(cb=>{ try { cb(nid, clean); } catch {} });
+                            // Also broadcast DOM CustomEvent for React hooks not directly registered
+                            try {
+                                window.dispatchEvent(new CustomEvent('audioNodesNodeRendered', { detail: { nodeId: nid, data: clean } }));
+                            } catch {}
+                        }
+                        break;
+                    }
                     case "syncScheduled": {
                         // Could surface a UI confirmation if desired
                         break;
@@ -185,11 +215,32 @@ export class AudioManager {
                 }
             };
 
+            // Capture raw PCM blocks for WAV when recording with wav option
+            try {
+                workletNode.port.addEventListener('message', (e: MessageEvent) => {
+                    const data = e.data;
+                    if (!data || typeof data !== 'object') return;
+                    if (data.type === 'captureBlock' && this.recording && this.recording.wav && this.recording.wav.enabled) {
+                        // Reconstruct Float32Array from transferable buffers (already Float32Array instances)
+                        const { left, right } = data;
+                        if (left && right && left.length === right.length) {
+                            this.recording.wav.pcmL.push(left);
+                            this.recording.wav.pcmR.push(right);
+                        }
+                    } else if (data.type === 'captureStopped') {
+                        // finalize if still active
+                    }
+                });
+            } catch {}
+
             // Proactively bootstrap to avoid missing early needBootstrap messages
             this.bootstrapWasmToWorklet();
 
-            // Connect to destination
-            workletNode.connect(this.audioContext.destination);
+            // Master gain node for mute control
+            this.masterGain = this.audioContext.createGain();
+            this.masterGain.gain.value = 1;
+            workletNode.connect(this.masterGain);
+            this.masterGain.connect(this.audioContext.destination);
 
             this.audioWorklet = workletNode;
             this.isInitialized = true;
@@ -248,6 +299,10 @@ export class AudioManager {
                 this.audioWorklet.disconnect();
                 this.audioWorklet = null;
             }
+            // Abort recording if active
+            if (this.recording && this.recording.mediaRecorder && this.recording.mediaRecorder.state !== 'inactive') {
+                try { this.recording.mediaRecorder.stop(); } catch {}
+            }
             if (this.audioContext) {
                 this.audioContext.close();
                 this.audioContext = null;
@@ -259,6 +314,7 @@ export class AudioManager {
         } finally {
             this.isInitialized = false;
             this.wasmReady = false;
+            this.recording = null;
         }
     }
 
@@ -439,4 +495,108 @@ export class AudioManager {
     }
 
     getBpm() { return this.bpm; }
+
+    // --- Recording API (Stereo master capture) ---
+    startRecording(onStop?: (blob: Blob, durationSec: number) => void): boolean {
+        if (!this.audioContext || !this.audioWorklet) return false;
+        if (this.recording && this.isRecording()) return false;
+        // Always use WAV path now.
+        try {
+            // Ensure worklet still connected to destination (in case prior modifications changed routing)
+            if (this.audioWorklet.numberOfOutputs && this.audioContext.destination) {
+                try { this.audioWorklet.connect(this.audioContext.destination); } catch {}
+            }
+        } catch {}
+        const rec: typeof this.recording = { mediaRecorder: null, chunks: [], startTime: performance.now(), onStop, wav: { enabled: true, pcmL: [], pcmR: [] } };
+        this.recording = rec;
+        try { this.audioWorklet.port.postMessage({ type: 'startCapture' }); } catch {}
+        return true;
+    }
+
+    stopRecording(): boolean {
+        if (!this.recording) return false;
+        // WAV finalize
+        if (this.recording.wav && this.recording.wav.enabled) {
+            try { this.audioWorklet?.port.postMessage({ type: 'stopCapture' }); } catch {}
+            const { pcmL, pcmR } = this.recording.wav;
+            if (!pcmL.length) return false;
+            const totalSamples = pcmL.reduce((a,b)=>a + b.length, 0);
+            const interleaved = new Float32Array(totalSamples * 2);
+            let offset = 0;
+            for (let i=0;i<pcmL.length;i++) {
+                const L = pcmL[i]; const R = (pcmR[i] && pcmR[i].length === L.length) ? pcmR[i] : L;
+                for (let j=0;j<L.length;j++) {
+                    interleaved[offset++] = L[j];
+                    interleaved[offset++] = R[j];
+                }
+            }
+            const wavBuffer = this._encodeWav(interleaved, 2, this.sampleRate);
+            const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+            const dur = (performance.now() - this.recording.startTime) / 1000;
+            if (this.recording.onStop) { try { this.recording.onStop(blob, dur); } catch {} }
+            // mark as finished so a new recording can start
+            this.recording.wav.enabled = false;
+            this.recording = null;
+            return true;
+        }
+        return false;
+    }
+
+    private _encodeWav(interleaved: Float32Array, channels: number, sampleRate: number): ArrayBuffer {
+        const bytesPerSample = 2; // 16-bit
+        const blockAlign = channels * bytesPerSample;
+        const byteRate = sampleRate * blockAlign;
+    // dataSize not needed explicitly; size written directly below
+        const buffer = new ArrayBuffer(44 + interleaved.length * bytesPerSample);
+        const view = new DataView(buffer);
+        let offset = 0;
+        const writeString = (s: string) => { for (let i=0;i<s.length;i++) view.setUint8(offset++, s.charCodeAt(i)); };
+        // RIFF header
+        writeString('RIFF');
+        view.setUint32(offset, 36 + interleaved.length * bytesPerSample, true); offset += 4;
+        writeString('WAVE');
+        // fmt chunk
+        writeString('fmt ');
+        view.setUint32(offset, 16, true); offset += 4; // PCM chunk size
+        view.setUint16(offset, 1, true); offset += 2; // audio format PCM
+        view.setUint16(offset, channels, true); offset += 2;
+        view.setUint32(offset, sampleRate, true); offset += 4;
+        view.setUint32(offset, byteRate, true); offset += 4;
+        view.setUint16(offset, blockAlign, true); offset += 2;
+        view.setUint16(offset, bytesPerSample * 8, true); offset += 2;
+        // data chunk
+        writeString('data');
+        view.setUint32(offset, interleaved.length * bytesPerSample, true); offset += 4;
+        // PCM samples
+        for (let i=0;i<interleaved.length;i++) {
+            let s = interleaved[i];
+            s = Math.max(-1, Math.min(1, s));
+            view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            offset += 2;
+        }
+        return buffer;
+    }
+
+    isRecording(): boolean { return !!(this.recording && this.recording.wav && this.recording.wav.enabled); }
+
+    // --- Preview mute API ---
+    private updateMasterGainVolume() {
+        if (!this.masterGain) return;
+        const muted = this.userMuted || this.previewMuteDepth > 0;
+        this.masterGain.gain.value = muted ? 0 : 1;
+    }
+    async muteForPreview() {
+        this.previewMuteDepth++;
+        this.updateMasterGainVolume();
+    }
+    async resumeFromPreview() {
+        if (this.previewMuteDepth > 0) this.previewMuteDepth--;
+        this.updateMasterGainVolume();
+    }
+
+    setUserMuted(muted: boolean) {
+        this.userMuted = !!muted;
+        this.updateMasterGainVolume();
+    }
+    isUserMuted() { return this.userMuted; }
 }

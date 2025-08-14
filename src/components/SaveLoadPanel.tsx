@@ -64,7 +64,7 @@ export default function SaveLoadPanel({
     }, [isMenuOpen]);
 
     return (
-        <div className="relative z-40 bg-gray-800/80 backdrop-blur-md rounded-xl p-3 shadow border border-gray-700/80">
+        <div data-save-load-panel className="relative z-40 bg-gray-800/80 backdrop-blur-md rounded-xl p-3 shadow border border-gray-700/80">
             <input
                 ref={fileInputRef}
                 type="file"

@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
 import { ParamRow, sharedInputCls } from "../ParamRow";
+import { useLiveParamModulation } from '@/hooks/useLiveParamModulation';
 import { useNodeUI } from "../NodeUIProvider";
 
 interface NumberParamProps {
@@ -36,6 +37,7 @@ export function NumberParam({
 }: NumberParamProps) {
     const { accentColor, isParamConnected } = useNodeUI();
     const connected = isParamConnected?.(paramKey) ?? false;
+    const liveModValue = useLiveParamModulation(nodeId, paramKey, !connected);
     const stop = (e: React.SyntheticEvent) => {
         e.stopPropagation();
     };
@@ -83,9 +85,11 @@ export function NumberParam({
     const invalid = raw.trim() === "" || Number.isNaN(parseFloat(raw));
     const showSlider = useSlider ?? (min != null && max != null);
     const effectiveValue = lastCommittedRef.current;
+    // Display value should reflect live modulation when connected
+    const displayValue = connected && typeof liveModValue === 'number' ? liveModValue : effectiveValue;
     const percent =
         min != null && max != null
-            ? ((effectiveValue - min) / (max - min)) * 100
+            ? ((displayValue - min) / (max - min)) * 100
             : 0;
 
     const slider =
@@ -114,7 +118,7 @@ export function NumberParam({
                         min={min}
                         max={max}
                         step={step ?? (max - min) / 100}
-                        value={effectiveValue}
+                        value={displayValue}
                         disabled={connected}
                         onChange={(e) => {
                             e.stopPropagation();
@@ -135,7 +139,7 @@ export function NumberParam({
         <ParamRow label={label} paramKey={paramKey} badge={badge}>
             <input
                 type="number"
-                value={raw}
+                value={connected && typeof liveModValue === 'number' ? liveModValue.toFixed(3) : raw}
                 min={min}
                 max={max}
                 step={step}

@@ -1,4 +1,4 @@
-import { Volume2, Waves, Speaker, Music, ToggleRight, Hash, List } from "lucide-react";
+import { Waves, Sparkles, Speaker, Music, ToggleRight, Hash, List } from "lucide-react";
 
 export type NodeCategoryName = "Synthesis" | "Effects" | "Sequencing" | "Utility" | "Value";
 
@@ -25,8 +25,8 @@ export const NODE_CATEGORIES: CategoryEntry[] = [
         color: "#8b5cf6",
         kind: "audio",
         nodes: [
-            { type: "oscillator", name: "Oscillator", description: "Basic waveform generator", tag: "synthesis", icon: Volume2 },
-            { type: "synth", name: "Synth", description: "Poly synth (MIDI in → audio out)", tag: "synthesis", icon: Volume2 },
+            { type: "oscillator", name: "Oscillator", description: "Basic waveform generator", tag: "synthesis", icon: Waves },
+            { type: "synth", name: "Synth", description: "Poly synth (MIDI in → audio out)", tag: "synthesis", icon: Waves },
         ],
     },
     {
@@ -34,7 +34,7 @@ export const NODE_CATEGORIES: CategoryEntry[] = [
         color: "#3b82f6",
         kind: "effect",
         nodes: [
-            { type: "reverb", name: "Reverb", description: "Spatial reverberation", tag: "effect", icon: Waves },
+            { type: "reverb", name: "Reverb", description: "Spatial reverberation", tag: "effect", icon: Sparkles },
         ],
     },
     {
