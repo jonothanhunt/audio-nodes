@@ -46,7 +46,9 @@ I love node‑based creative workflows and making music—so this project is a g
 ### Install
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/jonothanhunt/audio-nodes.git
+# or (SSH)
+# git clone git@github.com:jonothanhunt/audio-nodes.git
 cd audio-nodes
 npm install
 ```
