@@ -8,6 +8,7 @@
   <a href="https://nodejs.org/"><img alt="node >=18" src="https://img.shields.io/badge/node-%3E%3D18-brightgreen" /></a>
   <a href="https://www.rust-lang.org/"><img alt="rust stable" src="https://img.shields.io/badge/rust-stable-orange" /></a>
   <a href="https://github.com/rustwasm/wasm-pack"><img alt="wasm-pack" src="https://img.shields.io/badge/wasm--pack-ready-purple" /></a>
+  <a href="./LICENSE"><img alt="License MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg" /></a>
 </p>
 
 <p align="center"><strong>Modular audio & MIDI playground in the browser.</strong><br/>Rust + WebAssembly DSP core • Next.js UI • React Flow graph</p>
@@ -25,7 +26,6 @@
 7. [Roadmap & TODO](#roadmap--todo)
 8. [Contributing](#contributing)
 9. [License](#license)
-
 ---
 
 ## Introduction
@@ -224,6 +224,12 @@ Completed (highlights):
 ## Contributing
 
 PRs and issues welcome. For sizeable DSP or architectural changes, open an issue first outlining intent + rough approach. Keep nodes focused (single responsibility) and prefer extending shared primitives where possible.
+
+---
+
+## License
+
+MIT © 2025 Jonothan Hunt — see [LICENSE](./LICENSE) for full text.
 
 ---
 
