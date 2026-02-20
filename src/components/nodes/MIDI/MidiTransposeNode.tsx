@@ -1,17 +1,17 @@
 "use client";
 import React from 'react';
-import { NodeShell } from '../node-framework/NodeShell';
-import { NodeSpec } from '../node-framework/types';
+import { NodeShell } from "../../node-framework/NodeShell";
+import { NodeSpec } from "../../node-framework/types";
 
-interface MidiTransposeNodeData { semitones?: number; clampLow?: number; clampHigh?: number; passOther?: boolean; _connectedParams?: string[]; onParameterChange: (nodeId: string, key: string, value: unknown) => void; [k: string]: unknown; }
+interface MidiTransposeNodeData { semitones?: number; clampLow?: number; clampHigh?: number; passOther?: boolean; _connectedParams?: string[]; onParameterChange: (nodeId: string, key: string, value: unknown) => void;[k: string]: unknown; }
 interface MidiTransposeNodeProps { id: string; selected?: boolean; data: MidiTransposeNodeData; }
 
 const spec: NodeSpec = {
     type: 'midi-transpose',
     // title omitted (registry provides)
     // accentColor & icon centralized in registry
-    inputs: [ { id: 'midi', role: 'midi-in', label: 'MIDI In' } ],
-    outputs: [ { id: 'midi-out', role: 'midi-out', label: 'MIDI Out' } ],
+    inputs: [{ id: 'midi', role: 'midi-in', label: 'MIDI In' }],
+    outputs: [{ id: 'midi-out', role: 'midi-out', label: 'MIDI Out' }],
     params: [
         { key: 'semitones', kind: 'number', default: 0, min: -24, max: 24, step: 1, label: 'Semitones' },
         { key: 'clampLow', kind: 'number', default: 0, min: 0, max: 127, step: 1, label: 'Clamp Low' },
@@ -26,7 +26,7 @@ const spec: NodeSpec = {
             { name: 'Clamp Low / High', description: 'Limit resulting note numbers to this inclusive range.' },
             { name: 'Pass Other', description: 'If enabled non-note messages are forwarded unchanged.' }
         ],
-        outputs: [ { name: 'MIDI Out', description: 'Transposed (and optionally clamped) MIDI note events.' } ]
+        outputs: [{ name: 'MIDI Out', description: 'Transposed (and optionally clamped) MIDI note events.' }]
     },
     // icon centralized in registry
 };

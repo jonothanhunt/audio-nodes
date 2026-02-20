@@ -1,20 +1,20 @@
 "use client";
 import React from 'react';
-import { NodeShell } from '../node-framework/NodeShell';
-import { NodeSpec } from '../node-framework/types';
+import { NodeShell } from "../../node-framework/NodeShell";
+import { NodeSpec } from "../../node-framework/types";
 
-interface SynthNodeData { preset?: string; waveform?: string; attack?: number; decay?: number; sustain?: number; release?: number; cutoff?: number; resonance?: number; glide?: number; gain?: number; maxVoices?: number; _connectedParams?: string[]; onParameterChange: (nodeId: string, key: string, value: unknown) => void; [k: string]: unknown; }
+interface SynthNodeData { preset?: string; waveform?: string; attack?: number; decay?: number; sustain?: number; release?: number; cutoff?: number; resonance?: number; glide?: number; gain?: number; maxVoices?: number; _connectedParams?: string[]; onParameterChange: (nodeId: string, key: string, value: unknown) => void;[k: string]: unknown; }
 interface SynthNodeProps { id: string; selected?: boolean; data: SynthNodeData; }
 
 const spec: NodeSpec = {
     type: 'synth',
     // title omitted (registry provides)
     // accentColor & icon centralized in registry
-    inputs: [ { id: 'midi', role: 'midi-in', label: 'MIDI In' } ],
-    outputs: [ { id: 'output', role: 'audio-out', label: 'Audio Out' } ],
+    inputs: [{ id: 'midi', role: 'midi-in', label: 'MIDI In' }],
+    outputs: [{ id: 'output', role: 'audio-out', label: 'Audio Out' }],
     params: [
-        { key: 'preset', kind: 'select', default: 'Init', options: ['Init','Pluck','Pad','Bass'], label: 'Preset' },
-        { key: 'waveform', kind: 'select', default: 'sawtooth', options: ['sine','sawtooth','square','triangle'], label: 'Waveform' },
+        { key: 'preset', kind: 'select', default: 'Init', options: ['Init', 'Pluck', 'Pad', 'Bass'], label: 'Preset' },
+        { key: 'waveform', kind: 'select', default: 'sawtooth', options: ['sine', 'sawtooth', 'square', 'triangle'], label: 'Waveform' },
         { key: 'attack', kind: 'number', default: 0.005, min: 0, step: 0.001, label: 'Attack' },
         { key: 'decay', kind: 'number', default: 0.12, min: 0, step: 0.001, label: 'Decay' },
         { key: 'sustain', kind: 'number', default: 0.7, min: 0, max: 1, step: 0.01, label: 'Sustain' },
@@ -37,7 +37,7 @@ const spec: NodeSpec = {
             { name: 'Gain', description: 'Output level.' },
             { name: 'Voices', description: 'Maximum simultaneous polyphony.' }
         ],
-        outputs: [ { name: 'Audio Out', description: 'Synth audio output.' } ]
+        outputs: [{ name: 'Audio Out', description: 'Synth audio output.' }]
     },
     // icon centralized in registry
 };

@@ -1,6 +1,7 @@
 use wasm_bindgen::prelude::*;
 
 pub mod nodes;
+pub mod dsp;
 
 // Import the `console.log` function from the `console` module of web_sys
 #[wasm_bindgen]

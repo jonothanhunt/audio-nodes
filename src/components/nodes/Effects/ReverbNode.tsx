@@ -1,7 +1,7 @@
 "use client";
 import React from 'react';
-import { NodeShell } from '../node-framework/NodeShell';
-import { NodeSpec } from '../node-framework/types';
+import { NodeShell } from "../../node-framework/NodeShell";
+import { NodeSpec } from "../../node-framework/types";
 
 interface ReverbNodeData {
     feedback?: number;
@@ -22,8 +22,8 @@ const spec: NodeSpec = {
         { key: 'feedback', kind: 'number', default: 0.3, min: 0, max: 0.95, step: 0.01, label: 'Feedback' },
         { key: 'wetMix', kind: 'number', default: 0.3, min: 0, max: 1, step: 0.01, label: 'Wet Mix' },
     ],
-    inputs: [ { id: 'input', role: 'audio-in', label: 'Audio In' } ],
-    outputs: [ { id: 'output', role: 'audio-out', label: 'Audio Out' } ],
+    inputs: [{ id: 'input', role: 'audio-in', label: 'Audio In' }],
+    outputs: [{ id: 'output', role: 'audio-out', label: 'Audio Out' }],
     help: {
         description: 'Adds reverberation (echo/space) to the audio signal.',
         inputs: [

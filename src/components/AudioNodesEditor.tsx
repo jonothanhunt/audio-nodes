@@ -12,30 +12,31 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 
 import NodeLibrary from "@/components/NodeLibrary";
-import OscillatorNode from "@/components/nodes/OscillatorNode";
-import ReverbNode from "@/components/nodes/ReverbNode";
-import SpeakerNode from "@/components/nodes/SpeakerNode";
-import SequencerNode from "@/components/nodes/SequencerNode";
-import ArpeggiatorNode from "@/components/nodes/ArpeggiatorNode";
-import SynthesizerNode from "./nodes/SynthesizerNode";
-import MidiInputNode from "@/components/nodes/MidiInputNode";
+import OscillatorNode from "@/components/nodes/Synthesis/OscillatorNode";
+import ReverbNode from "@/components/nodes/Effects/ReverbNode";
+import SpeakerNode from "@/components/nodes/Utility/SpeakerNode";
+import SequencerNode from "@/components/nodes/MIDI/SequencerNode";
+import ArpeggiatorNode from "@/components/nodes/MIDI/ArpeggiatorNode";
+import SynthesizerNode from "@/components/nodes/Synthesis/SynthesizerNode";
+import MidiInputNode from "@/components/nodes/MIDI/MidiInputNode";
 import SaveLoadPanel from "@/components/SaveLoadPanel";
 import { useAudioEngine } from "@/hooks/useAudioEngine";
 // nodes.ts removed – inline minimal initial data builder (handlers only; param defaults via NodeSpec)
 import { useProjectPersistence } from "@/hooks/useProjectPersistence";
 import { useGraph } from "@/hooks/useGraph";
-import MidiTransposeNode from "@/components/nodes/MidiTransposeNode";
+import { useMidiAccess } from "@/hooks/useMidiAccess";
+import MidiTransposeNode from "@/components/nodes/MIDI/MidiTransposeNode";
 import GradientEdge from "@/components/edges/GradientEdge";
 import { getNodeMeta } from "@/lib/nodeRegistry";
 import { getHandleRole } from "@/lib/handles";
 import type { OnConnectStartParams } from "reactflow";
-import ValueBoolNode from "./nodes/ValueBoolNode";
-import ValueNumberNode from "./nodes/ValueNumberNode";
-import ValueStringNode from "./nodes/ValueStringNode";
-import ValueTextNode from "./nodes/ValueTextNode";
-import ValueSelectNode from "./nodes/ValueSelectNode";
+import ValueBoolNode from "@/components/nodes/Value/ValueBoolNode";
+import ValueNumberNode from "@/components/nodes/Value/ValueNumberNode";
+import ValueStringNode from "@/components/nodes/Value/ValueStringNode";
+import ValueTextNode from "@/components/nodes/Value/ValueTextNode";
+import ValueSelectNode from "@/components/nodes/Value/ValueSelectNode";
 import TransportPill from "@/components/TransportPill";
-import LFONode from "@/components/nodes/LFONode";
+import LFONode from "@/components/nodes/Utility/LFONode";
 
 // Custom node registry
 const nodeTypes = {
@@ -73,13 +74,13 @@ export default function AudioNodesEditor() {
 
     // Bridge: dispatch sequencerStep events from audioManager to window so individual SequencerNode components can listen
     React.useEffect(() => {
-        const off = audioManager.onSequencerStep((nodeId, stepIndex) => {
+        const off = audioManager.onSequencerStep((nodeId: string, stepIndex: number) => {
             try {
                 const ev = new CustomEvent("audioNodesSequencerStep", { detail: { nodeId, stepIndex } });
                 window.dispatchEvent(ev);
-            } catch {}
+            } catch { }
         });
-        return () => { try { off(); } catch {} };
+        return () => { try { off(); } catch { } };
     }, [audioManager]);
 
     // Listen for UI-triggered play/rate events from SequencerNode components and forward to audioManager
@@ -271,7 +272,7 @@ export default function AudioNodesEditor() {
             if (!currentIds.has(id)) {
                 try {
                     audioManager.removeNode(id);
-                } catch {}
+                } catch { }
             }
         }
         // push updates
@@ -467,7 +468,7 @@ export default function AudioNodesEditor() {
                     const json = await res.json();
                     handleLoadFromObject(json as unknown);
                     break;
-                } catch {}
+                } catch { }
             }
         };
         void boot();
@@ -586,7 +587,7 @@ export default function AudioNodesEditor() {
             const bump = centerInViewport
                 ? 0
                 : ((pasteBumpRef.current = (pasteBumpRef.current + 1) % 5),
-                  24 + 6 * pasteBumpRef.current);
+                    24 + 6 * pasteBumpRef.current);
             const newNodes: Node[] = nodesToCopy.map((n) => {
                 const delta = {
                     x: (n.position?.x || 0) - centroid.x,
@@ -595,13 +596,13 @@ export default function AudioNodesEditor() {
                 const base =
                     centerInViewport && centerTarget
                         ? {
-                              x: centerTarget.x + delta.x,
-                              y: centerTarget.y + delta.y,
-                          }
+                            x: centerTarget.x + delta.x,
+                            y: centerTarget.y + delta.y,
+                        }
                         : {
-                              x: (n.position?.x || 0) + bump,
-                              y: (n.position?.y || 0) + bump,
-                          };
+                            x: (n.position?.x || 0) + bump,
+                            y: (n.position?.y || 0) + bump,
+                        };
                 const clonedData = {
                     ...(n.data as unknown as Record<string, unknown>),
                 } as unknown as Node["data"];
@@ -620,9 +621,8 @@ export default function AudioNodesEditor() {
                     if (!s || !t) return null;
                     return {
                         ...e,
-                        id: `${s}-${t}-${e.sourceHandle || ""}-${
-                            e.targetHandle || ""
-                        }-${Math.random().toString(36).slice(2, 8)}`,
+                        id: `${s}-${t}-${e.sourceHandle || ""}-${e.targetHandle || ""
+                            }-${Math.random().toString(36).slice(2, 8)}`,
                         source: s,
                         target: t,
                     } as Edge;
@@ -685,336 +685,8 @@ export default function AudioNodesEditor() {
         return () => window.removeEventListener("keydown", onKeyDown);
     }, [duplicateSelection, getSelectedGraph, duplicateGraph]);
 
-    // Web MIDI integration (uses nodesRef defined above)
-    React.useEffect(() => {
-        let mounted = true;
-        const STATUS_PREFIX = "[MIDI]";
-
-        const activeNotesRef = new Map<string, Set<number>>(); // nodeId -> active note numbers
-
-        const setStatusAll = (status: string) => {
-            setNodes((prev) =>
-                prev.map((n) =>
-                    n.type === "midi-input"
-                        ? { ...n, data: { ...n.data, status } }
-                        : n
-                )
-            );
-        };
-        const setErrorAll = (error: string) => {
-            setNodes((prev) =>
-                prev.map((n) =>
-                    n.type === "midi-input"
-                        ? { ...n, data: { ...n.data, error } }
-                        : n
-                )
-            );
-        };
-
-        if (typeof window === "undefined") return;
-        const secure = window.isSecureContext;
-        console.info(
-            STATUS_PREFIX,
-            "secureContext=",
-            secure,
-            "protocol=",
-            location.protocol,
-            "host=",
-            location.host
-        );
-        if (!secure) {
-            setStatusAll("insecure-context");
-            return;
-        }
-        if (!("requestMIDIAccess" in navigator)) {
-            setStatusAll("unsupported");
-            return;
-        }
-
-        // Simplified: use built-in Web MIDI types (lib.dom) and helper functions
-
-        const getInputs = (access: MIDIAccess): MIDIInput[] => {
-            try {
-                return Array.from(access.inputs.values());
-            } catch {
-                return [];
-            }
-        };
-
-        interface MidiNodeData {
-            deviceId?: string;
-            devices?: Array<{ id: string; name: string }>;
-            status?: string;
-            activeNotes?: number[];
-            channel?: number | "all";
-            error?: string;
-            [k: string]: unknown;
-        }
-
-        const publishDevices = (access: MIDIAccess) => {
-            const inputs = getInputs(access);
-            const list: Array<{ id: string; name: string }> = [];
-            const seen = new Set<string>();
-            inputs.forEach((inp, idx) => {
-                const rawId = (inp.id || "").trim();
-                const rawName = (inp.name || rawId || "").trim();
-                const id = rawId || rawName || `device-${idx}`;
-                const name = rawName || rawId || id;
-                const key = id + "::" + name;
-                if (seen.has(key)) return;
-                seen.add(key);
-                list.push({ id, name });
-            });
-            list.sort((a, b) => a.name.localeCompare(b.name));
-            setNodes((prev) => {
-                type GenericNode = (typeof prev)[number];
-                const updated = prev.map((n) => {
-                    if (n.type !== "midi-input") return n;
-                    const existing = n.data as unknown as MidiNodeData;
-                    const currentId = existing.deviceId || "";
-                    const nextId =
-                        currentId && list.some((d) => d.id === currentId)
-                            ? currentId
-                            : "";
-                    const hasActive =
-                        Array.isArray(existing.activeNotes) &&
-                        existing.activeNotes.length > 0;
-                    const newData: MidiNodeData = {
-                        ...existing,
-                        devices: list,
-                        deviceId: nextId,
-                        status: hasActive ? existing.status : "listening",
-                    };
-                    return {
-                        ...n,
-                        data: newData as unknown as GenericNode["data"],
-                    };
-                }) as typeof prev;
-                return updated;
-            });
-            if (list.length === 0) setStatusAll("no-devices");
-            else setStatusAll("listening");
-        };
-
-        let accessRef: MIDIAccess | null = null;
-        let requesting = false;
-
-        const attachHandlers = (access: MIDIAccess) => {
-            if (!mounted) return;
-            // Clear previous generic errors on success
-            setNodes((prev) =>
-                prev.map((n) =>
-                    n.type === "midi-input"
-                        ? { ...n, data: { ...n.data, error: undefined } }
-                        : n
-                )
-            );
-            publishDevices(access);
-            const updateInputHandlers = () => {
-                if (!mounted) return;
-                publishDevices(access);
-                const inputs = getInputs(access);
-                if (!inputs.length) {
-                    /* no inputs */
-                }
-                for (const input of inputs) {
-                    input.onmidimessage = (e: MIDIMessageEvent) => {
-                        const bytes = e.data;
-                        if (!bytes || bytes.length < 1) return;
-                        const status = bytes[0] & 0xff;
-                        const typeHigh = status & 0xf0;
-                        const isChannelMsg =
-                            typeHigh >= 0x80 && typeHigh <= 0xe0;
-                        const channel = isChannelMsg
-                            ? (status & 0x0f) + 1
-                            : null;
-                        let label = "";
-                        switch (typeHigh) {
-                            case 0x80:
-                                label = "NoteOff";
-                                break;
-                            case 0x90:
-                                label =
-                                    (bytes[2] ?? 0) === 0
-                                        ? "NoteOff"
-                                        : "NoteOn";
-                                break;
-                            case 0xa0:
-                                label = "PolyAT";
-                                break;
-                            case 0xb0:
-                                label = "CC";
-                                break;
-                            case 0xc0:
-                                label = "Prog";
-                                break;
-                            case 0xd0:
-                                label = "ChAT";
-                                break;
-                            case 0xe0:
-                                label = "Pitch";
-                                break;
-                            default:
-                                if (status === 0xf8) label = "Clock";
-                                else if (status === 0xfa) label = "Start";
-                                else if (status === 0xfc) label = "Stop";
-                                else label = `0x${status.toString(16)}`;
-                        }
-                        const nodesSnap = nodesRef.current;
-                        for (const n of nodesSnap) {
-                            if (n.type !== "midi-input") continue;
-                            const nd =
-                                (n.data as unknown as MidiNodeData) || {};
-                            const devFilter = (nd.deviceId || "").trim();
-                            const inName = (input.name || "").trim();
-                            if (
-                                devFilter &&
-                                devFilter !== (input.id || "") &&
-                                devFilter !== inName
-                            )
-                                continue;
-                            if (
-                                nd.channel &&
-                                nd.channel !== "all" &&
-                                channel !== null &&
-                                nd.channel !== channel
-                            )
-                                continue;
-                            const cmd = status & 0xf0;
-                            if (cmd === 0x90 || cmd === 0x80) {
-                                const note = (bytes[1] ?? 0) & 0x7f;
-                                const vel = (bytes[2] ?? 0) & 0x7f;
-                                let set = activeNotesRef.get(n.id);
-                                if (!set) {
-                                    set = new Set();
-                                    activeNotesRef.set(n.id, set);
-                                }
-                                if (cmd === 0x90 && vel > 0) set.add(note);
-                                else set.delete(note);
-                            }
-                            const activeSet =
-                                activeNotesRef.get(n.id) || new Set<number>();
-                            const notesArr = Array.from(activeSet.values());
-                            setNodes((prev) => {
-                                type GenericNode = (typeof prev)[number];
-                                const updated = prev.map((p) => {
-                                    if (p.id !== n.id) return p;
-                                    const existing =
-                                        p.data as unknown as MidiNodeData;
-                                    const statusStrBase =
-                                        notesArr.length > 0
-                                            ? [...notesArr]
-                                                  .sort((a, b) => a - b)
-                                                  .join(",")
-                                            : label;
-                                    const statusStr =
-                                        notesArr.length === 0 &&
-                                        (label === "NoteOff" ||
-                                            label === "NoteOn")
-                                            ? "listening"
-                                            : statusStrBase;
-                                    const newData: MidiNodeData = {
-                                        ...existing,
-                                        status: statusStr,
-                                        activeNotes: notesArr,
-                                    };
-                                    return {
-                                        ...p,
-                                        data: newData as unknown as GenericNode["data"],
-                                    };
-                                }) as typeof prev;
-                                return updated;
-                            });
-                            sendMIDI(n.id, [
-                                {
-                                    data: [
-                                        status,
-                                        bytes[1] ?? 0,
-                                        bytes[2] ?? 0,
-                                    ] as [number, number, number],
-                                    atTimeMs: e.timeStamp,
-                                },
-                            ]);
-                        }
-                    };
-                }
-            };
-            updateInputHandlers();
-            try {
-                const hasAdd = (
-                    access as unknown as {
-                        addEventListener?: (t: string, cb: () => void) => void;
-                    }
-                ).addEventListener;
-                if (typeof hasAdd === "function") {
-                    hasAdd.call(access, "statechange", updateInputHandlers);
-                } else if (typeof access.onstatechange !== "undefined") {
-                    access.onstatechange = updateInputHandlers;
-                }
-            } catch {
-                /* ignore */
-            }
-        };
-
-        const requestMIDI = async () => {
-            if (requesting || accessRef || !mounted) return;
-            requesting = true;
-            setStatusAll("requesting");
-            try {
-                const requestFn = navigator.requestMIDIAccess?.bind(navigator);
-                if (typeof requestFn !== "function") {
-                    setStatusAll("unsupported");
-                    requesting = false;
-                    return;
-                }
-                const access = await requestFn({ sysex: false });
-                if (!mounted) return;
-                accessRef = access;
-                attachHandlers(access);
-            } catch (err) {
-                const name =
-                    (err as { name?: string } | null | undefined)?.name ||
-                    "Error";
-                const message =
-                    (err as { message?: string } | null | undefined)?.message ||
-                    "";
-                console.warn(
-                    STATUS_PREFIX,
-                    "requestMIDIAccess failed",
-                    name,
-                    message
-                );
-                const classified =
-                    name === "NotAllowedError" || name === "SecurityError"
-                        ? "denied"
-                        : name === "TypeError"
-                        ? "unsupported"
-                        : "error";
-                setStatusAll(classified);
-                setErrorAll(
-                    name === "TypeError"
-                        ? "TypeError (maybe blocked flag or experimental feature disabled)"
-                        : name
-                );
-            } finally {
-                requesting = false;
-            }
-        };
-
-        // Listen for retry events from nodes
-        const onRetry = () => {
-            void requestMIDI();
-        };
-        window.addEventListener("audioNodesRetryMIDI", onRetry);
-
-        // Initial attempt (can be moved behind a user gesture if needed)
-        void requestMIDI();
-
-        return () => {
-            mounted = false;
-            window.removeEventListener("audioNodesRetryMIDI", onRetry);
-        };
-    }, [sendMIDI, setNodes]);
+    // Web MIDI integration extracted to custom hook
+    useMidiAccess(nodesRef, setNodes, sendMIDI);
 
     const edgeTypes = React.useMemo(() => ({ gradient: GradientEdge }), []);
 

@@ -1,9 +1,9 @@
 "use client";
 import React from 'react';
-import { NodeShell } from '../node-framework/NodeShell';
-import { NodeSpec } from '../node-framework/types';
+import { NodeShell } from "../../node-framework/NodeShell";
+import { NodeSpec } from "../../node-framework/types";
 
-interface LFONodeData { waveform?: string; beatsPerCycle?: number; depth?: number; offset?: number; bipolar?: boolean; phase?: number; onParameterChange: (nodeId: string, key: string, value: unknown) => void; [k:string]: unknown; }
+interface LFONodeData { waveform?: string; beatsPerCycle?: number; depth?: number; offset?: number; bipolar?: boolean; phase?: number; onParameterChange: (nodeId: string, key: string, value: unknown) => void;[k: string]: unknown; }
 interface LFONodeProps { id: string; selected?: boolean; data: LFONodeData; }
 
 const spec: NodeSpec = {
@@ -11,14 +11,14 @@ const spec: NodeSpec = {
   // title omitted (registry provides)
   // accentColor & icon centralized in registry
   params: [
-    { key: 'waveform', kind: 'select', default: 'sine', options: ['sine','triangle','saw','square'], label: 'Waveform' },
+    { key: 'waveform', kind: 'select', default: 'sine', options: ['sine', 'triangle', 'saw', 'square'], label: 'Waveform' },
     { key: 'beatsPerCycle', kind: 'number', default: 1, min: 0.0625, max: 64, step: 0.0625, label: 'Beats/Cycle', description: 'LFO period length in beats' },
     { key: 'depth', kind: 'number', default: 1, min: 0, max: 1, step: 0.01, label: 'Depth' },
     { key: 'offset', kind: 'number', default: 0, min: -1, max: 1, step: 0.01, label: 'Offset' },
     { key: 'bipolar', kind: 'bool', default: true, label: 'Bipolar' },
     { key: 'phase', kind: 'number', default: 0, min: 0, max: 1, step: 0.01, label: 'Phase' },
   ],
-  outputs: [ { id: 'output', role: 'param-out', label: 'LFO Out' } ],
+  outputs: [{ id: 'output', role: 'param-out', label: 'LFO Out' }],
   help: {
     description: 'Beat-synced low frequency oscillator for parameter modulation.',
     inputs: [
@@ -29,7 +29,7 @@ const spec: NodeSpec = {
       { name: 'Bipolar', description: 'If off, maps [-1,1] to [0,1].' },
       { name: 'Phase', description: 'Initial phase offset (0-1).' },
     ],
-    outputs: [ { name: 'LFO Out', description: 'Current modulation value (number).' } ]
+    outputs: [{ name: 'LFO Out', description: 'Current modulation value (number).' }]
   },
   // icon centralized in registry
 };

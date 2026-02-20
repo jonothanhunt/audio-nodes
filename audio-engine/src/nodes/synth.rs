@@ -1,12 +1,5 @@
 use wasm_bindgen::prelude::*;
-
-#[derive(Clone, Copy)]
-pub enum Waveform {
-    Sine,
-    Square,
-    Sawtooth,
-    Triangle,
-}
+use crate::dsp::{OscillatorCore, Waveform};
 
 #[derive(Clone, Copy)]
 struct Voice {
@@ -17,7 +10,7 @@ struct Voice {
     freq_target: f32,
     freq_current: f32,
     env: f32,
-    phase: f32,
+    core: OscillatorCore,
     velocity: f32,         // 0..1
 }
 
@@ -31,7 +24,7 @@ impl Voice {
             freq_target: 0.0,
             freq_current: 0.0,
             env: 0.0,
-            phase: 0.0,
+            core: OscillatorCore::new(),
             velocity: 0.0,
         }
     }
@@ -102,7 +95,7 @@ impl SynthNode {
             v.freq_target = freq;
             v.freq_current = if self.glide_time_sec <= 0.0 { freq } else { v.freq_current.max(20.0) };
             v.env = 0.0;
-            v.phase = 0.0;
+            v.core.phase = 0.0;
             v.velocity = vel;
             return;
         }
@@ -120,7 +113,7 @@ impl SynthNode {
             v.freq_target = freq;
             v.freq_current = if self.glide_time_sec <= 0.0 { freq } else { v.freq_current.max(20.0) };
             v.env = 0.0;
-            v.phase = 0.0;
+            v.core.phase = 0.0;
             v.velocity = vel;
         }
     }
@@ -147,13 +140,17 @@ impl SynthNode {
 
     #[wasm_bindgen]
     pub fn set_waveform(&mut self, waveform: u32) {
-        self.waveform = match waveform {
+        let w = match waveform {
             0 => Waveform::Sine,
             1 => Waveform::Square,
             2 => Waveform::Sawtooth,
             3 => Waveform::Triangle,
             _ => Waveform::Sine,
         };
+        self.waveform = w;
+        for v in self.voices.iter_mut() {
+            v.core.set_waveform(w);
+        }
     }
 
     #[wasm_bindgen]
@@ -212,19 +209,8 @@ impl SynthNode {
                     if v.env <= 0.0 { v.active = false; }
                 }
                 // Oscillator
-                let phase_inc = 2.0 * std::f32::consts::PI * v.freq_current / self.sample_rate;
-                let osc = match self.waveform {
-                    Waveform::Sine => v.phase.sin(),
-                    Waveform::Square => if v.phase.sin() > 0.0 { 1.0 } else { -1.0 },
-                    Waveform::Sawtooth => (v.phase / std::f32::consts::PI) - 1.0,
-                    Waveform::Triangle => {
-                        let t = (v.phase / (2.0 * std::f32::consts::PI)) % 1.0;
-                        if t < 0.5 { 4.0 * t - 1.0 } else { 3.0 - 4.0 * t }
-                    }
-                };
+                let osc = v.core.tick(v.freq_current, self.sample_rate);
                 acc += osc * v.env * v.velocity; // velocity applied here
-                v.phase += phase_inc;
-                if v.phase >= 2.0 * std::f32::consts::PI { v.phase -= 2.0 * std::f32::consts::PI; }
                 if v.active || v.env > 0.0 { voices_on += 1; }
             }
             // Smooth mix gain (normalize by active voices)

@@ -1,7 +1,7 @@
-import { NodeShell } from '../node-framework/NodeShell';
-import { NodeSpec } from '../node-framework/types';
+import { NodeShell } from "../../node-framework/NodeShell";
+import { NodeSpec } from "../../node-framework/types";
 
-interface ValueNumberData { value?: number; ranged?: boolean; min?: number; max?: number; step?: number; _connectedParams?: string[]; onParameterChange: (nodeId: string, key: string, value: unknown) => void; [k:string]: unknown; }
+interface ValueNumberData { value?: number; ranged?: boolean; min?: number; max?: number; step?: number; _connectedParams?: string[]; onParameterChange: (nodeId: string, key: string, value: unknown) => void;[k: string]: unknown; }
 interface ValueNumberNodeProps { id: string; selected?: boolean; data: ValueNumberData; }
 
 // We'll implement range support using additional params; slider min/max/step only applied when ranged=true
@@ -16,14 +16,14 @@ const spec: NodeSpec = {
         { key: 'max', kind: 'number', default: 100, label: 'Max', hidden: false },
         { key: 'step', kind: 'number', default: 1, label: 'Step', hidden: false },
     ],
-        outputs: [ { id: 'param-out', role: 'param-out', label: 'Number Out' } ],
+    outputs: [{ id: 'param-out', role: 'param-out', label: 'Number Out' }],
     help: {
         description: 'Numeric value generator with optional slider range; exposes its value as a param output.',
         inputs: [
             { name: 'Value (number)', description: 'Optional param input overriding local control.' },
             { name: 'Range controls', description: 'Min/Max/Step used when Use Range is enabled.' }
         ],
-        outputs: [ { name: 'Number Out', description: 'Current numeric value.' } ]
+        outputs: [{ name: 'Number Out', description: 'Current numeric value.' }]
     }
 };
 

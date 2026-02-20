@@ -21,8 +21,8 @@ class EngineProcessor extends AudioWorkletProcessor {
         this._reverbInstances = new Map(); // nodeId -> wasm.ReverbNode
         this._synthInstances = new Map(); // nodeId -> wasm.SynthNode (planned)
         this._transposeInstances = new Map(); // nodeId -> wasm.MidiTransposeNode
-    this._lfoInstances = new Map(); // nodeId -> wasm.LfoNode
-    this._modConnections = []; // derived modulation edges (lfo -> param)
+        this._lfoInstances = new Map(); // nodeId -> wasm.LfoNode
+        this._modConnections = []; // derived modulation edges (lfo -> param)
 
         this._midiQueues = new Map(); // nodeId -> Array of events for next blocks
         this._timebase = { perfNowMs: 0, audioCurrentTimeSec: 0 };
@@ -55,24 +55,24 @@ class EngineProcessor extends AudioWorkletProcessor {
             syncAllNextBeat: false,     // request to reset sequencers next beat
         };
 
-    // --- Live capture (for WAV encoding on main thread) ---
-    this._captureActive = false; // when true we post raw PCM blocks to main thread
+        // --- Live capture (for WAV encoding on main thread) ---
+        this._captureActive = false; // when true we post raw PCM blocks to main thread
 
-    // --- Sequencer registry (global clock driven) ---
-    // Map<nodeId, {
-    //   rateMultiplier: number (0.25,0.5,1,2,4)
-    //   isPlaying: boolean
-    //   pendingStartBeat: number|null (quantized start at global beat index)
-    //   pendingRate: number|null (apply at next beat)
-    //   stepIndex: number
-    //   beatsAccum: number (accumulated beats toward next step)
-    //   activeNotes: Set<number> (MIDI notes currently on)
-    //   _startedOnce: boolean (internal guard to avoid duplicate initial step event)
-    // }>
-    this._sequencers = new Map();
-    // --- Arpeggiator registry ---
-    // Map<nodeId, { rateMultiplier:number, isPlaying:boolean, pendingStartBeat:number|null, pendingRate:number|null, beatsAccum:number, held:Set<number>, order:number[], dir:1|-1, activeOut:Set<number>, mode:string, octaves:number }>
-    this._arps = new Map();
+        // --- Sequencer registry (global clock driven) ---
+        // Map<nodeId, {
+        //   rateMultiplier: number (0.25,0.5,1,2,4)
+        //   isPlaying: boolean
+        //   pendingStartBeat: number|null (quantized start at global beat index)
+        //   pendingRate: number|null (apply at next beat)
+        //   stepIndex: number
+        //   beatsAccum: number (accumulated beats toward next step)
+        //   activeNotes: Set<number> (MIDI notes currently on)
+        //   _startedOnce: boolean (internal guard to avoid duplicate initial step event)
+        // }>
+        this._sequencers = new Map();
+        // --- Arpeggiator registry ---
+        // Map<nodeId, { rateMultiplier:number, isPlaying:boolean, pendingStartBeat:number|null, pendingRate:number|null, beatsAccum:number, held:Set<number>, order:number[], dir:1|-1, activeOut:Set<number>, mode:string, octaves:number }>
+        this._arps = new Map();
     }
 
     async _initWasm() {
@@ -107,15 +107,26 @@ class EngineProcessor extends AudioWorkletProcessor {
         this._loading = true;
         try {
             let code = String(glueCode);
+            code = `
+if (typeof globalThis.TextDecoder === 'undefined') {
+    globalThis.TextDecoder = class {
+        decode(arr) {
+            if (!arr) return '';
+            let s = '';
+            for (let i = 0; i < arr.length; i++) {
+                s += String.fromCharCode(arr[i]);
+            }
+            return s;
+        }
+    };
+}
+` + code;
             code = code.replace(/^export\s+class\s+/gm, "class ");
-            code = code.replace(
-                /export\s*\{\s*initSync\s*\};?/gm,
-                "globalThis.__wbg_initSync = initSync;"
-            );
-            code = code.replace(
-                /export\s+default\s+__wbg_init\s*;?/gm,
-                "globalThis.__wbg_init_default = __wbg_init;"
-            );
+            code = code.replace(/^export\s+const\s+/gm, "const ");
+            code = code.replace(/^export\s*\{[^}]+\};?/gm, "");
+            code = code.replace(/export\s+default\s+__wbg_init\s*;?/gm, "");
+            code += "\nglobalThis.__wbg_init_default = __wbg_init;\n";
+            code += "globalThis.__wbg_initSync = initSync;\n";
             code = code.replace(/import\.meta\.url/g, "'/audio-engine-wasm/'");
             // Explicitly expose classes to globalThis
             code +=
@@ -168,7 +179,7 @@ class EngineProcessor extends AudioWorkletProcessor {
         } catch (err) {
             try {
                 this.port.postMessage({ type: "error", message: String(err) });
-            } catch {}
+            } catch { }
         } finally {
             this._loading = false;
         }
@@ -256,9 +267,9 @@ class EngineProcessor extends AudioWorkletProcessor {
                 const { nodeId, multiplier } = msg;
                 if (!nodeId) break;
                 const m = Number(multiplier);
-                if (![0.25,0.5,1,2,4].includes(m)) break;
+                if (![0.25, 0.5, 1, 2, 4].includes(m)) break;
                 let entry = this._arps.get(nodeId);
-                if (!entry) { entry = { rateMultiplier:1,isPlaying:false,pendingStartBeat:null,pendingRate:null,beatsAccum:0,held:new Set(),order:[],dir:1,activeOut:new Set(),mode:'up',octaves:1 }; this._arps.set(nodeId, entry); }
+                if (!entry) { entry = { rateMultiplier: 1, isPlaying: false, pendingStartBeat: null, pendingRate: null, beatsAccum: 0, held: new Set(), order: [], dir: 1, activeOut: new Set(), mode: 'up', octaves: 1 }; this._arps.set(nodeId, entry); }
                 entry.pendingRate = m;
                 break;
             }
@@ -266,14 +277,14 @@ class EngineProcessor extends AudioWorkletProcessor {
                 const { nodeId, play } = msg;
                 if (!nodeId) break;
                 let entry = this._arps.get(nodeId);
-                if (!entry) { entry = { rateMultiplier:1,isPlaying:false,pendingStartBeat:null,pendingRate:null,beatsAccum:0,held:new Set(),order:[],dir:1,activeOut:new Set(),mode:'up',octaves:1 }; this._arps.set(nodeId, entry); }
+                if (!entry) { entry = { rateMultiplier: 1, isPlaying: false, pendingStartBeat: null, pendingRate: null, beatsAccum: 0, held: new Set(), order: [], dir: 1, activeOut: new Set(), mode: 'up', octaves: 1 }; this._arps.set(nodeId, entry); }
                 if (play) {
                     if (!entry.isPlaying && entry.pendingStartBeat == null) entry.pendingStartBeat = this._transport.beatIndex + 1;
                 } else {
                     entry.isPlaying = false; entry.pendingStartBeat = null; entry.beatsAccum = 0; // send note off for any active notes
                     if (entry.activeOut.size) {
                         const offEvents = [];
-                        for (const n of entry.activeOut.values()) offEvents.push({ data:[0x80, n & 0x7f, 0] });
+                        for (const n of entry.activeOut.values()) offEvents.push({ data: [0x80, n & 0x7f, 0] });
                         this._broadcastArpMIDI(nodeId, offEvents);
                         entry.activeOut.clear();
                     }
@@ -289,7 +300,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                 this._bootstrapFromMain(glue, wasm);
                 try {
                     this.port.postMessage({ type: "ackBootstrap" });
-                } catch {}
+                } catch { }
                 break;
             }
             case "updateNode": {
@@ -297,7 +308,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                 this._nodes.set(nodeId, data);
                 try {
                     this._paramCache.set(nodeId, data);
-                } catch {}
+                } catch { }
                 // If this is a sequencer node, ensure a registry entry exists reflecting current persisted state.
                 if (data && data.type === "sequencer") {
                     let entry = this._sequencers.get(nodeId);
@@ -315,7 +326,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                         this._sequencers.set(nodeId, entry);
                     }
                     // Apply persisted rateMultiplier immediately (will influence step duration)
-                    if (typeof data.rateMultiplier === "number" && [0.25,0.5,1,2,4].includes(data.rateMultiplier)) {
+                    if (typeof data.rateMultiplier === "number" && [0.25, 0.5, 1, 2, 4].includes(data.rateMultiplier)) {
                         entry.rateMultiplier = data.rateMultiplier;
                     }
                     // If project saved with playing=true, quantize start to next beat unless already scheduled/playing
@@ -326,18 +337,18 @@ class EngineProcessor extends AudioWorkletProcessor {
                 // If arpeggiator, ensure registry entry & update mode/octaves and persisted rate/play
                 if (data && data.type === 'arpeggiator') {
                     let e = this._arps.get(nodeId);
-                    if (!e) { e = { rateMultiplier:1,isPlaying:false,pendingStartBeat:null,pendingRate:null,beatsAccum:0,held:new Set(),order:[],dir:1,activeOut:new Set(),mode:'up',octaves:1 }; this._arps.set(nodeId, e);}
+                    if (!e) { e = { rateMultiplier: 1, isPlaying: false, pendingStartBeat: null, pendingRate: null, beatsAccum: 0, held: new Set(), order: [], dir: 1, activeOut: new Set(), mode: 'up', octaves: 1 }; this._arps.set(nodeId, e); }
                     const oldMode = e.mode;
                     const oldOct = e.octaves;
-                    if (typeof data.rateMultiplier === 'number' && [0.25,0.5,1,2,4].includes(data.rateMultiplier)) e.rateMultiplier = data.rateMultiplier;
+                    if (typeof data.rateMultiplier === 'number' && [0.25, 0.5, 1, 2, 4].includes(data.rateMultiplier)) e.rateMultiplier = data.rateMultiplier;
                     if (data.playing && !e.isPlaying && e.pendingStartBeat == null) e.pendingStartBeat = this._transport.beatIndex + 1;
                     if (typeof data.mode === 'string') e.mode = data.mode;
-                    if (typeof data.octaves === 'number') e.octaves = Math.max(1, Math.min(4, data.octaves|0));
+                    if (typeof data.octaves === 'number') e.octaves = Math.max(1, Math.min(4, data.octaves | 0));
                     // If pattern topology changed, flush active notes to avoid hangs
                     if (oldMode !== e.mode || oldOct !== e.octaves) {
                         if (e.activeOut.size) {
                             const offs = [];
-                            for (const n of e.activeOut.values()) offs.push({ data:[0x80, n & 0x7f, 0] });
+                            for (const n of e.activeOut.values()) offs.push({ data: [0x80, n & 0x7f, 0] });
                             this._broadcastArpMIDI(nodeId, offs);
                             e.activeOut.clear();
                         }
@@ -345,7 +356,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                 }
                 try {
                     this.port.postMessage({ type: "ackNode", nodeId });
-                } catch {}
+                } catch { }
                 break;
             }
             case "removeNode": {
@@ -408,34 +419,34 @@ class EngineProcessor extends AudioWorkletProcessor {
                 if (osc) {
                     try {
                         osc.free?.();
-                    } catch {}
+                    } catch { }
                     this._oscInstances.delete(nodeId);
                 }
                 const rev = this._reverbInstances.get(nodeId);
                 if (rev) {
                     try {
                         rev.free?.();
-                    } catch {}
+                    } catch { }
                     this._reverbInstances.delete(nodeId);
                 }
                 const syn = this._synthInstances.get(nodeId);
                 if (syn) {
                     try {
                         syn.free?.();
-                    } catch {}
+                    } catch { }
                     this._synthInstances.delete(nodeId);
                 }
                 const tr = this._transposeInstances.get(nodeId);
                 if (tr) {
                     try {
                         tr.free?.();
-                    } catch {}
+                    } catch { }
                     this._transposeInstances.delete(nodeId);
                 }
                 this._transposeNoteState.delete(nodeId);
                 try {
                     this.port.postMessage({ type: "ackRemove", nodeId });
-                } catch {}
+                } catch { }
                 break;
             }
             case "updateConnections": {
@@ -449,7 +460,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                     const src = this._nodes.get(c.from);
                     const dst = this._nodes.get(c.to);
                     if (src && src.type === 'lfo' && dst) {
-                        if (c.toInput && !['input','output','midi'].includes(c.toInput)) {
+                        if (c.toInput && !['input', 'output', 'midi'].includes(c.toInput)) {
                             this._modConnections.push({ from: c.from, to: c.to, targetParam: c.toInput });
                         }
                     }
@@ -459,7 +470,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                         type: "ackConnections",
                         count: this._connections.length,
                     });
-                } catch {}
+                } catch { }
                 break;
             }
             case "clear": {
@@ -472,22 +483,22 @@ class EngineProcessor extends AudioWorkletProcessor {
                 for (const inst of this._oscInstances.values()) {
                     try {
                         inst.free?.();
-                    } catch {}
+                    } catch { }
                 }
                 for (const inst of this._reverbInstances.values()) {
                     try {
                         inst.free?.();
-                    } catch {}
+                    } catch { }
                 }
                 for (const inst of this._synthInstances.values()) {
                     try {
                         inst.free?.();
-                    } catch {}
+                    } catch { }
                 }
                 for (const inst of this._transposeInstances.values()) {
                     try {
                         inst.free?.();
-                    } catch {}
+                    } catch { }
                 }
                 this._oscInstances.clear();
                 this._reverbInstances.clear();
@@ -495,7 +506,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                 this._transposeInstances.clear();
                 try {
                     this.port.postMessage({ type: "ackClear" });
-                } catch {}
+                } catch { }
                 break;
             }
             case "timebase": {
@@ -537,7 +548,7 @@ class EngineProcessor extends AudioWorkletProcessor {
             }
             case 'stopCapture': {
                 this._captureActive = false;
-                try { this.port.postMessage({ type:'captureStopped' }); } catch {}
+                try { this.port.postMessage({ type: 'captureStopped' }); } catch { }
                 break;
             }
             default:
@@ -607,7 +618,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                     t.pendingBpm = null;
                     t.pendingBpmBeat = null;
                 }
-                try { this.port.postMessage({ type: "beat", beatIndex: t.beatIndex, bpm: t.bpm }); } catch {}
+                try { this.port.postMessage({ type: "beat", beatIndex: t.beatIndex, bpm: t.bpm }); } catch { }
                 t.beatIndex += 1;
                 // Apply pending rate changes at beat boundary
                 for (const [, entry] of this._sequencers.entries()) {
@@ -618,13 +629,13 @@ class EngineProcessor extends AudioWorkletProcessor {
                 }
                 // Global sync request
                 if (t.syncAllNextBeat) {
-                    try { this.port.postMessage({ type: "syncScheduled", beatIndex: t.beatIndex }); } catch {}
+                    try { this.port.postMessage({ type: "syncScheduled", beatIndex: t.beatIndex }); } catch { }
                     for (const [nid, entry] of this._sequencers.entries()) {
                         if (!entry.isPlaying) continue;
                         entry.stepIndex = 0;
                         entry.beatsAccum = 0;
                         entry._startedOnce = true;
-                        try { this.port.postMessage({ type: "sequencerStep", nodeId: nid, stepIndex: 0 }); } catch {}
+                        try { this.port.postMessage({ type: "sequencerStep", nodeId: nid, stepIndex: 0 }); } catch { }
                     }
                     t.syncAllNextBeat = false;
                 }
@@ -639,13 +650,13 @@ class EngineProcessor extends AudioWorkletProcessor {
                     }
                 }
                 for (const [, a] of this._arps.entries()) {
-                    if (a.pendingStartBeat === t.beatIndex - 1) { a.isPlaying = true; a.beatsAccum = 0; a.pendingStartBeat = null; if (a.activeOut.size) { const offs=[]; for (const n of a.activeOut.values()) offs.push({data:[0x80,n&0x7f,0]}); this._broadcastArpMIDI(''+Math.random(), offs); a.activeOut.clear(); } }
+                    if (a.pendingStartBeat === t.beatIndex - 1) { a.isPlaying = true; a.beatsAccum = 0; a.pendingStartBeat = null; if (a.activeOut.size) { const offs = []; for (const n of a.activeOut.values()) offs.push({ data: [0x80, n & 0x7f, 0] }); this._broadcastArpMIDI('' + Math.random(), offs); a.activeOut.clear(); } }
                 }
                 // Emit initial step events
                 for (const [nid, entry] of this._sequencers.entries()) {
                     if (entry.isPlaying && entry._startedOnce === false) {
                         entry._startedOnce = true;
-                        try { this.port.postMessage({ type: "sequencerStep", nodeId: nid, stepIndex: 0 }); } catch {}
+                        try { this.port.postMessage({ type: "sequencerStep", nodeId: nid, stepIndex: 0 }); } catch { }
                     }
                 }
                 t.nextBeatFrame += t.framesPerBeat;
@@ -673,34 +684,35 @@ class EngineProcessor extends AudioWorkletProcessor {
                         advanced = true;
                     }
                     if (advanced) {
-                        try { this.port.postMessage({ type: "sequencerStep", nodeId: nid, stepIndex: entry.stepIndex }); } catch {}
+                        try { this.port.postMessage({ type: "sequencerStep", nodeId: nid, stepIndex: entry.stepIndex }); } catch { }
                     }
                 }
             }
             // Arpeggiator advancement
             if (this._arps.size) {
-        for (const [nid, a] of this._arps.entries()) {
+                for (const [nid, a] of this._arps.entries()) {
                     if (!a.isPlaying) continue;
                     a.beatsAccum += beatsAdvanced;
                     const stepBeats = 1 / (a.rateMultiplier || 1);
                     if (a.beatsAccum >= stepBeats) {
                         a.beatsAccum -= stepBeats;
-            // build ordered note list (with octaves) from held set
+                        // build ordered note list (with octaves) from held set
                         // held notes arrive via MIDI routing; maintain in a.held
                         if (a.held.size === 0) { // no notes held, turn off any currently sounding
-                            if (a.activeOut.size) { const offs=[]; for (const n of a.activeOut.values()) offs.push({data:[0x80,n&0x7f,0]}); this._broadcastArpMIDI(nid, offs); a.activeOut.clear(); }
-                            continue; }
-                        const baseNotes = Array.from(a.held.values()).sort((x,y)=>x-y);
+                            if (a.activeOut.size) { const offs = []; for (const n of a.activeOut.values()) offs.push({ data: [0x80, n & 0x7f, 0] }); this._broadcastArpMIDI(nid, offs); a.activeOut.clear(); }
+                            continue;
+                        }
+                        const baseNotes = Array.from(a.held.values()).sort((x, y) => x - y);
                         let expanded = baseNotes.slice();
-                        const octs = Math.max(1, Math.min(4, a.octaves|0));
+                        const octs = Math.max(1, Math.min(4, a.octaves | 0));
                         if (octs > 1) {
-                            for (let o=1;o<octs;o++) {
-                                for (const n of baseNotes) { const nn = n + 12*o; if (nn <= 127) expanded.push(nn); }
+                            for (let o = 1; o < octs; o++) {
+                                for (const n of baseNotes) { const nn = n + 12 * o; if (nn <= 127) expanded.push(nn); }
                             }
-                            expanded.sort((x,y)=>x-y);
+                            expanded.sort((x, y) => x - y);
                         }
                         if (a.mode === 'random') {
-                            const choice = expanded[Math.floor(Math.random()*expanded.length)];
+                            const choice = expanded[Math.floor(Math.random() * expanded.length)];
                             if (choice != null) this._arpApplyOutputSet(nid, a, new Set([choice]));
                         } else if (a.mode === 'chord') {
                             this._arpApplyOutputSet(nid, a, new Set(expanded));
@@ -708,11 +720,11 @@ class EngineProcessor extends AudioWorkletProcessor {
                             // maintain traversal order
                             if (!a.order.length) { a.order = expanded.slice(); a.dir = 1; }
                             // remove notes not held anymore
-                            a.order = a.order.filter(n=>expanded.includes(n));
+                            a.order = a.order.filter(n => expanded.includes(n));
                             // add new notes maintaining sort
                             for (const n of expanded) if (!a.order.includes(n)) a.order.push(n);
-                            a.order.sort((x,y)=>x-y);
-                            if (a.mode === 'down') a.order.sort((x,y)=>y-x);
+                            a.order.sort((x, y) => x - y);
+                            if (a.mode === 'down') a.order.sort((x, y) => y - x);
                             if (a.mode === 'up-down') {
                                 // bounce between ends; use dir to step
                                 let lastIdx = -1;
@@ -722,7 +734,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                                 idx += a.dir;
                                 if (idx >= a.order.length) { a.dir = -1; idx = a.order.length - 2; }
                                 else if (idx < 0) { a.dir = 1; idx = 1; }
-                                const note = a.order[Math.max(0, Math.min(a.order.length-1, idx))];
+                                const note = a.order[Math.max(0, Math.min(a.order.length - 1, idx))];
                                 if (note != null) this._arpApplyOutputSet(nid, a, new Set([note]));
                             } else {
                                 // linear (up or down already sorted)
@@ -765,9 +777,9 @@ class EngineProcessor extends AudioWorkletProcessor {
                     // Maintain held note set for arpeggiator
                     const events = queue.splice(0, queue.length);
                     let entry = this._arps.get(nodeId);
-                    if (!entry) { entry = { rateMultiplier:1,isPlaying:false,pendingStartBeat:null,pendingRate:null,beatsAccum:0,held:new Set(),order:[],dir:1,activeOut:new Set(),mode:'up',octaves:1 }; this._arps.set(nodeId, entry);}
+                    if (!entry) { entry = { rateMultiplier: 1, isPlaying: false, pendingStartBeat: null, pendingRate: null, beatsAccum: 0, held: new Set(), order: [], dir: 1, activeOut: new Set(), mode: 'up', octaves: 1 }; this._arps.set(nodeId, entry); }
                     for (const ev of events) {
-                        const [status,d1,d2] = ev.data;
+                        const [status, d1, d2] = ev.data;
                         const cmd = status & 0xf0;
                         if (cmd === 0x90 && (d2 & 0x7f) > 0) entry.held.add(d1 & 0x7f);
                         else if (cmd === 0x80 || (cmd === 0x90 && (d2 & 0x7f) === 0)) entry.held.delete(d1 & 0x7f);
@@ -806,10 +818,10 @@ class EngineProcessor extends AudioWorkletProcessor {
                         try {
                             dst[e.toInput] = v;
                             this._nodes.set(e.to, dst);
-                        } catch {}
+                        } catch { }
                     }
                 }
-            } catch {}
+            } catch { }
 
             this._processGraph(outL, outR);
 
@@ -819,8 +831,8 @@ class EngineProcessor extends AudioWorkletProcessor {
                 const left = new Float32Array(outL); // copy
                 const right = new Float32Array(outR);
                 try {
-                    this.port.postMessage({ type:'captureBlock', left, right }, [left.buffer, right.buffer]);
-                } catch {}
+                    this.port.postMessage({ type: 'captureBlock', left, right }, [left.buffer, right.buffer]);
+                } catch { }
             }
 
             // Advance coarse timebase by one block
@@ -829,7 +841,7 @@ class EngineProcessor extends AudioWorkletProcessor {
         } catch (err) {
             try {
                 this.port.postMessage({ type: "error", message: String(err) });
-            } catch {}
+            } catch { }
         }
 
         return true;
@@ -838,18 +850,18 @@ class EngineProcessor extends AudioWorkletProcessor {
     _arpApplyOutputSet(nodeId, a, newSet) {
         // Determine off/on differences
         const offs = [];
-        for (const n of a.activeOut.values()) if (!newSet.has(n)) offs.push({ data:[0x80, n & 0x7f, 0] });
+        for (const n of a.activeOut.values()) if (!newSet.has(n)) offs.push({ data: [0x80, n & 0x7f, 0] });
         const ons = [];
-        for (const n of newSet.values()) if (!a.activeOut.has(n)) ons.push({ data:[0x90, n & 0x7f, 100] });
+        for (const n of newSet.values()) if (!a.activeOut.has(n)) ons.push({ data: [0x90, n & 0x7f, 100] });
         if (offs.length) this._broadcastArpMIDI(nodeId, offs);
         if (ons.length) this._broadcastArpMIDI(nodeId, ons);
         a.activeOut = newSet;
-        if (ons.length === 1) { try { this.port.postMessage({ type:'arpNote', nodeId, note: ons[0].data[1] }); } catch {} }
+        if (ons.length === 1) { try { this.port.postMessage({ type: 'arpNote', nodeId, note: ons[0].data[1] }); } catch { } }
     }
 
     _broadcastArpMIDI(nodeId, events) {
         if (!Array.isArray(events) || !events.length) return;
-        const downstream = this._connections.filter(c=> c.from === nodeId && (c.fromOutput === 'midi-out' || c.fromOutput === 'midi' || c.fromOutput == null));
+        const downstream = this._connections.filter(c => c.from === nodeId && (c.fromOutput === 'midi-out' || c.fromOutput === 'midi' || c.fromOutput == null));
         for (const edge of downstream) {
             const q = this._midiQueues.get(edge.to) || [];
             for (const ev of events) q.push(ev);
@@ -862,7 +874,7 @@ class EngineProcessor extends AudioWorkletProcessor {
         for (const [nid, entry] of this._sequencers.entries()) {
             if (entry.activeNotes && entry.activeNotes.size) {
                 const offs = [];
-                for (const n of entry.activeNotes.values()) offs.push({ data:[0x80, n & 0x7f, 0] });
+                for (const n of entry.activeNotes.values()) offs.push({ data: [0x80, n & 0x7f, 0] });
                 this._broadcastSequencerMIDI(nid, offs);
                 entry.activeNotes.clear();
             }
@@ -870,7 +882,7 @@ class EngineProcessor extends AudioWorkletProcessor {
         for (const [nid, a] of this._arps.entries()) {
             if (a.activeOut && a.activeOut.size) {
                 const offs = [];
-                for (const n of a.activeOut.values()) offs.push({ data:[0x80, n & 0x7f, 0] });
+                for (const n of a.activeOut.values()) offs.push({ data: [0x80, n & 0x7f, 0] });
                 this._broadcastArpMIDI(nid, offs);
                 a.activeOut.clear();
             }
@@ -958,7 +970,7 @@ class EngineProcessor extends AudioWorkletProcessor {
         try {
             // Apply modulation additive overrides (simple v1): gather lfo contributions for supported params
             if (this._modConnections && this._modConnections.length) {
-                const relevant = this._modConnections.filter(m=> m.to === nodeId);
+                const relevant = this._modConnections.filter(m => m.to === nodeId);
                 if (relevant.length) {
                     // We'll build a temp param patch object
                     const modAccum = {};
@@ -969,10 +981,10 @@ class EngineProcessor extends AudioWorkletProcessor {
                         if (!inst) continue;
                         // Derive beatsPerCycle, waveform, phase from node data, update inst params
                         const beats = Number(lfoNode.beatsPerCycle) || 1;
-                        const wfMap = { sine:0, triangle:1, saw:2, square:3 };
+                        const wfMap = { sine: 0, triangle: 1, saw: 2, square: 3 };
                         const wf = wfMap[lfoNode.waveform] ?? 0;
                         const phase = Number(lfoNode.phase) || 0;
-                        try { inst.set_params(beats, wf, phase); } catch {}
+                        try { inst.set_params(beats, wf, phase); } catch { }
                         const raw = inst.next_value(N, this._transport.bpm);
                         let depth = Number(lfoNode.depth); if (!isFinite(depth)) depth = 1;
                         let offset = Number(lfoNode.offset); if (!isFinite(offset)) offset = 0;
@@ -989,7 +1001,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                         // Throttle: send a lightweight preview of modulated numeric params (no more than once per block)
                         try {
                             this.port.postMessage({ type: 'modPreview', nodeId, data: modAccum });
-                        } catch {}
+                        } catch { }
                     }
                 }
             }
@@ -1022,7 +1034,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                 outL[i] += s;
                 outR[i] += s;
             }
-        } catch {}
+        } catch { }
     }
 
     // Deliver MIDI events to a Synth instance (Note On/Off handling)
@@ -1058,13 +1070,13 @@ class EngineProcessor extends AudioWorkletProcessor {
                         if (typeof synth.all_notes_off === "function") {
                             try {
                                 synth.all_notes_off();
-                            } catch {}
+                            } catch { }
                         } else {
                             // Fallback: manually send note_off for all notes
                             for (let n = 0; n < 128; n++) {
                                 try {
                                     synth.note_off?.(n);
-                                } catch {}
+                                } catch { }
                             }
                         }
                     }
@@ -1092,7 +1104,7 @@ class EngineProcessor extends AudioWorkletProcessor {
         const passOther = !!data.passOther;
         try {
             inst.set_params?.(semitones, clampLow, clampHigh, passOther);
-        } catch {}
+        } catch { }
 
         let state = this._transposeNoteState.get(nodeId);
         if (!state) {
@@ -1138,7 +1150,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                                 ],
                             });
                         }
-                    } catch {}
+                    } catch { }
                 } else {
                     const key = (channel << 7) | origNote;
                     const transposedNote = state.active.get(key);
@@ -1154,7 +1166,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                                 outEvents.push({
                                     data: [0x80 | channel, res[1] & 0x7f, 0],
                                 });
-                        } catch {}
+                        } catch { }
                     }
                 }
             } else if (cmd === 0x80) {
@@ -1177,7 +1189,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                             outEvents.push({
                                 data: [0x80 | channel, res[1] & 0x7f, 0],
                             });
-                    } catch {}
+                    } catch { }
                 }
             } else {
                 if (passOther) {
@@ -1195,7 +1207,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                                     res[2] & 0x7f,
                                 ],
                             });
-                    } catch {}
+                    } catch { }
                 }
             }
         }
