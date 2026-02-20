@@ -18,7 +18,7 @@ interface NodeShellProps {
   children?: React.ReactNode; // allow custom extras
 }
 
-export function NodeShell(props: NodeShellProps) {
+function NodeShellBase(props: NodeShellProps) {
   const { id, data, spec, selected, onParameterChange, children } = props;
   const { params } = useNodeSpec({ id, data, onParameterChange, spec });
 
@@ -37,7 +37,7 @@ export function NodeShell(props: NodeShellProps) {
   if (primaryOut) {
     if (primaryOut.role === 'param-out') {
       // Heuristic: find first non-hidden param to determine variant; fallback numeric
-      const firstParam = spec.params.find(p=>!p.hidden);
+      const firstParam = spec.params.find(p => !p.hidden);
       if (firstParam?.kind === 'bool') outVariant = 'bool';
       else if (firstParam?.kind === 'text' || firstParam?.kind === 'select') outVariant = 'string';
       else outVariant = 'numeric';
@@ -77,12 +77,12 @@ export function NodeShell(props: NodeShellProps) {
               ?
             </button>
           )}
-      {spec.help && helpBtnRef && (
+          {spec.help && helpBtnRef && (
             <NodeHelpPopover
               open={helpOpen}
               onClose={() => setHelpOpen(false)}
               anchorRef={helpBtnRef as React.RefObject<HTMLElement>}
-        title={effectiveTitle}
+              title={effectiveTitle}
               description={spec.help.description}
               inputs={spec.help.inputs}
               outputs={spec.help.outputs}
@@ -93,11 +93,11 @@ export function NodeShell(props: NodeShellProps) {
           <div className="grid grid-cols-[minmax(16rem,_auto)_auto] gap-x-4">
             <div className="flex flex-col gap-2 col-span-1">
               {primaryIn && <AudioInRow label={primaryIn.label} variant={inVariant} />}
-              {spec.renderBeforeParams && spec.renderBeforeParams({ id, data, params, update: (k,v)=>onParameterChange(id,k,v) })}
+              {spec.renderBeforeParams && spec.renderBeforeParams({ id, data, params, update: (k, v) => onParameterChange(id, k, v) })}
               {params.map(p => (
                 <ParamAuto key={p.spec.key} runtime={p} nodeId={id} onParameterChange={onParameterChange} />
               ))}
-              {spec.renderAfterParams && spec.renderAfterParams({ id, data, params, update: (k,v)=>onParameterChange(id,k,v) })}
+              {spec.renderAfterParams && spec.renderAfterParams({ id, data, params, update: (k, v) => onParameterChange(id, k, v) })}
             </div>
             <div className="flex flex-col items-stretch col-span-1">
               <AudioOutRow label={primaryOut.label} />
@@ -106,11 +106,11 @@ export function NodeShell(props: NodeShellProps) {
         ) : (
           <div className="flex flex-col gap-2">
             {primaryIn && <AudioInRow label={primaryIn.label} variant={inVariant} />}
-            {spec.renderBeforeParams && spec.renderBeforeParams({ id, data, params, update: (k,v)=>onParameterChange(id,k,v) })}
+            {spec.renderBeforeParams && spec.renderBeforeParams({ id, data, params, update: (k, v) => onParameterChange(id, k, v) })}
             {params.map(p => (
               <ParamAuto key={p.spec.key} runtime={p} nodeId={id} onParameterChange={onParameterChange} />
             ))}
-            {spec.renderAfterParams && spec.renderAfterParams({ id, data, params, update: (k,v)=>onParameterChange(id,k,v) })}
+            {spec.renderAfterParams && spec.renderAfterParams({ id, data, params, update: (k, v) => onParameterChange(id, k, v) })}
           </div>
         )}
         {/* Full-width custom content (e.g., sequencer grid) */}
@@ -120,11 +120,13 @@ export function NodeShell(props: NodeShellProps) {
           </div>
         )}
       </div>
-  {/* If there is no primaryOut we explicitly pass null so HandleLayer suppresses the default output handle (avoids phantom output on sink nodes like Speaker). */}
-  <HandleLayer includeMidiIn={!!primaryIn} inputHandleVariant={inVariant} inputHandleId={primaryIn?.id || 'midi'} includeParamTargets={spec.paramHandles !== false} outputId={primaryOut ? primaryOut.id : null} outputVariant={outVariant} />
+      {/* If there is no primaryOut we explicitly pass null so HandleLayer suppresses the default output handle (avoids phantom output on sink nodes like Speaker). */}
+      <HandleLayer includeMidiIn={!!primaryIn} inputHandleVariant={inVariant} inputHandleId={primaryIn?.id || 'midi'} includeParamTargets={spec.paramHandles !== false} outputId={primaryOut ? primaryOut.id : null} outputVariant={outVariant} />
     </NodeUIProvider>
   );
 }
+
+export const NodeShell = React.memo(NodeShellBase);
 
 function AudioInRow({ label, variant }: { label: string; variant: string }) {
   const { midiEl } = useNodeUI(); // reuse midi slot for first input alignment

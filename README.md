@@ -137,11 +137,11 @@ Minimal checklist:
 1. Registry: Add display entry (type, name, icon, color, description) to `nodeRegistry.ts`.
 2. DSP (if needed): Implement Rust node + export in `audio-engine/src/lib.rs`; rebuild (`npm run build:wasm`).
 3. Worklet: Create handling / instantiation logic if it's a new DSP or MIDI processor.
-4. UI: Create `src/components/nodes/<Name>Node.tsx` with a `NodeSpec` (params, inputs, outputs, help) and return `<NodeShell spec={spec} />`.
+4. UI: Create `src/components/nodes/<Name>Node.tsx` with a `NodeSpec` (params, inputs, outputs, help) and return `<NodeShell spec={spec} />`. Note: `NodeShell` applies `React.memo` automatically to optimize canvas rendering. Do not wrap your node exports in `React.memo` unless it has complex internal state.
 5. Register component in the editor's `nodeTypes` map (unless auto-discovered).
 6. Test: Add node, connect cables, wiggle params, confirm console free of load errors.
 7. Persistence: Ensure sensible defaults so saved projects reload identically.
-8. (Optional) Custom UI: Provide `children` or hooks for grids, previews, advanced controls.
+8. (Optional) Custom UI: Provide `children` or hooks for grids, previews, advanced controls. You can access the UI context using `useNodeUI()`.
 
 ---
 
