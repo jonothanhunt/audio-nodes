@@ -1,7 +1,7 @@
 import { NodeShell } from "../../node-framework/NodeShell";
 import { NodeSpec } from "../../node-framework/types";
 
-interface ValueBoolData { value?: boolean; _connectedParams?: string[]; onParameterChange: (nodeId: string, key: string, value: unknown) => void;[k: string]: unknown; }
+interface ValueBoolData { value?: boolean; onParameterChange: (nodeId: string, key: string, value: unknown) => void;[k: string]: unknown; }
 interface ValueBoolNodeProps { id: string; selected?: boolean; data: ValueBoolData; }
 
 const spec: NodeSpec = {

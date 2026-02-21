@@ -56,16 +56,28 @@ export function useGraph() {
             const audioOk = fromRole === "audio-out" && toRole === "audio-in";
             const midiOk = fromRole === "midi-out" && toRole === "midi-in";
             const paramOk = fromRole === "param-out" && toRole === "param-in";
-            return audioOk || midiOk || paramOk;
+            if (!audioOk && !midiOk && !paramOk) return false;
+
+            // Audio inputs allow fan-in (mixing). MIDI and param inputs are single-source only.
+            if (midiOk || paramOk) {
+                const alreadyConnected = edges.some(
+                    (e) =>
+                        e.target === connection.target &&
+                        e.targetHandle === connection.targetHandle,
+                );
+                if (alreadyConnected) return false;
+            }
+
+            return true;
         },
-        [nodes],
+        [nodes, edges],
     );
 
     const onConnect = useCallback(
-        (params: Connection) =>
-            setEdges((eds) =>
-                isValidConnection(params) ? addEdge(params, eds) : eds,
-            ),
+        (params: Connection) => {
+            if (!isValidConnection(params)) return;
+            setEdges((eds) => addEdge(params, eds));
+        },
         [setEdges, isValidConnection],
     );
 

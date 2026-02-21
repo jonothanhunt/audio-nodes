@@ -36,8 +36,8 @@ export function NumberParam({
     badge,
 }: NumberParamProps) {
     const { accentColor, isParamConnected } = useNodeUI();
-    const connected = isParamConnected?.(paramKey) ?? false;
-    const liveModValue = useLiveParamModulation(nodeId, paramKey, !connected);
+    const disabledComputed = isParamConnected?.(paramKey) ?? false;
+    const liveModDelta = useLiveParamModulation(nodeId, paramKey, disabledComputed);
     const stop = (e: React.SyntheticEvent) => {
         e.stopPropagation();
     };
@@ -84,9 +84,9 @@ export function NumberParam({
 
     const invalid = raw.trim() === "" || Number.isNaN(parseFloat(raw));
     const showSlider = useSlider ?? (min != null && max != null);
-    const effectiveValue = lastCommittedRef.current;
-    // Display value should reflect live modulation when connected
-    const displayValue = connected && typeof liveModValue === 'number' ? liveModValue : effectiveValue;
+    const liveModNum = typeof liveModDelta === 'number' ? liveModDelta : 0;
+    const displayValue = lastCommittedRef.current + (liveModNum || 0);
+
     const percent =
         min != null && max != null
             ? ((displayValue - min) / (max - min)) * 100
@@ -95,10 +95,10 @@ export function NumberParam({
     const slider =
         showSlider && min != null && max != null ? (
             <div
-                className={`ml-3 flex items-center gap-1 w-52 ${connected ? "opacity-60" : ""}`}
+                className={`ml-3 flex items-center gap-1 w-52`}
                 onPointerDown={stop}
                 onMouseDown={stop}
-                style={{ pointerEvents: connected ? "none" : undefined }}
+                style={{ opacity: disabledComputed ? 0.6 : 1, pointerEvents: disabledComputed ? 'none' : 'auto' }}
             >
                 <span className="text-sm text-white/50 w-6 text-right select-none">
                     {min}
@@ -119,9 +119,10 @@ export function NumberParam({
                         max={max}
                         step={step ?? (max - min) / 100}
                         value={displayValue}
-                        disabled={connected}
+                        disabled={disabledComputed}
                         onChange={(e) => {
                             e.stopPropagation();
+                            if (disabledComputed) return;
                             const v = parseFloat(e.target.value);
                             commitValue(v);
                             setRaw(String(v));
@@ -139,18 +140,20 @@ export function NumberParam({
         <ParamRow label={label} paramKey={paramKey} badge={badge}>
             <input
                 type="number"
-                value={connected && typeof liveModValue === 'number' ? liveModValue.toFixed(3) : raw}
+                value={raw}
                 min={min}
                 max={max}
                 step={step}
-                disabled={connected}
+                disabled={disabledComputed}
                 onChange={(e) => {
                     e.stopPropagation();
+                    if (disabledComputed) return;
                     const next = e.target.value;
                     setRaw(next);
                     commitIfValid(next);
                 }}
                 onBlur={() => {
+                    if (disabledComputed) return;
                     if (raw.trim() === "") {
                         setRaw(String(lastCommittedRef.current));
                     } else {
@@ -162,8 +165,7 @@ export function NumberParam({
                 onMouseDown={stop}
                 onClick={stop}
                 onDoubleClick={stop}
-                className={`${sharedInputCls} nodrag ${invalid ? "border-red-500 focus:border-red-500" : ""} ${connected ? "cursor-not-allowed opacity-60" : ""}`}
-                style={{ pointerEvents: connected ? "none" : undefined }}
+                className={`${sharedInputCls} nodrag ${invalid ? "border-red-500 focus:border-red-500" : ""} ${disabledComputed ? "opacity-60 cursor-not-allowed" : ""}`}
             />
             {slider}
         </ParamRow>

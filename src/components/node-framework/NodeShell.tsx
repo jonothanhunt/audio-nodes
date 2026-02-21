@@ -11,11 +11,11 @@ import { getNodeMeta } from "@/lib/nodeRegistry";
 
 interface NodeShellProps {
   id: string;
-  data: Record<string, unknown> & { _connectedParams?: string[] };
+  data: Record<string, unknown>;
   spec: NodeSpec;
   selected?: boolean;
   onParameterChange: (id: string, key: string, value: unknown) => void;
-  children?: React.ReactNode; // allow custom extras
+  children?: React.ReactNode;
 }
 
 function NodeShellBase(props: NodeShellProps) {
@@ -27,7 +27,6 @@ function NodeShellBase(props: NodeShellProps) {
   const stringKeys = spec.params.filter(p => p.kind === 'text' || p.kind === 'select').map(p => p.key);
   const boolKeys = spec.params.filter(p => p.kind === 'bool').map(p => p.key);
 
-  const isParamConnected = (key: string) => Array.isArray(data._connectedParams) && data._connectedParams.includes(key);
 
   // Detect primary in/out (first declared)
   const primaryIn = spec.inputs?.[0];
@@ -55,9 +54,11 @@ function NodeShellBase(props: NodeShellProps) {
   const helpBtnRef = React.useRef<HTMLButtonElement | null>(null);
 
   return (
-    <NodeUIProvider accentColor={accent} numericKeys={numericKeys} stringKeys={stringKeys} boolKeys={boolKeys} isParamConnected={isParamConnected}>
+    <NodeUIProvider nodeId={id} accentColor={accent} numericKeys={numericKeys} stringKeys={stringKeys} boolKeys={boolKeys}>
       {selected && (
-        <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-xs text-gray-500">ID: {id}</div>
+        <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-xs text-gray-500 whitespace-nowrap bg-gray-900/80 px-1 rounded">
+          ID: …{id.slice(-8)}
+        </div>
       )}
       <div className="relative bg-gray-900 rounded-lg p-4 shadow-lg border" style={{ borderColor: accent }}>
         <div className="pointer-events-none absolute inset-0 rounded-lg" style={{ background: `linear-gradient(135deg, ${accent}26, transparent 65%)` }} />

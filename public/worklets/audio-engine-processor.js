@@ -22,7 +22,8 @@ class EngineProcessor extends AudioWorkletProcessor {
         this._synthInstances = new Map(); // nodeId -> wasm.SynthNode (planned)
         this._transposeInstances = new Map(); // nodeId -> wasm.MidiTransposeNode
         this._lfoInstances = new Map(); // nodeId -> wasm.LfoNode
-        this._modConnections = []; // derived modulation edges (lfo -> param)
+        this._lfoValues = new Map(); // nodeId -> current block value
+        this._paramConnections = []; // derived parameter edges (CV / Mod)
 
         this._midiQueues = new Map(); // nodeId -> Array of events for next blocks
         this._timebase = { perfNowMs: 0, audioCurrentTimeSec: 0 };
@@ -228,6 +229,11 @@ if (typeof globalThis.TextDecoder === 'undefined') {
             case "setSequencerPlay": {
                 const { nodeId, play } = msg;
                 if (!nodeId) break;
+                // Skip if 'playing' is currently driven by a param connection (e.g. a Bool node).
+                // In that case the per-block _applyParamModulations path owns it.
+                const isPlayingModulated = this._paramConnections &&
+                    this._paramConnections.some(m => m.to === nodeId && m.targetParam === 'playing');
+                if (isPlayingModulated) break;
                 let entry = this._sequencers.get(nodeId);
                 if (!entry) {
                     entry = {
@@ -248,10 +254,10 @@ if (typeof globalThis.TextDecoder === 'undefined') {
                         entry.pendingStartBeat = this._transport.beatIndex + 1;
                     }
                 } else {
-                    // Stop immediately (gated) but do not reset step index; spec: Play false gates output w/o reset
+                    // Stop immediately (gated) but do not reset step index
                     entry.isPlaying = false;
                     entry.pendingStartBeat = null;
-                    // Send NoteOff for any active notes if we had generated some (future-proof)
+                    // Send NoteOff for any active notes
                     if (entry.activeNotes.size) {
                         const outEvents = [];
                         for (const midi of entry.activeNotes.values()) {
@@ -454,15 +460,13 @@ if (typeof globalThis.TextDecoder === 'undefined') {
                 this._connections = Array.isArray(connections)
                     ? connections
                     : [];
-                // Rebuild modulation connections: any edge from an lfo node to a param-in
-                this._modConnections = [];
+                // Rebuild parameter connections: any edge targeting a param-in
+                this._paramConnections = [];
                 for (const c of this._connections) {
-                    const src = this._nodes.get(c.from);
-                    const dst = this._nodes.get(c.to);
-                    if (src && src.type === 'lfo' && dst) {
-                        if (c.toInput && !['input', 'output', 'midi'].includes(c.toInput)) {
-                            this._modConnections.push({ from: c.from, to: c.to, targetParam: c.toInput });
-                        }
+                    if (c.toInput && !['input', 'output', 'midi', 'midi-out', 'audio-in', 'audio-out'].includes(c.toInput)) {
+                        let tp = c.toInput;
+                        if (tp.startsWith('param-')) tp = tp.substring(6);
+                        this._paramConnections.push({ from: c.from, to: c.to, fromOutput: c.fromOutput, targetParam: tp });
                     }
                 }
                 try {
@@ -476,9 +480,10 @@ if (typeof globalThis.TextDecoder === 'undefined') {
             case "clear": {
                 this._nodes.clear();
                 this._connections = [];
+                this._paramConnections = [];
                 this._paramCache.clear?.();
+                this._lfoValues.clear();
                 this._sequencers.clear();
-                this._arps.clear();
                 this._arps.clear();
                 for (const inst of this._oscInstances.values()) {
                     try {
@@ -604,6 +609,80 @@ if (typeof globalThis.TextDecoder === 'undefined') {
             }
             // Approximate current audio time for this block
             const blockStartTimeSec = this._timebase.audioCurrentTimeSec; // updated when host sends timebase; coarse but fine for scheduling
+
+            // Pre-evaluate all LFO nodes once per block
+            this._lfoValues.clear();
+            const lfoNodes = Array.from(this._nodes.entries()).filter(([_, d]) => d?.type === 'lfo');
+            for (const [nid, lfoNode] of lfoNodes) {
+                const inst = this._getLfoInstance(nid);
+                if (!inst) continue;
+                const beats = Number(lfoNode.beatsPerCycle) || 1;
+                const wfMap = { sine: 0, triangle: 1, saw: 2, square: 3 };
+                const wf = wfMap[lfoNode.waveform] ?? 0;
+                const phase = Number(lfoNode.phase) || 0;
+                try { inst.set_params(beats, wf, phase); } catch { }
+                const raw = inst.next_value(blockSize, this._transport.bpm);
+                let depth = Number(lfoNode.depth); if (!isFinite(depth)) depth = 1;
+                let offset = Number(lfoNode.offset); if (!isFinite(offset)) offset = 0;
+                const bipolar = lfoNode.bipolar !== false;
+                let v = raw;
+                if (!bipolar) v = (v + 1) * 0.5;
+                v = v * depth + offset;
+                this._lfoValues.set(nid, v);
+            }
+
+            // --- Pre-propagate value-node connections (e.g. Bool A → Bool B.value) ---
+            // Value nodes (value-bool, value-number, etc.) act as pass-through sources.
+            // Their 'value' field in _nodes must be patched before downstream modulations run.
+            // We loop up to 4 times to handle chains of arbitrary depth.
+            this._propagateValueNodes();
+
+            // --- Pre-process Param Modulations for stateful MIDI nodes ---
+            for (const [nid, entry] of this._sequencers.entries()) {
+                const data = this._nodes.get(nid);
+                if (!data) continue;
+                const patched = this._applyParamModulations(nid, data);
+                if (patched !== data) {
+                    const play = !!patched.playing;
+                    if (play && !entry.isPlaying && entry.pendingStartBeat == null) {
+                        entry.pendingStartBeat = this._transport.beatIndex + 1;
+                    } else if (!play && entry.isPlaying) {
+                        entry.isPlaying = false;
+                        entry.pendingStartBeat = null;
+                        if (entry.activeNotes.size) {
+                            const outEvents = [];
+                            for (const midi of entry.activeNotes.values()) outEvents.push({ data: [0x80, midi & 0x7f, 0] });
+                            this._broadcastSequencerMIDI(nid, outEvents);
+                            entry.activeNotes.clear();
+                        }
+                    }
+                    if (typeof patched.rateMultiplier === 'number') entry.pendingRate = patched.rateMultiplier;
+                }
+            }
+            for (const [nid, entry] of this._arps.entries()) {
+                const data = this._nodes.get(nid);
+                if (!data) continue;
+                const patched = this._applyParamModulations(nid, data);
+                if (patched !== data) {
+                    const play = !!patched.playing;
+                    if (play && !entry.isPlaying && entry.pendingStartBeat == null) {
+                        entry.pendingStartBeat = this._transport.beatIndex + 1;
+                    } else if (!play && entry.isPlaying) {
+                        entry.isPlaying = false;
+                        entry.pendingStartBeat = null;
+                        entry.beatsAccum = 0;
+                        if (entry.activeOut.size) {
+                            const offEvents = [];
+                            for (const n of entry.activeOut.values()) offEvents.push({ data: [0x80, n & 0x7f, 0] });
+                            this._broadcastArpMIDI(nid, offEvents);
+                            entry.activeOut.clear();
+                        }
+                    }
+                    if (typeof patched.rateMultiplier === 'number') entry.pendingRate = patched.rateMultiplier;
+                    if (typeof patched.mode === 'string') entry.mode = patched.mode;
+                    if (typeof patched.octaves === 'number') entry.octaves = Math.max(1, Math.min(4, Math.floor(patched.octaves)));
+                }
+            }
 
             // --- Beat scheduling (beat-only, no bars) ---
             const t = this._transport;
@@ -788,40 +867,7 @@ if (typeof globalThis.TextDecoder === 'undefined') {
                     queue.length = 0; // drop
                 }
             }
-
-            // Propagate param values along param edges
-            try {
-                const paramEdges = this._connections.filter(
-                    (c) =>
-                        c &&
-                        (c.fromOutput === "output" || c.fromOutput == null) &&
-                        c.toInput &&
-                        typeof c.toInput === "string" &&
-                        this._nodes.get(c.from) &&
-                        this._nodes.get(c.to)
-                );
-                for (const e of paramEdges) {
-                    const src = this._nodes.get(e.from) || {};
-                    const dst = this._nodes.get(e.to) || {};
-                    // Determine value to forward: by convention use 'value' when present, else try fromOutput key
-                    let v = undefined;
-                    if (Object.prototype.hasOwnProperty.call(src, "value")) {
-                        v = src.value;
-                    } else if (
-                        e.fromOutput &&
-                        Object.prototype.hasOwnProperty.call(src, e.fromOutput)
-                    ) {
-                        v = src[e.fromOutput];
-                    }
-                    if (v !== undefined) {
-                        // assign shallowly; avoid copying functions
-                        try {
-                            dst[e.toInput] = v;
-                            this._nodes.set(e.to, dst);
-                        } catch { }
-                    }
-                }
-            } catch { }
+            // LFO evaluation was moved to the top of the block
 
             this._processGraph(outL, outR);
 
@@ -964,47 +1010,11 @@ if (typeof globalThis.TextDecoder === 'undefined') {
 
     // Render Synth node audio into the provided output buffers
     _processSynth(nodeId, data, outL, outR) {
+        data = this._applyParamModulations(nodeId, data);
         const N = outL.length;
         const synth = this._getSynthInstance(nodeId);
         if (!synth) return;
         try {
-            // Apply modulation additive overrides (simple v1): gather lfo contributions for supported params
-            if (this._modConnections && this._modConnections.length) {
-                const relevant = this._modConnections.filter(m => m.to === nodeId);
-                if (relevant.length) {
-                    // We'll build a temp param patch object
-                    const modAccum = {};
-                    for (const m of relevant) {
-                        const lfoNode = this._nodes.get(m.from);
-                        if (!lfoNode) continue;
-                        const inst = this._getLfoInstance(m.from);
-                        if (!inst) continue;
-                        // Derive beatsPerCycle, waveform, phase from node data, update inst params
-                        const beats = Number(lfoNode.beatsPerCycle) || 1;
-                        const wfMap = { sine: 0, triangle: 1, saw: 2, square: 3 };
-                        const wf = wfMap[lfoNode.waveform] ?? 0;
-                        const phase = Number(lfoNode.phase) || 0;
-                        try { inst.set_params(beats, wf, phase); } catch { }
-                        const raw = inst.next_value(N, this._transport.bpm);
-                        let depth = Number(lfoNode.depth); if (!isFinite(depth)) depth = 1;
-                        let offset = Number(lfoNode.offset); if (!isFinite(offset)) offset = 0;
-                        const bipolar = lfoNode.bipolar !== false; // default true
-                        let v = raw; // [-1,1]
-                        if (!bipolar) v = (v + 1) * 0.5; // [0,1]
-                        v = v * depth + offset; // scale and shift
-                        if (!modAccum[m.targetParam]) modAccum[m.targetParam] = 0;
-                        modAccum[m.targetParam] += v;
-                    }
-                    // Merge onto data (non-destructive): create shallow copy to not mutate original node data map
-                    if (Object.keys(modAccum).length) {
-                        data = { ...data, ...modAccum };
-                        // Throttle: send a lightweight preview of modulated numeric params (no more than once per block)
-                        try {
-                            this.port.postMessage({ type: 'modPreview', nodeId, data: modAccum });
-                        } catch { }
-                    }
-                }
-            }
             const wf = this._getWaveformIndex(data.waveform || "sawtooth");
             synth.set_waveform?.(wf);
             if (typeof data.maxVoices === "number")
@@ -1094,6 +1104,7 @@ if (typeof globalThis.TextDecoder === 'undefined') {
         data,
         events /*, blockStartTimeSec, blockSize */
     ) {
+        data = this._applyParamModulations(nodeId, data);
         const inst = this._getTransposeInstance(nodeId);
         if (!inst) return;
         const semitones =
@@ -1226,7 +1237,91 @@ if (typeof globalThis.TextDecoder === 'undefined') {
         }
     }
 
+    _propagateValueNodes() {
+        if (!this._paramConnections || !this._paramConnections.length) return;
+        // Collect connections that target value nodes (used as pass-through signal sources).
+        const valueTargets = this._paramConnections.filter(m => {
+            const n = this._nodes.get(m.to);
+            return n && typeof n.type === 'string' && n.type.startsWith('value-');
+        });
+        if (!valueTargets.length) return;
+        // Lazy-init cache: tracks last value actually sent via modPreview, keyed by
+        // connection identity. This is independent of _nodes, which React's node-sync
+        // periodically resets to the React-state value (causing false "no-change" skips).
+        if (!this._propagatedValues) this._propagatedValues = new Map();
+        // Propagate up to 4 levels deep to handle chained value nodes.
+        for (let pass = 0; pass < 4; pass++) {
+            let anyChanged = false;
+            for (const m of valueTargets) {
+                const srcNode = this._nodes.get(m.from);
+                if (!srcNode) continue;
+                const targetNode = this._nodes.get(m.to);
+                if (!targetNode) continue;
+                // Determine which field to read from the source
+                const outKey = m.fromOutput && m.fromOutput !== 'param-out' && m.fromOutput !== 'output'
+                    ? m.fromOutput : 'value';
+                const raw = srcNode[outKey];
+                if (raw === undefined || raw === null) continue;
+                // Always write into _nodes so downstream chains (pass 1, 2...) see the updated value.
+                const prevNodeVal = targetNode[m.targetParam];
+                if (prevNodeVal !== raw) {
+                    this._nodes.set(m.to, { ...targetNode, [m.targetParam]: raw });
+                    anyChanged = true;
+                }
+                // Use the propagated-values cache (not _nodes) to determine if we should notify the UI.
+                // _nodes gets reset by React's sync, so it is not a reliable signal for "did value change".
+                const cacheKey = `${m.from}:${m.to}:${m.targetParam}`;
+                if (this._propagatedValues.get(cacheKey) !== raw) {
+                    this._propagatedValues.set(cacheKey, raw);
+                    try { this.port.postMessage({ type: 'modPreview', nodeId: m.to, data: { [m.targetParam]: raw } }); } catch { }
+                }
+            }
+            if (!anyChanged) break; // converged — no further chain propagation needed
+        }
+    }
+
+    _applyParamModulations(nodeId, data) {
+        if (!this._paramConnections || !this._paramConnections.length) return data;
+        const relevant = this._paramConnections.filter(m => m.to === nodeId);
+        if (!relevant.length) return data;
+
+        const modAccum = {};
+        // Track which keys come from a direct (non-LFO) source — those replace rather than add
+        const directSet = new Set();
+        for (const m of relevant) {
+            const srcNode = this._nodes.get(m.from);
+            if (!srcNode) continue;
+
+            if (srcNode.type === 'lfo') {
+                const v = this._lfoValues.get(m.from) || 0;
+                if (modAccum[m.targetParam] === undefined) modAccum[m.targetParam] = 0;
+                modAccum[m.targetParam] += v;
+            } else {
+                // Direct value node — use its raw value (preserving boolean)
+                const outKey = m.fromOutput && m.fromOutput !== 'param-out' && m.fromOutput !== 'output' ? m.fromOutput : 'value';
+                const raw = srcNode[outKey];
+                // If it's a boolean, keep it boolean (replaces directly)
+                if (typeof raw === 'boolean') {
+                    modAccum[m.targetParam] = raw;
+                    directSet.add(m.targetParam);
+                } else {
+                    const v = Number(raw);
+                    if (modAccum[m.targetParam] === undefined) modAccum[m.targetParam] = 0;
+                    if (!directSet.has(m.targetParam)) modAccum[m.targetParam] += isFinite(v) ? v : 0;
+                }
+            }
+        }
+
+        if (Object.keys(modAccum).length) {
+            const patched = { ...data, ...modAccum };
+            try { this.port.postMessage({ type: 'modPreview', nodeId, data: modAccum }); } catch { }
+            return patched;
+        }
+        return data;
+    }
+
     _processOscillator(nodeId, data, outL, outR) {
+        data = this._applyParamModulations(nodeId, data);
         const N = outL.length;
         const osc = this._getOscInstance(nodeId);
         try {
@@ -1249,6 +1344,7 @@ if (typeof globalThis.TextDecoder === 'undefined') {
     }
 
     _processReverb(nodeId, data, outL, outR, visited) {
+        data = this._applyParamModulations(nodeId, data);
         // Only treat audio edges into main audio input
         const inputs = this._connections.filter(
             (c) =>

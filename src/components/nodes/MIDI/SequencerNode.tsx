@@ -4,6 +4,7 @@ import React from "react";
 import { NodeShell } from "../../node-framework/NodeShell";
 import { NodeSpec } from "../../node-framework/types";
 import { SequencerGrid, NOTE_NAMES } from "../../node-ui/SequencerGrid";
+import { useConnectedParamChecker } from "../../node-ui/useConnectedParam";
 
 interface SequencerNodeData {
     length?: number;
@@ -12,7 +13,6 @@ interface SequencerNodeData {
     rateMultiplier?: number;
     playing?: boolean;
     steps?: boolean[][];
-    _connectedParams?: string[];
     onParameterChange: (nodeId: string, parameter: string, value: string | number | boolean | boolean[][]) => void;
     onEmitMidi?: (
         sourceId: string,
@@ -28,6 +28,31 @@ const NOTE_OPTIONS = OCTAVES.flatMap((oct) =>
     NOTE_NAMES.map((n) => `${n}${oct}`),
 );
 
+// Static portions of the spec (params, IO, help) never change — only renderAfterParams
+// closes over rateHint/playingProp so those stay inside useMemo.
+const SEQUENCER_SPEC_BASE = {
+    type: 'sequencer',
+    params: [
+        { key: 'fromNote', kind: 'select' as const, default: 'C4', label: 'From', options: NOTE_OPTIONS },
+        { key: 'toNote', kind: 'select' as const, default: 'C5', label: 'To', options: NOTE_OPTIONS },
+        { key: 'length', kind: 'number' as const, default: 16, min: 1, max: 64, step: 1, label: 'Length' },
+        { key: 'playing', kind: 'bool' as const, default: false, label: 'Play' },
+        { key: 'rateMultiplier', kind: 'select' as const, default: '1', label: 'Rate', options: ['0.25', '0.5', '1', '2', '4'] },
+    ],
+    inputs: [] as NodeSpec['inputs'],
+    outputs: [{ id: 'midi-out', role: 'midi-out' as const, label: 'MIDI Out' }],
+    help: {
+        description: 'Step sequencer that emits MIDI notes on the global transport. Toggle grid cells to enable notes.',
+        inputs: [
+            { name: 'From/To', description: 'MIDI note range displayed.' },
+            { name: 'Length', description: 'Steps per sequence (1–64).' },
+            { name: 'Play', description: 'Quantized start/stop with global bar.' },
+            { name: 'Rate', description: 'Speed multiplier vs global BPM.' },
+        ],
+        outputs: [{ name: 'MIDI Out', description: 'Emits Note On/Off each step.' }],
+    },
+} satisfies Omit<NodeSpec, 'renderAfterParams' | 'renderBeforeParams'>;
+
 function noteToMidi(note: string): number {
     // Expect format like 'C4', 'G#3'
     const m = note.match(/^(C#?|D#?|E|F#?|G#?|A#?|B)(-?\d+)$/);
@@ -40,10 +65,26 @@ function noteToMidi(note: string): number {
     return (octave + 1) * 12 + idx;
 }
 
-// (Spec now created inside component to allow dynamic renderAfterParams usage.)
-
 export default function SequencerNode({ id, data, selected }: SequencerNodeProps) {
     const { onParameterChange } = data;
+    const isConnected = useConnectedParamChecker(id);
+    const playingIsConnected = isConnected('playing');
+
+    // When 'playing' is driven by a connected Bool node, track the live modulated value
+    // from the worklet's modPreview events — this keeps the UI in sync with the actual state.
+    const [modulatedPlaying, setModulatedPlaying] = React.useState<boolean | undefined>(undefined);
+    React.useEffect(() => {
+        if (!playingIsConnected) { setModulatedPlaying(undefined); return; }
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent).detail as { nodeId: string; data: Record<string, unknown> };
+            if (!detail || detail.nodeId !== id) return;
+            const v = detail.data?.playing;
+            if (typeof v === 'boolean') setModulatedPlaying(v);
+        };
+        window.addEventListener('audioNodesNodeRendered', handler as EventListener);
+        return () => window.removeEventListener('audioNodesNodeRendered', handler as EventListener);
+    }, [id, playingIsConnected]);
+
     // Defaults
     React.useEffect(() => {
         const ensure = (key: keyof SequencerNodeData, def: string | number | boolean) => {
@@ -57,10 +98,14 @@ export default function SequencerNode({ id, data, selected }: SequencerNodeProps
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // Resolve explicit playing: prefer live modulated value when connected, else use data prop
+    const playingProp = playingIsConnected
+        ? (modulatedPlaying ?? data.playing ?? false)
+        : (data.playing ?? false);
+
     const lengthProp = data.length ?? 16;
     const fromNoteProp = data.fromNote ?? 'C4';
     const toNoteProp = data.toNote ?? 'C5';
-    const playingProp = data.playing ?? false;
 
     const lengthClamped = Math.max(
         1,
@@ -141,7 +186,10 @@ export default function SequencerNode({ id, data, selected }: SequencerNodeProps
     // Emit MIDI on step change
     React.useEffect(() => {
         if (!data || typeof data.onEmitMidi !== "function") return;
-        if (!playingProp || !startedRef.current) return; // don't emit until quantized start
+        // Gate: only emit if the worklet has confirmed a step (startedRef) OR playingProp is true.
+        // Using startedRef here allows modulation-driven play (e.g. Bool node) to emit MIDI
+        // even when React state hasn't caught up to the actual playing state yet.
+        if (!startedRef.current && !playingProp) return;
         if (currentStep < 0) return;
         const emit = data.onEmitMidi as (
             sourceId: string,
@@ -187,8 +235,10 @@ export default function SequencerNode({ id, data, selected }: SequencerNodeProps
                 }
             }
             if (events.length) emit(id, events);
-            // Reset started flag so re-playing will wait for next quantized step
+            // Reset refs so re-playing starts with a clean slate
             startedRef.current = false;
+            prevStepRef.current = -1;
+            setCurrentStep(-1);
         }
     }, [playingProp, data, steps, currentStep, noteCount, bottomMidi, id]);
 
@@ -290,27 +340,7 @@ export default function SequencerNode({ id, data, selected }: SequencerNodeProps
 
     // Node-local spec (params, help, IO) now dynamic for hint placement
     const spec: NodeSpec = React.useMemo(() => ({
-        type: 'sequencer',
-        // title omitted (registry provides); accentColor centralized in registry
-        params: [
-            { key: 'fromNote', kind: 'select', default: 'C4', label: 'From', options: NOTE_OPTIONS },
-            { key: 'toNote', kind: 'select', default: 'C5', label: 'To', options: NOTE_OPTIONS },
-            { key: 'length', kind: 'number', default: 16, min: 1, max: 64, step: 1, label: 'Length' },
-            { key: 'playing', kind: 'bool', default: false, label: 'Play' },
-            { key: 'rateMultiplier', kind: 'select', default: '1', label: 'Rate', options: ['0.25', '0.5', '1', '2', '4'] },
-        ],
-        inputs: [],
-        outputs: [{ id: 'midi-out', role: 'midi-out', label: 'MIDI Out' }],
-        help: {
-            description: 'Step sequencer that emits MIDI notes on the global transport. Toggle grid cells to enable notes.',
-            inputs: [
-                { name: 'From/To', description: 'MIDI note range displayed.' },
-                { name: 'Length', description: 'Steps per sequence (1–64).' },
-                { name: 'Play', description: 'Quantized start/stop with global bar.' },
-                { name: 'Rate', description: 'Speed multiplier vs global BPM.' },
-            ],
-            outputs: [{ name: 'MIDI Out', description: 'Emits Note On/Off each step.' }]
-        },
+        ...SEQUENCER_SPEC_BASE,
         renderAfterParams: () => (
             rateHint && playingProp ? <div className="text-[10px] text-amber-400/80 -mt-1 mb-1">Rate change applies next beat</div> : null
         )
@@ -320,13 +350,17 @@ export default function SequencerNode({ id, data, selected }: SequencerNodeProps
     const handleParamChange = React.useCallback((nid: string, key: string, value: unknown) => {
         onParameterChange(nid, key, key === 'rateMultiplier' ? Number(value) : value as (string | number | boolean | boolean[][]));
         if (key === 'playing') {
-            try { window.dispatchEvent(new CustomEvent('audioNodesSequencerPlayToggle', { detail: { nodeId: nid, play: value } })); } catch { }
+            // Only dispatch the window event when 'playing' is NOT modulated by an external connection.
+            // When connected, the worklet's _applyParamModulations path owns play/stop.
+            if (!playingIsConnected) {
+                try { window.dispatchEvent(new CustomEvent('audioNodesSequencerPlayToggle', { detail: { nodeId: nid, play: value } })); } catch { }
+            }
         } else if (key === 'rateMultiplier') {
             try { window.dispatchEvent(new CustomEvent('audioNodesSequencerRateChange', { detail: { nodeId: nid, rate: Number(value) } })); } catch { }
             setRateHint(true);
             window.setTimeout(() => setRateHint(false), 1600);
         }
-    }, [onParameterChange]);
+    }, [onParameterChange, playingIsConnected]);
 
     const grid = (
         <SequencerGrid

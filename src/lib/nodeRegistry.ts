@@ -71,7 +71,6 @@ export const NODE_CATEGORIES: CategoryEntry[] = [
 ];
 
 // Build fast lookup maps
-const TYPE_ALIASES: Record<string, string> = { "value-string": "value-text" };
 export const NODE_TYPE_MAP: Record<string, { def: NodeEntry; category: CategoryEntry }> = {};
 for (const cat of NODE_CATEGORIES) {
     for (const def of cat.nodes) {
@@ -93,16 +92,15 @@ export function getNodeMeta(type?: string): UnifiedNodeMeta {
     if (!type) {
         return { type: "unknown", category: "Utility", accentColor: "#64748b", kind: "utility" };
     }
-    const resolved = TYPE_ALIASES[type] || type;
-    const entry = NODE_TYPE_MAP[resolved];
+    const entry = NODE_TYPE_MAP[type];
     if (!entry) {
-        return { type: resolved, category: "Utility", accentColor: "#64748b", kind: "utility" };
+        return { type, category: "Utility", accentColor: "#64748b", kind: "utility" };
     }
     return {
         type: entry.def.type,
         category: entry.category.name,
         accentColor: entry.category.color,
-    kind: entry.category.kind,
+        kind: entry.category.kind,
         displayName: entry.def.name,
         icon: entry.def.icon,
         description: entry.def.description,

@@ -38,7 +38,7 @@ export function useProjectPersistence(
             if (typeof anyWin.__audioNodesTransportBpm === "number") {
                 transportBpm = anyWin.__audioNodesTransportBpm;
             }
-        } catch {}
+        } catch { }
         return {
             version: 1,
             createdAt: new Date().toISOString(),
@@ -51,8 +51,7 @@ export function useProjectPersistence(
             edges: edges.map((e) => ({
                 id:
                     e.id ||
-                    `${e.source}-${e.sourceHandle || "out"}->${e.target}-${
-                        e.targetHandle || "in"
+                    `${e.source}-${e.sourceHandle || "out"}->${e.target}-${e.targetHandle || "in"
                     }`,
                 source: e.source,
                 target: e.target,
@@ -93,20 +92,6 @@ export function useProjectPersistence(
 
             const loadedNodes: Node[] = rawNodes.map((n) => {
                 const rawData = (n.data || {}) as Record<string, unknown>;
-                // Migration: if type=sequencer
-                if (n.type === "sequencer") {
-                    // If bpm present and rateMultiplier absent, drop bpm and set rateMultiplier=1
-                    if (
-                        Object.prototype.hasOwnProperty.call(rawData, "bpm") &&
-                        !Object.prototype.hasOwnProperty.call(rawData, "rateMultiplier")
-                    ) {
-                        delete rawData.bpm; // global BPM now
-                        rawData.rateMultiplier = 1;
-                    }
-                    if (!Object.prototype.hasOwnProperty.call(rawData, "rateMultiplier")) {
-                        rawData.rateMultiplier = 1;
-                    }
-                }
                 return {
                     id: String(n.id),
                     type: n.type,
@@ -118,8 +103,7 @@ export function useProjectPersistence(
             const loadedEdges: Edge[] = rawEdges.map((e) => ({
                 id:
                     e.id ||
-                    `${e.source}-${e.sourceHandle || "out"}->${e.target}-${
-                        e.targetHandle || "in"
+                    `${e.source}-${e.sourceHandle || "out"}->${e.target}-${e.targetHandle || "in"
                     }`,
                 source: String(e.source),
                 target: String(e.target),
@@ -143,7 +127,7 @@ export function useProjectPersistence(
                 if (maybe.transport && typeof maybe.transport.bpm === "number") {
                     (window as unknown as { __audioNodesTransportBpm?: number }).__audioNodesTransportBpm = maybe.transport.bpm;
                 }
-            } catch {}
+            } catch { }
             return true;
         },
         [setNodes, setEdges, reattachHandlers, rfInstanceRef],

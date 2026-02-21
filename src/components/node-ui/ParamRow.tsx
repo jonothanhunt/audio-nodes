@@ -11,13 +11,11 @@ interface ParamRowProps {
 }
 
 export function ParamRow({ label, paramKey, children, badge }: ParamRowProps) {
-    const { registerParam, accentColor, isParamConnected } = useNodeUI();
-    const connected = isParamConnected?.(paramKey) ?? false;
+    const { registerParam, accentColor } = useNodeUI();
     return (
         <div
             className={`relative flex items-center ${rowHeightCls}`}
             ref={(el) => registerParam(paramKey, el)}
-            data-connected={connected ? "true" : "false"}
         >
             <label className={`${labelCls} flex items-center`}>
                 <span>{label}</span>

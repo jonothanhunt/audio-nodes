@@ -1,8 +1,8 @@
 "use client";
 import React from "react";
 import { ParamRow } from "../ParamRow";
-import { useNodeUI } from "../NodeUIProvider";
 import { inputCls } from "../styles/inputStyles";
+import { useNodeUI } from "../NodeUIProvider";
 
 interface SelectParamProps {
     nodeId: string;
@@ -29,11 +29,10 @@ export function SelectParam({
     widthClass = "w-28",
     disabled,
 }: SelectParamProps) {
+    const { isParamConnected } = useNodeUI();
     const stop = (e: React.SyntheticEvent) => {
         e.stopPropagation();
     };
-    const { isParamConnected } = useNodeUI();
-    const connected = isParamConnected?.(paramKey) ?? false;
     // Track last valid value so we can display it when incoming connected value is invalid
     const lastValidRef = React.useRef<string | null>(null);
     const opts = Array.isArray(options) ? options : [];
@@ -47,8 +46,8 @@ export function SelectParam({
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [value, options]);
-    const invalidIncoming = connected && !isValid;
-    const disabledComputed = connected || !!disabled;
+    const invalidIncoming = !isValid;
+    const disabledComputed = !!disabled || (isParamConnected?.(paramKey) ?? false);
     const displayValue = invalidIncoming
         ? lastValidRef.current ?? (opts[0] ?? "")
         : value;

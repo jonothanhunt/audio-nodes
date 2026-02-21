@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
 import { HandleVariant } from "./styles/handleStyles";
+import { useConnectedParamChecker } from "./useConnectedParam";
 
 interface RegistrationMap {
     [key: string]: HTMLElement | null;
@@ -19,29 +20,29 @@ interface NodeUIContextValue {
     outputTop: number;
     getVariantFor: (key: string) => HandleVariant;
     baseBg: string;
-    isParamConnected?: (key: string) => boolean;
+    isParamConnected: (key: string) => boolean;
 }
 
 const NodeUIContext = React.createContext<NodeUIContextValue | null>(null);
 
 export interface NodeUIProviderProps {
+    nodeId: string;
     accentColor: string;
     children: React.ReactNode;
     numericKeys?: string[];
     stringKeys?: string[];
     boolKeys?: string[];
     baseBg?: string;
-    isParamConnected?: (key: string) => boolean;
 }
 
 export function NodeUIProvider({
+    nodeId,
     accentColor,
     children,
     numericKeys = [],
     stringKeys = [],
     boolKeys = [],
     baseBg = "#111827",
-    isParamConnected,
 }: NodeUIProviderProps) {
     const rootRef = React.useRef<HTMLDivElement | null>(null);
     const midiRef = React.useRef<HTMLElement | null>(null);
@@ -52,6 +53,9 @@ export function NodeUIProvider({
     const [outputTop, setOutputTop] = React.useState(0);
     const [paramTops, setParamTops] = React.useState<TopsMap>({});
     const lastParamTopsRef = React.useRef<TopsMap>({});
+
+    // Derive isParamConnected from ConnectedParamsContext (single source of truth)
+    const isParamConnected = useConnectedParamChecker(nodeId);
 
     const shallowEqual = (a: TopsMap, b: TopsMap) => {
         const aKeys = Object.keys(a);
@@ -111,7 +115,7 @@ export function NodeUIProvider({
 
     const registerParam = React.useCallback(
         (key: string, el: HTMLElement | null) => {
-            if (paramRefs.current[key] === el) return; // no change
+            if (paramRefs.current[key] === el) return;
             paramRefs.current[key] = el;
             requestCompute();
         },

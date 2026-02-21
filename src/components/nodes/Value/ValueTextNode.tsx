@@ -1,7 +1,7 @@
 import { NodeShell } from "../../node-framework/NodeShell";
 import { NodeSpec } from "../../node-framework/types";
 
-interface ValueTextData { value?: string; _connectedParams?: string[]; onParameterChange: (nodeId: string, key: string, value: unknown) => void;[k: string]: unknown; }
+interface ValueTextData { value?: string; onParameterChange: (nodeId: string, key: string, value: unknown) => void;[k: string]: unknown; }
 interface ValueTextNodeProps { id: string; selected?: boolean; data: ValueTextData; }
 
 const spec: NodeSpec = {

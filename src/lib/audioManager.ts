@@ -24,7 +24,7 @@ export class AudioManager {
         };
     } | null = null;
 
-    private modPreviewListeners: Set<(nodeId: string, data: Record<string, number>) => void> = new Set();
+    private modPreviewListeners: Set<(nodeId: string, data: Record<string, number | boolean>) => void> = new Set();
     private previewMuteDepth = 0;
     private userMuted = false;
     private masterGain: GainNode | null = null;
@@ -76,9 +76,10 @@ export class AudioManager {
                     case 'modPreview': {
                         const nid = String(msg.nodeId || '');
                         if (nid && msg.data && typeof msg.data === 'object') {
-                            const clean: Record<string, number> = {};
+                            const clean: Record<string, number | boolean> = {};
                             for (const [k, v] of Object.entries(msg.data)) {
                                 if (typeof v === 'number' && isFinite(v)) clean[k] = v;
+                                else if (typeof v === 'boolean') clean[k] = v;
                             }
                             this.modPreviewListeners.forEach(cb => { try { cb(nid, clean); } catch { } });
                             try { window.dispatchEvent(new CustomEvent('audioNodesNodeRendered', { detail: { nodeId: nid, data: clean } })); } catch { }

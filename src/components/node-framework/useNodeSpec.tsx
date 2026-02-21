@@ -21,7 +21,7 @@ export function useNodeSpec({ id, data, onParameterChange, spec }: UseNodeSpecAr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const isConnected = useConnectedParamChecker(data);
+  const isConnected = useConnectedParamChecker(id);
 
   const update = React.useCallback((key: string, value: unknown) => {
     onParameterChange(id, key, value);
@@ -56,15 +56,15 @@ export function ParamAuto({ runtime, nodeId, onParameterChange }: ParamAutoProps
   switch (spec.kind) {
     case 'number': {
       const s = spec as NumberParamSpec;
-      return <NumberParam {...common} value={Number(value ?? s.default)} min={s.min} max={s.max} step={s.step} onParameterChange={onParameterChange as (nid: string, k: string, v: number)=>void} />;
+      return <NumberParam {...common} value={Number(value ?? s.default)} min={s.min} max={s.max} step={s.step} onParameterChange={onParameterChange as (nid: string, k: string, v: number) => void} />;
     }
     case 'bool': {
       const s = spec as BoolParamSpec;
-      return <BooleanParam {...common} value={Boolean(value ?? s.default)} onParameterChange={onParameterChange as (nid: string, k: string, v: boolean)=>void} />;
+      return <BooleanParam {...common} value={Boolean(value ?? s.default)} onParameterChange={onParameterChange as (nid: string, k: string, v: boolean) => void} />;
     }
     case 'select': {
       const s = spec as SelectParamSpec;
-      return <SelectParam {...common} value={String(value ?? s.default)} options={s.options} onParameterChange={onParameterChange as (nid: string, k: string, v: string)=>void} />;
+      return <SelectParam {...common} value={String(value ?? s.default)} options={s.options} onParameterChange={onParameterChange as (nid: string, k: string, v: string) => void} />;
     }
     case 'text': {
       const s = spec as TextParamSpec;
