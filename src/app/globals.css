@@ -1,8 +1,10 @@
 @import "tailwindcss";
 
 :root {
-    --background: #111827; /* Tailwind gray-900 */
-    --foreground: #e5e7eb; /* Tailwind gray-200 */
+    --background: #111827;
+    /* Tailwind gray-900 */
+    --foreground: #e5e7eb;
+    /* Tailwind gray-200 */
 }
 
 @theme inline {
@@ -59,30 +61,37 @@ body {
 
 .react-flow-dark .react-flow__controls,
 .react-flow-controls-dark {
-    background: rgba(31, 41, 55, 0.85) !important; /* #1f2937 with opacity */
+    background: rgba(31, 41, 55, 0.85) !important;
+    /* #1f2937 with opacity */
     border: 1px solid #374151 !important;
-    border-radius: 0.75rem !important; /* match rounded panels */
+    border-radius: 0.75rem !important;
+    /* match rounded panels */
     backdrop-filter: blur(8px);
     box-shadow:
         0 10px 15px -3px rgba(0, 0, 0, 0.2),
         0 4px 6px -4px rgba(0, 0, 0, 0.2);
-    overflow: hidden; /* clip inner button corners */
+    overflow: hidden;
+    /* clip inner button corners */
 }
 
 .react-flow-controls-dark button {
     background: transparent !important;
-    color: #ffffff !important; /* icon color via currentColor */
-    border: none !important; /* remove default separators */
-    padding: 0.5rem !important; /* match panel control padding */
+    color: #ffffff !important;
+    /* icon color via currentColor */
+    border: none !important;
+    /* remove default separators */
+    padding: 0.5rem !important;
+    /* match panel control padding */
 }
 
 /* subtle dividers between stacked buttons */
-.react-flow-controls-dark button + button {
+.react-flow-controls-dark button+button {
     border-top: 1px solid rgba(55, 65, 81, 0.6) !important;
 }
 
 .react-flow-controls-dark button:hover {
-    background: rgba(55, 65, 81, 0.8) !important; /* #374151 */
+    background: rgba(55, 65, 81, 0.8) !important;
+    /* #374151 */
 }
 
 /* Force SVG icons to white for higher contrast */
@@ -95,7 +104,8 @@ body {
 .react-flow-minimap-dark {
     background: rgba(31, 41, 55, 0.85) !important;
     border: 1px solid #374151 !important;
-    border-radius: 0.75rem !important; /* match rounded panels */
+    border-radius: 0.75rem !important;
+    /* match rounded panels */
     backdrop-filter: blur(8px);
     box-shadow:
         0 10px 15px -3px rgba(0, 0, 0, 0.2),
@@ -103,30 +113,24 @@ body {
     overflow: hidden;
 }
 
-.react-flow-minimap-dark svg {
-    border-radius: 0.75rem !important;
-}
-
 .react-flow-minimap-dark .react-flow__minimap-mask {
     fill: #111827 !important;
     fill-opacity: 0.6 !important;
-}
-
-.react-flow-minimap-dark .react-flow__minimap-node {
-    fill: #9ca3af !important; /* slightly brighter */
-    stroke: #e5e7eb !important; /* light border for contrast */
 }
 
 @layer utilities {
     .font-w-70 {
         font-weight: 70;
     }
+
     .font-w-80 {
         font-weight: 80;
     }
+
     .font-w-90 {
         font-weight: 90;
     }
+
     .font-w-100 {
         font-weight: 100;
     }
@@ -141,5 +145,6 @@ input[type="number"]::-webkit-inner-spin-button {
 
 input[type="number"] {
     appearance: textfield;
-    -moz-appearance: textfield; /* Firefox */
+    -moz-appearance: textfield;
+    /* Firefox */
 }

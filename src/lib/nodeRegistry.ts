@@ -1,6 +1,6 @@
-import { Waves, Sparkles, Speaker, Music, ToggleRight, Hash, List, Camera } from "lucide-react";
+import { Waves, Sparkles, Speaker, Music, ToggleRight, Hash, List, Camera, Cpu } from "lucide-react";
 
-export type NodeCategoryName = "Synthesis" | "Effects" | "Sequencing" | "Utility" | "Value";
+export type NodeCategoryName = "Synthesis" | "Effects" | "Sequencing" | "Utility" | "Value" | "Logic";
 
 export interface NodeEntry {
     type: string;
@@ -56,6 +56,20 @@ export const NODE_CATEGORIES: CategoryEntry[] = [
             { type: "speaker", name: "Speaker", description: "Audio output", tag: "utility", icon: Speaker },
             { type: "lfo", name: "LFO", description: "Low frequency modulator (beat-synced)", tag: "utility", icon: Waves },
             { type: "camera-hands", name: "Hand Tracking", description: "MediaPipe hand tracking to param", tag: "utility", icon: Camera },
+        ],
+    },
+    {
+        name: "Logic",
+        color: "#eab308", // Amber
+        kind: "value",
+        nodes: [
+            { type: "logic-compare", name: "Compare", description: "Compare two values (a > b)", tag: "logic", icon: Cpu },
+            { type: "logic-gate", name: "Gate", description: "Boolean logic (AND, OR, NOT)", tag: "logic", icon: Cpu },
+            { type: "logic-add", name: "Add", description: "A + B", tag: "logic", icon: Cpu },
+            { type: "logic-subtract", name: "Subtract", description: "A - B", tag: "logic", icon: Cpu },
+            { type: "logic-multiply", name: "Multiply", description: "A × B", tag: "logic", icon: Cpu },
+            { type: "logic-divide", name: "Divide", description: "A ÷ B", tag: "logic", icon: Cpu },
+            { type: "logic-condition", name: "Condition", description: "If / Then / Else branching", tag: "logic", icon: Cpu },
         ],
     },
     {

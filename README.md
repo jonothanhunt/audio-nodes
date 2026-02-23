@@ -279,6 +279,12 @@ Still stuck? Open an issue with console logs + reproduction steps.
 - [ ] Per‑destination modulation depth
 - [ ] Mod matrix / routing panel
 
+### Logic & Math
+- [ ] Comparators (> , < , >= , <= , ==)
+- [ ] Logic Gates (AND, OR, NOT)
+- [ ] Basic Math (Add, Subtract, Multiply, Divide)
+- [ ] Conditional (If-Then-Else with dynamic types)
+
 ### MIDI / Sequencing
 - [ ] Scale quantizer
 - [ ] Velocity curve

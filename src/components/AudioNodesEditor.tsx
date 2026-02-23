@@ -38,6 +38,13 @@ import ValueTextNode from "@/components/nodes/Value/ValueTextNode";
 import ValueSelectNode from "@/components/nodes/Value/ValueSelectNode";
 import TransportPill from "@/components/TransportPill";
 import LFONode from "@/components/nodes/Utility/LFONode";
+import ValueCompareNode from "@/components/nodes/Logic/ValueCompareNode";
+import ValueLogicNode from "@/components/nodes/Logic/ValueLogicNode";
+import ValueAddNode from "@/components/nodes/Logic/ValueAddNode";
+import ValueSubtractNode from "@/components/nodes/Logic/ValueSubtractNode";
+import ValueMultiplyNode from "@/components/nodes/Logic/ValueMultiplyNode";
+import ValueDivideNode from "@/components/nodes/Logic/ValueDivideNode";
+import ValueConditionNode from "@/components/nodes/Logic/ValueConditionNode";
 import { ConnectedParamsProvider } from "@/components/node-ui/ConnectedParamsContext";
 import { AudioManagerProvider } from "@/lib/AudioManagerContext";
 
@@ -56,6 +63,13 @@ const nodeTypes = {
     "value-select": ValueSelectNode,
     lfo: LFONode,
     "camera-hands": CameraHandsNode,
+    "logic-compare": ValueCompareNode,
+    "logic-gate": ValueLogicNode,
+    "logic-add": ValueAddNode,
+    "logic-subtract": ValueSubtractNode,
+    "logic-multiply": ValueMultiplyNode,
+    "logic-divide": ValueDivideNode,
+    "logic-condition": ValueConditionNode,
 };
 
 const edgeTypes = { gradient: GradientEdge };
@@ -245,8 +259,14 @@ export default function AudioNodesEditor() {
                         >
                             <MiniMap
                                 className="react-flow-minimap-dark !top-auto !right-auto bg-gray-800/80 backdrop-blur-md rounded-xl border border-gray-700/80 shadow"
-                                style={{ width: 288, height: 146 }}
-                                nodeBorderRadius={5}
+                                style={{ width: 288, height: 146, strokeLinejoin: "round" }}
+                                nodeBorderRadius={24}
+                                nodeColor={(node) => {
+                                    return getNodeMeta(node.type).accentColor;
+                                }}
+                                maskColor="rgba(17, 24, 39, 0.6)"
+                                maskStrokeColor="rgba(17, 24, 39, 0.6)"
+                                maskStrokeWidth={20}
                                 pannable
                                 zoomable
                                 offsetScale={0}

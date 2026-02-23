@@ -1,5 +1,8 @@
 export type ParamKind = 'number' | 'bool' | 'select' | 'text';
 
+export type NodeCategory = 'Generators' | 'Effects' | 'MIDI' | 'Utility' | 'Logic';
+export const NODE_CATEGORIES: NodeCategory[] = ['Generators', 'Effects', 'MIDI', 'Utility', 'Logic'];
+
 export interface BaseParamSpec<K extends ParamKind = ParamKind> {
   key: string;
   kind: K;

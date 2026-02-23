@@ -21,6 +21,13 @@ import { spec as valueTextSpec } from "@/components/nodes/Value/ValueTextNode";
 import { spec as valueSelectSpec } from "@/components/nodes/Value/ValueSelectNode";
 import { spec as lfoSpec } from "@/components/nodes/Utility/LFONode";
 import { spec as cameraHandsSpec } from "@/components/nodes/Utility/CameraHandsNode";
+import { spec as logicCompareSpec } from "@/components/nodes/Logic/ValueCompareNode";
+import { spec as logicGateSpec } from "@/components/nodes/Logic/ValueLogicNode";
+import { spec as logicAddSpec } from "@/components/nodes/Logic/ValueAddNode";
+import { spec as logicSubtractSpec } from "@/components/nodes/Logic/ValueSubtractNode";
+import { spec as logicMultiplySpec } from "@/components/nodes/Logic/ValueMultiplyNode";
+import { spec as logicDivideSpec } from "@/components/nodes/Logic/ValueDivideNode";
+import { spec as logicConditionSpec } from "@/components/nodes/Logic/ValueConditionNode";
 import type { HandleRole } from "@/lib/handles";
 
 type SpecLike = Pick<NodeSpec, "params" | "inputs" | "outputs">;
@@ -40,6 +47,13 @@ const SPEC_REGISTRY: Record<string, SpecLike> = {
     "value-select": valueSelectSpec,
     lfo: lfoSpec,
     "camera-hands": cameraHandsSpec,
+    "logic-compare": logicCompareSpec,
+    "logic-gate": logicGateSpec,
+    "logic-add": logicAddSpec,
+    "logic-subtract": logicSubtractSpec,
+    "logic-multiply": logicMultiplySpec,
+    "logic-divide": logicDivideSpec,
+    "logic-condition": logicConditionSpec,
 };
 
 /**
