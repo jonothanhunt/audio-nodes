@@ -22,7 +22,7 @@ export interface BoolParamSpec extends BaseParamSpec<'bool'> {
 }
 export interface SelectParamSpec extends BaseParamSpec<'select'> {
   default: string;
-  options: string[]; // static for now
+  options: Array<string | { label: string; value: string }>; // Allow objects for display labels
 }
 export interface TextParamSpec extends BaseParamSpec<'text'> {
   default: string;
@@ -35,6 +35,7 @@ export interface IOHandleSpec {
   id: string; // unique handle id
   role: 'audio-in' | 'audio-out' | 'midi-in' | 'midi-out' | 'param-out';
   label: string;
+  variant?: 'audio' | 'midi' | 'numeric' | 'string' | 'bool'; // override inferred shape
 }
 
 export interface NodeSpec {

@@ -16,6 +16,7 @@ interface NodeShellProps {
   selected?: boolean;
   onParameterChange: (id: string, key: string, value: unknown) => void;
   children?: React.ReactNode;
+  childrenCenter?: boolean;
 }
 
 function NodeShellBase(props: NodeShellProps) {
@@ -32,7 +33,8 @@ function NodeShellBase(props: NodeShellProps) {
   const inVariant: 'audio' | 'midi' | 'numeric' | 'string' | 'bool' = primaryIn?.role.startsWith('midi') ? 'midi' : primaryIn?.role.startsWith('audio') ? 'audio' : 'midi';
 
   // Helper to determine output variant based on role and params
-  const getOutVariant = (role: string): 'audio' | 'midi' | 'numeric' | 'string' | 'bool' => {
+  const getOutVariant = (role: string, overrideVariant?: 'audio' | 'midi' | 'numeric' | 'string' | 'bool'): 'audio' | 'midi' | 'numeric' | 'string' | 'bool' => {
+    if (overrideVariant) return overrideVariant;
     if (role === 'param-out') {
       const firstParam = spec.params.find(p => !p.hidden);
       if (firstParam?.kind === 'bool') return 'bool';
@@ -90,8 +92,8 @@ function NodeShellBase(props: NodeShellProps) {
             />
           )}
         </div>
-        <div className="grid grid-cols-[minmax(16rem,_auto)_auto] gap-x-4">
-          <div className="flex flex-col gap-2 col-span-1">
+        <div className={`grid ${props.childrenCenter ? 'grid-cols-[minmax(12rem,_auto)_auto_auto]' : 'grid-cols-[minmax(16rem,_auto)_auto]'} gap-x-4`}>
+          <div className="flex flex-col gap-2 col-start-1">
             {primaryIn && <AudioInRow label={primaryIn.label} variant={inVariant} />}
             {spec.renderBeforeParams && spec.renderBeforeParams({ id, data, params, update: (k, v) => onParameterChange(id, k, v) })}
             {params.map(p => (
@@ -99,8 +101,16 @@ function NodeShellBase(props: NodeShellProps) {
             ))}
             {spec.renderAfterParams && spec.renderAfterParams({ id, data, params, update: (k, v) => onParameterChange(id, k, v) })}
           </div>
+
+          {/* Centered children content (e.g. camera preview) injected between params and outputs */}
+          {props.childrenCenter && children && (
+            <div className="flex flex-col items-center justify-center col-start-2">
+              {children}
+            </div>
+          )}
+
           {(spec.outputs && spec.outputs.length > 0) && (
-            <div className="flex flex-col items-stretch col-span-1 gap-2">
+            <div className={`flex flex-col items-stretch ${props.childrenCenter ? 'col-start-3' : 'col-start-2'} gap-2`}>
               {spec.outputs.map(out => (
                 <AudioOutRow key={out.id} id={out.id} label={out.label} />
               ))}
@@ -108,7 +118,7 @@ function NodeShellBase(props: NodeShellProps) {
           )}
         </div>
         {/* Full-width custom content (e.g., sequencer grid) */}
-        {children && (
+        {!props.childrenCenter && children && (
           <div className="mt-4">
             {children}
           </div>
@@ -120,7 +130,7 @@ function NodeShellBase(props: NodeShellProps) {
         inputHandleVariant={inVariant}
         inputHandleId={primaryIn?.id || 'midi'}
         includeParamTargets={spec.paramHandles !== false}
-        outputs={spec.outputs?.map(o => ({ id: o.id, variant: getOutVariant(o.role) }))}
+        outputs={spec.outputs?.map(o => ({ id: o.id, variant: getOutVariant(o.role, o.variant) }))}
       />
     </NodeUIProvider>
   );

@@ -55,7 +55,7 @@ export const NODE_CATEGORIES: CategoryEntry[] = [
         nodes: [
             { type: "speaker", name: "Speaker", description: "Audio output", tag: "utility", icon: Speaker },
             { type: "lfo", name: "LFO", description: "Low frequency modulator (beat-synced)", tag: "utility", icon: Waves },
-            { type: "camera-hands", name: "Camera Hands", description: "MediaPipe hand tracking to param", tag: "utility", icon: Camera },
+            { type: "camera-hands", name: "Hand Tracking", description: "MediaPipe hand tracking to param", tag: "utility", icon: Camera },
         ],
     },
     {

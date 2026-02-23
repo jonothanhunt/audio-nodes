@@ -9,7 +9,7 @@ interface SelectParamProps {
     paramKey: string;
     label: string;
     value: string;
-    options: string[];
+    options: Array<string | { label: string; value: string }>;
     onParameterChange: (
         nodeId: string,
         parameter: string,
@@ -35,7 +35,7 @@ export function SelectParam({
     };
     // Track last valid value so we can display it when incoming connected value is invalid
     const lastValidRef = React.useRef<string | null>(null);
-    const opts = Array.isArray(options) ? options : [];
+    const opts = Array.isArray(options) ? options.map(o => typeof o === 'string' ? o : o.value) : [];
     const isValid = opts.includes(value);
     React.useEffect(() => {
         if (isValid) {
@@ -74,11 +74,15 @@ export function SelectParam({
                     outlineColor: invalidIncoming ? "#ef4444" : undefined,
                 }}
             >
-                {options.map((o) => (
-                    <option key={o} value={o}>
-                        {o}
-                    </option>
-                ))}
+                {options.map((o) => {
+                    const val = typeof o === 'string' ? o : o.value;
+                    const lbl = typeof o === 'string' ? o : o.label;
+                    return (
+                        <option key={val} value={val}>
+                            {lbl}
+                        </option>
+                    );
+                })}
             </select>
         </ParamRow>
     );

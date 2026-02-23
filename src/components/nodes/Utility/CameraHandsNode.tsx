@@ -8,18 +8,19 @@ import { NodeShell } from "../../node-framework/NodeShell";
 
 export const spec: NodeSpec = {
     type: "camera-hands",
+    title: "Hand Tracking",
     params: [
-        // Hidden from the standard parameter auto-renderer because we build a custom UI for them below
         { key: "hand1x", kind: "number", default: 0, min: 0, max: 1, step: 0.001, label: "Hand 1 X", handle: false, hidden: true },
         { key: "hand1y", kind: "number", default: 0, min: 0, max: 1, step: 0.001, label: "Hand 1 Y", handle: false, hidden: true },
         { key: "hand2x", kind: "number", default: 0, min: 0, max: 1, step: 0.001, label: "Hand 2 X", handle: false, hidden: true },
         { key: "hand2y", kind: "number", default: 0, min: 0, max: 1, step: 0.001, label: "Hand 2 Y", handle: false, hidden: true },
+        { key: "camera", kind: "select", default: "default", options: ["default"], label: "Camera", handle: false },
     ],
     outputs: [
-        { id: "hand1x", role: "param-out", label: "Hand 1 X" },
-        { id: "hand1y", role: "param-out", label: "Hand 1 Y" },
-        { id: "hand2x", role: "param-out", label: "Hand 2 X" },
-        { id: "hand2y", role: "param-out", label: "Hand 2 Y" },
+        { id: "hand1x", role: "param-out", label: "Hand 1 X", variant: "numeric" },
+        { id: "hand1y", role: "param-out", label: "Hand 1 Y", variant: "numeric" },
+        { id: "hand2x", role: "param-out", label: "Hand 2 X", variant: "numeric" },
+        { id: "hand2y", role: "param-out", label: "Hand 2 Y", variant: "numeric" },
     ],
     inputs: [],
     paramHandles: false,
@@ -54,9 +55,8 @@ export default function CameraHandsNode({ id, data, selected }: CameraHandsNodeP
     const { onParameterChange } = data;
 
     const [devices, setDevices] = React.useState<MediaDeviceInfo[]>([]);
-    const [deviceId, setDeviceId] = React.useState<string>(
-        typeof data.camera === "string" ? data.camera : "default"
-    );
+    const activeCamera = typeof data.camera === "string" ? data.camera : "default";
+
 
     React.useEffect(() => {
         navigator.mediaDevices?.enumerateDevices()
@@ -78,77 +78,72 @@ export default function CameraHandsNode({ id, data, selected }: CameraHandsNodeP
 
     const { videoRef, canvasRef, ready, loading, error } = useMediaPipeHands({
         enabled: true,
-        deviceId: deviceId !== "default" ? deviceId : undefined,
+        deviceId: activeCamera !== "default" ? activeCamera : undefined,
         onHands: handleHands,
     });
 
-    const handleCameraChange = React.useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-        const val = e.target.value;
-        setDeviceId(val);
-        onParameterChange(id, "camera", val);
-    }, [id, onParameterChange]);
-
-    // Update the underlying hidden parameters with our tracking state, 
-    // so that NodeShell displays the outputs internally with the current state (if we decide to show values)
-    // Actually, NodeShell doesn't render param-out readouts, so we'll 
-    // leave the values purely to `onParameterChange` propagating to the audio engine.
+    const runtimeSpec = React.useMemo(() => {
+        return {
+            ...spec,
+            params: spec.params.map(p => {
+                if (p.key === "camera") {
+                    return {
+                        ...p,
+                        options: [
+                            { label: "Default Camera", value: "default" },
+                            ...devices.map(d => ({
+                                label: d.label || `Camera ${d.deviceId.slice(0, 8)}`,
+                                value: d.deviceId
+                            }))
+                        ]
+                    };
+                }
+                return p;
+            }),
+            renderAfterParams: () => (
+                <div className="flex flex-col gap-2 relative mt-1 min-w-[160px]">
+                    {/* Canvas preview */}
+                    <div className="relative rounded-lg overflow-hidden" style={{ background: "#000", height: 110 }}>
+                        <video ref={videoRef} style={{ display: "none" }} muted playsInline />
+                        <canvas
+                            ref={canvasRef}
+                            width={160}
+                            height={110}
+                            style={{
+                                display: "block",
+                                width: "100%",
+                                height: "100%",
+                                filter: "grayscale(1) contrast(1.1)",
+                                objectFit: "cover",
+                            }}
+                        />
+                        {(!ready && !error) && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/70">
+                                {loading
+                                    ? <><div className="w-4 h-4 border-2 border-white/20 border-t-white/80 rounded-full animate-spin" />
+                                        <span className="text-[10px] text-white/50">Loading…</span></>
+                                    : <span className="text-[10px] text-white/40">Starting camera…</span>
+                                }
+                            </div>
+                        )}
+                        {error && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/80 px-3">
+                                <span className="text-[10px] text-red-400 text-center leading-tight">{error}</span>
+                            </div>
+                        )}
+                        {ready && (
+                            <div className="absolute bottom-1 left-1.5 text-[9px] text-white/50 bg-black/50 rounded px-1 py-0.5 pointer-events-none">
+                                {hands.length} Hand{hands.length !== 1 ? "s" : ""}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )
+        };
+    }, [devices, videoRef, canvasRef, ready, loading, error, hands.length]);
 
     return (
-        // We pass the raw spec now, and NodeShell handles creating the 4 output handles gracefully
-        <NodeShell id={id} data={data as unknown as Record<string, unknown>} spec={spec} selected={selected} onParameterChange={onParameterChange}>
-            {/* Custom UI payload */}
-            <div className="flex flex-col gap-2 relative mt-1 min-w-[200px]">
-                {/* Canvas preview */}
-                <div className="relative rounded-lg overflow-hidden" style={{ background: "#000", height: 130 }}>
-                    <video ref={videoRef} style={{ display: "none" }} muted playsInline />
-                    <canvas
-                        ref={canvasRef}
-                        width={200}
-                        height={130}
-                        style={{
-                            display: "block",
-                            width: "100%",
-                            height: "100%",
-                            filter: "grayscale(1) contrast(1.1)",
-                            objectFit: "cover",
-                        }}
-                    />
-                    {(!ready && !error) && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/70">
-                            {loading
-                                ? <><div className="w-4 h-4 border-2 border-white/20 border-t-white/80 rounded-full animate-spin" />
-                                    <span className="text-[10px] text-white/50">Loading…</span></>
-                                : <span className="text-[10px] text-white/40">Starting camera…</span>
-                            }
-                        </div>
-                    )}
-                    {error && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/80 px-3">
-                            <span className="text-[10px] text-red-400 text-center leading-tight">{error}</span>
-                        </div>
-                    )}
-                    {ready && (
-                        <div className="absolute bottom-1 left-1.5 text-[9px] text-white/50 bg-black/50 rounded px-1 py-0.5 pointer-events-none">
-                            {hands.length} Hand{hands.length !== 1 ? "s" : ""}
-                        </div>
-                    )}
-                </div>
-
-                {/* Camera selector */}
-                <select
-                    value={deviceId}
-                    onChange={handleCameraChange}
-                    className="w-full bg-black/20 border border-white/10 rounded-md text-[11px] text-white/80 px-2 py-1 outline-none appearance-none cursor-pointer nodrag"
-                    style={{ background: "rgba(255,255,255,0.05)" }}
-                >
-                    <option value="default">Default Camera</option>
-                    {devices.map(d => (
-                        <option key={d.deviceId} value={d.deviceId}>
-                            {d.label || `Camera ${d.deviceId.slice(0, 8)}`}
-                        </option>
-                    ))}
-                </select>
-            </div>
-        </NodeShell>
+        // We pass the runtime spec now, and NodeShell handles creating the 4 output handles gracefully
+        <NodeShell id={id} data={data} spec={runtimeSpec} selected={selected} onParameterChange={onParameterChange} />
     );
 }
