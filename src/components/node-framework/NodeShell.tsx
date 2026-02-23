@@ -62,7 +62,7 @@ function NodeShellBase(props: NodeShellProps) {
           ID: …{id.slice(-8)}
         </div>
       )}
-      <div className="relative bg-gray-900 rounded-lg p-4 shadow-lg border" style={{ borderColor: accent }}>
+      <div className={`relative bg-gray-900 rounded-lg p-4 shadow-lg transition-all duration-200 ${selected ? 'border-[3px]' : 'border'}`} style={{ borderColor: accent }}>
         <div className="pointer-events-none absolute inset-0 rounded-lg" style={{ background: `linear-gradient(135deg, ${accent}26, transparent 65%)` }} />
         <div className="flex items-center gap-2 mb-3 relative">
           {EffectiveIcon && React.createElement(EffectiveIcon, { className: 'w-4 h-4 -translate-y-0.5', style: { color: accent } })}

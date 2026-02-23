@@ -115,6 +115,7 @@ Param connections (e.g. Bool → sequencer `playing`, LFO → oscillator `freque
 - **Value-node chaining:** Bool A → Bool B → sequencer works; the worklet propagates value-node chains before running modulations (`_propagateValueNodes`), supporting up to 4 levels of depth per block.
 - **Live UI preview:** When a param handle has an incoming connection, the control is disabled but its colour/value updates in real time via `modPreview` messages from the worklet → `audioNodesNodeRendered` window event → `useLiveParamModulation` hook → `BooleanParam` / `NumberParam` display.
 - **Single-source rule:** MIDI and param handles each accept only one incoming connection. Audio inputs allow fan-in (mixing).
+- **Logic & Math Processing:** Dynamic nodes (Add, Subtract, Gate, Comparator, Conditional) are instantly evaluated synchronously within the modulation loop (up to 4 levels deep), enabling you to perform boolean mapping, variable routing, and arithmetic per-block.
 
 ### Transport & Scheduling (Beat‑Only)
 - Single global beat clock (no bars / signatures) encourages polymeter & drifting patterns.
@@ -279,11 +280,7 @@ Still stuck? Open an issue with console logs + reproduction steps.
 - [ ] Per‑destination modulation depth
 - [ ] Mod matrix / routing panel
 
-### Logic & Math
-- [ ] Comparators (> , < , >= , <= , ==)
-- [ ] Logic Gates (AND, OR, NOT)
-- [ ] Basic Math (Add, Subtract, Multiply, Divide)
-- [ ] Conditional (If-Then-Else with dynamic types)
+
 
 ### MIDI / Sequencing
 - [ ] Scale quantizer

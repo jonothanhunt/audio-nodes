@@ -20,6 +20,7 @@ import ArpeggiatorNode from "@/components/nodes/MIDI/ArpeggiatorNode";
 import SynthesizerNode from "@/components/nodes/Synthesis/SynthesizerNode";
 import MidiInputNode from "@/components/nodes/MIDI/MidiInputNode";
 import SaveLoadPanel from "@/components/SaveLoadPanel";
+import SidebarHeaderInfo from "@/components/SidebarHeaderInfo";
 import { useAudioEngine } from "@/hooks/useAudioEngine";
 import { useProjectPersistence } from "@/hooks/useProjectPersistence";
 import { useGraph } from "@/hooks/useGraph";
@@ -280,7 +281,11 @@ export default function AudioNodesEditor() {
                         </ReactFlow>
                     </ConnectedParamsProvider>
                 </div>
-                <div className="absolute top-16 left-4 bottom-44 z-50 w-72 flex flex-col pointer-events-auto gap-4">
+                {/* Bottom-center Transport Pill */}
+                <TransportPill audioManager={audioManager} />
+
+                <div className="absolute top-4 left-4 bottom-4 z-50 w-72 flex flex-col pointer-events-auto gap-4">
+                    <SidebarHeaderInfo />
                     <SaveLoadPanel
                         onSave={handleSaveClick}
                         onLoadObject={handleLoadFromObject}
@@ -290,8 +295,6 @@ export default function AudioNodesEditor() {
                         <NodeLibrary onAddNode={onAddNode} />
                     </div>
                 </div>
-                {/* Bottom-center Transport Pill */}
-                <TransportPill audioManager={audioManager} />
             </div>
         </AudioManagerProvider>
     );

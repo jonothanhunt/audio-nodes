@@ -1,15 +1,6 @@
 /* tslint:disable */
 /* eslint-disable */
 
-export class AudioEngine {
-    free(): void;
-    [Symbol.dispose](): void;
-    constructor(sample_rate: number);
-    process_audio(output: Float32Array): void;
-    readonly buffer_size: number;
-    readonly sample_rate: number;
-}
-
 export class LfoNode {
     free(): void;
     [Symbol.dispose](): void;
@@ -80,10 +71,6 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
-    readonly __wbg_lfonode_free: (a: number, b: number) => void;
-    readonly lfonode_new: (a: number) => number;
-    readonly lfonode_set_params: (a: number, b: number, c: number, d: number) => void;
-    readonly lfonode_next_value: (a: number, b: number, c: number) => number;
     readonly __wbg_synthnode_free: (a: number, b: number) => void;
     readonly synthnode_new: (a: number) => number;
     readonly synthnode_note_on: (a: number, b: number, c: number) => void;
@@ -102,6 +89,13 @@ export interface InitOutput {
     readonly reverbnode_set_wet_mix: (a: number, b: number) => void;
     readonly reverbnode_wet_mix: (a: number) => number;
     readonly reverbnode_process: (a: number, b: number, c: number, d: number, e: number, f: any) => void;
+    readonly __wbg_speakernode_free: (a: number, b: number) => void;
+    readonly speakernode_new: () => number;
+    readonly speakernode_set_volume: (a: number, b: number) => void;
+    readonly speakernode_volume: (a: number) => number;
+    readonly speakernode_set_muted: (a: number, b: number) => void;
+    readonly speakernode_muted: (a: number) => number;
+    readonly speakernode_process: (a: number, b: number, c: number, d: number, e: number, f: any) => void;
     readonly __wbg_miditransposenode_free: (a: number, b: number) => void;
     readonly miditransposenode_new: () => number;
     readonly miditransposenode_set_params: (a: number, b: number, c: number, d: number, e: number) => void;
@@ -114,21 +108,13 @@ export interface InitOutput {
     readonly oscillatornode_amplitude: (a: number) => number;
     readonly oscillatornode_set_waveform: (a: number, b: number) => void;
     readonly oscillatornode_process: (a: number, b: number, c: number, d: any) => void;
-    readonly __wbg_speakernode_free: (a: number, b: number) => void;
-    readonly speakernode_new: () => number;
-    readonly speakernode_set_volume: (a: number, b: number) => void;
-    readonly speakernode_set_muted: (a: number, b: number) => void;
-    readonly speakernode_muted: (a: number) => number;
-    readonly speakernode_process: (a: number, b: number, c: number, d: number, e: number, f: any) => void;
-    readonly __wbg_audioengine_free: (a: number, b: number) => void;
-    readonly audioengine_new: (a: number) => number;
-    readonly audioengine_sample_rate: (a: number) => number;
-    readonly audioengine_buffer_size: (a: number) => number;
-    readonly audioengine_process_audio: (a: number, b: number, c: number, d: any) => void;
-    readonly speakernode_volume: (a: number) => number;
+    readonly __wbg_lfonode_free: (a: number, b: number) => void;
+    readonly lfonode_new: (a: number) => number;
+    readonly lfonode_set_params: (a: number, b: number, c: number, d: number) => void;
+    readonly lfonode_next_value: (a: number, b: number, c: number) => number;
     readonly __wbindgen_externrefs: WebAssembly.Table;
-    readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
+    readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_start: () => void;
 }
 

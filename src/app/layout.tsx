@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
-import TitleBarCreds from "@/components/TitleBarCreds";
 
 const geistSans = Geist({
     variable: "--font-geist-sans",
@@ -50,9 +49,6 @@ export default function RootLayout({
             <body
                 className={`${geistSans.variable} ${geistMono.variable} ${atkinsonHyperlegible.variable} ${lastik.variable} antialiased bg-gray-900 text-white`}
             >
-                <div className="fixed top-4 left-4 right-4 z-[70] pointer-events-auto">
-                    <TitleBarCreds />
-                </div>
                 {children}
             </body>
         </html>

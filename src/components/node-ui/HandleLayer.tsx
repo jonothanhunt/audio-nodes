@@ -48,16 +48,7 @@ export function HandleLayer({
                         accentColor,
                         baseBg,
                     })}
-                    onMouseEnter={(e) => {
-                        (
-                            e.currentTarget as HTMLElement
-                        ).style.setProperty("--fill", accentColor);
-                    }}
-                    onMouseLeave={(e) => {
-                        (
-                            e.currentTarget as HTMLElement
-                        ).style.setProperty("--fill", baseBg);
-                    }}
+
                 >
                     {renderHandleInner(inputHandleVariant, accentColor)}
                 </Handle>
@@ -79,16 +70,7 @@ export function HandleLayer({
                             accentColor,
                             baseBg,
                         })}
-                        onMouseEnter={(e) => {
-                            (
-                                e.currentTarget as HTMLElement
-                            ).style.setProperty("--fill", accentColor);
-                        }}
-                        onMouseLeave={(e) => {
-                            (
-                                e.currentTarget as HTMLElement
-                            ).style.setProperty("--fill", baseBg);
-                        }}
+
                     >
                         {renderHandleInner(variant, accentColor)}
                     </Handle>
@@ -112,16 +94,7 @@ export function HandleLayer({
                             accentColor,
                             baseBg,
                         })}
-                        onMouseEnter={(e) => {
-                            (
-                                e.currentTarget as HTMLElement
-                            ).style.setProperty("--fill", accentColor);
-                        }}
-                        onMouseLeave={(e) => {
-                            (
-                                e.currentTarget as HTMLElement
-                            ).style.setProperty("--fill", baseBg);
-                        }}
+
                     >
                         {renderHandleInner(variant, accentColor)}
                     </Handle>

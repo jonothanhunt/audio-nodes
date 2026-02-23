@@ -148,3 +148,14 @@ input[type="number"] {
     -moz-appearance: textfield;
     /* Firefox */
 }
+
+/* Custom Node Handle dynamic filling states */
+.react-flow__handle {
+    --fill: var(--base-bg);
+}
+
+.react-flow__handle:hover,
+.react-flow__handle.react-flow__handle-connecting,
+.react-flow__handle.react-flow__handle-connected {
+    --fill: var(--accent);
+}

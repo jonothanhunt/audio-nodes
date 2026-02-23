@@ -1,50 +1,5 @@
 /* @ts-self-types="./audio_engine.d.ts" */
 
-export class AudioEngine {
-    __destroy_into_raw() {
-        const ptr = this.__wbg_ptr;
-        this.__wbg_ptr = 0;
-        AudioEngineFinalization.unregister(this);
-        return ptr;
-    }
-    free() {
-        const ptr = this.__destroy_into_raw();
-        wasm.__wbg_audioengine_free(ptr, 0);
-    }
-    /**
-     * @returns {number}
-     */
-    get buffer_size() {
-        const ret = wasm.audioengine_buffer_size(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * @param {number} sample_rate
-     */
-    constructor(sample_rate) {
-        const ret = wasm.audioengine_new(sample_rate);
-        this.__wbg_ptr = ret >>> 0;
-        AudioEngineFinalization.register(this, this.__wbg_ptr, this);
-        return this;
-    }
-    /**
-     * @param {Float32Array} output
-     */
-    process_audio(output) {
-        var ptr0 = passArrayF32ToWasm0(output, wasm.__wbindgen_malloc);
-        var len0 = WASM_VECTOR_LEN;
-        wasm.audioengine_process_audio(this.__wbg_ptr, ptr0, len0, output);
-    }
-    /**
-     * @returns {number}
-     */
-    get sample_rate() {
-        const ret = wasm.audioengine_sample_rate(this.__wbg_ptr);
-        return ret;
-    }
-}
-if (Symbol.dispose) AudioEngine.prototype[Symbol.dispose] = AudioEngine.prototype.free;
-
 export class LfoNode {
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
@@ -300,7 +255,7 @@ export class SpeakerNode {
      * @returns {number}
      */
     get volume() {
-        const ret = wasm.audioengine_sample_rate(this.__wbg_ptr);
+        const ret = wasm.speakernode_volume(this.__wbg_ptr);
         return ret;
     }
 }
@@ -408,9 +363,6 @@ function __wbg_get_imports() {
         __wbg___wbindgen_throw_be289d5034ed271b: function(arg0, arg1) {
             throw new Error(getStringFromWasm0(arg0, arg1));
         },
-        __wbg_log_12e85d2f2217123e: function(arg0, arg1) {
-            console.log(getStringFromWasm0(arg0, arg1));
-        },
         __wbindgen_init_externref_table: function() {
             const table = wasm.__wbindgen_externrefs;
             const offset = table.grow(4);
@@ -427,9 +379,6 @@ function __wbg_get_imports() {
     };
 }
 
-const AudioEngineFinalization = (typeof FinalizationRegistry === 'undefined')
-    ? { register: () => {}, unregister: () => {} }
-    : new FinalizationRegistry(ptr => wasm.__wbg_audioengine_free(ptr >>> 0, 1));
 const LfoNodeFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_lfonode_free(ptr >>> 0, 1));

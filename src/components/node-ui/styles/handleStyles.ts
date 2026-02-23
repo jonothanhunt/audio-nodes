@@ -27,7 +27,7 @@ export function makeHandleStyle({
     const base: React.CSSProperties = {
         top: top + topAdjust,
         transform: "translateY(-50%)",
-    [side]: -(size / 2),
+        [side]: -(size / 2),
         width: size,
         height: size,
         background: "transparent",
@@ -37,7 +37,8 @@ export function makeHandleStyle({
         transition: "background 140ms, box-shadow 140ms, filter 140ms",
         cursor: "crosshair",
         position: "absolute",
-        "--fill": (connected ? accentColor : baseBg) as string,
+        "--accent": accentColor,
+        "--base-bg": baseBg,
     } as React.CSSProperties;
     // Container remains unrotated for all variants; shapes drawn via inner SVG
     return base;
@@ -68,25 +69,25 @@ export function renderHandleInner(
         );
     }
     if (variant === "midi") {
-            return React.createElement(
-                "svg",
-                {
-                    width: "100%",
-                    height: "100%",
-                    viewBox: "0 0 100 100",
-                    preserveAspectRatio: "xMidYMid meet",
-                    style: { pointerEvents: "none" },
-                },
-                React.createElement("rect", {
-                    x: 10,
-                    y: 10,
-                    width: 80,
-                    height: 80,
-                    fill: "var(--fill)",
-                    stroke: accentColor,
-                    strokeWidth: 6,
-                }),
-            );
+        return React.createElement(
+            "svg",
+            {
+                width: "100%",
+                height: "100%",
+                viewBox: "0 0 100 100",
+                preserveAspectRatio: "xMidYMid meet",
+                style: { pointerEvents: "none" },
+            },
+            React.createElement("rect", {
+                x: 10,
+                y: 10,
+                width: 80,
+                height: 80,
+                fill: "var(--fill)",
+                stroke: accentColor,
+                strokeWidth: 6,
+            }),
+        );
     }
     if (variant === "numeric") {
         return React.createElement(

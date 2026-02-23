@@ -15,43 +15,12 @@ macro_rules! console_log {
     ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
 }
 
-// Audio engine initialization
-#[wasm_bindgen]
-pub struct AudioEngine {
-    sample_rate: f32,
-    buffer_size: usize,
-}
-
-#[wasm_bindgen]
-impl AudioEngine {
-    #[wasm_bindgen(constructor)]
-    pub fn new(sample_rate: f32) -> AudioEngine {
-        console_log!("AudioEngine initialized with sample rate: {}", sample_rate);
-        AudioEngine {
-            sample_rate,
-            buffer_size: 512,
-        }
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn sample_rate(&self) -> f32 {
-        self.sample_rate
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn buffer_size(&self) -> usize {
-        self.buffer_size
-    }
-
-    pub fn process_audio(&mut self, output: &mut [f32]) {
-        // This will be the main audio processing loop
-        // For now, just fill with silence
-        for sample in output.iter_mut() {
-            *sample = 0.0;
-        }
-    }
-}
+// The exported components in this WASM module are individual DSP and MIDI nodes 
+// (e.g. Oscillator, Reverb, Transpose) rather than a single monolithic engine.
+// The Javascript AudioWorkletProcessor instantiates these nodes and orchestrates
+// the routing, rendering, and timing for the entire graph.
 
 pub use nodes::transpose::MidiTransposeNode;
 
-// SynthNode is defined in nodes/mod.rs
+// Node implementations are exported from their respective modules
+// (e.g., SynthNode, OscillatorNode, ReverbNode, LfoNode)
