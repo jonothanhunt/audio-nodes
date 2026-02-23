@@ -62,8 +62,8 @@ function NodeShellBase(props: NodeShellProps) {
           ID: …{id.slice(-8)}
         </div>
       )}
-      <div className={`relative bg - gray - 900 rounded - lg p - 4 shadow - lg transition - all duration - 200 ${selected ? 'outline-[3px]' : 'outline-1'} `} style={{ outlineStyle: 'solid', outlineColor: accent, outlineOffset: '-1px' }}>
-        <div className="pointer-events-none absolute inset-0 rounded-lg" style={{ background: `linear - gradient(135deg, ${accent}26, transparent 65 %)` }} />
+      <div className={`relative bg-gray-900 rounded-lg p-4 shadow-lg transition-all duration-200 ${selected ? 'outline-[3px]' : 'outline-1'}`} style={{ outlineStyle: 'solid', outlineColor: accent, outlineOffset: '-1px' }}>
+        <div className="pointer-events-none absolute inset-0 rounded-lg" style={{ background: `linear-gradient(135deg, ${accent}26, transparent 65%)` }} />
         <div className="flex items-center gap-2 mb-3 relative">
           {EffectiveIcon && React.createElement(EffectiveIcon, { className: 'w-4 h-4 -translate-y-0.5', style: { color: accent } })}
           <span className="title-font text-base" style={{ color: accent }}>{effectiveTitle}</span>
@@ -92,7 +92,7 @@ function NodeShellBase(props: NodeShellProps) {
             />
           )}
         </div>
-        <div className={`grid ${props.childrenCenter ? 'grid-cols-[minmax(12rem,_auto)_auto_auto]' : 'grid-cols-[minmax(16rem,_auto)_auto]'} gap - x - 4`}>
+        <div className={`grid ${props.childrenCenter ? 'grid-cols-[minmax(12rem,_auto)_auto_auto]' : 'grid-cols-[minmax(16rem,_auto)_auto]'} gap-x-4`}>
           <div className="flex flex-col gap-2 col-start-1">
             {primaryIn && <AudioInRow label={primaryIn.label} variant={inVariant} />}
             {spec.renderBeforeParams && spec.renderBeforeParams({ id, data, params, update: (k, v) => onParameterChange(id, k, v) })}

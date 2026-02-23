@@ -281,7 +281,7 @@ export default function AudioNodesEditor() {
                 {/* Bottom-center Transport Pill */}
                 <TransportPill audioManager={audioManager} />
 
-                <div className="absolute top-4 left-4 bottom-4 z-50 w-72 flex flex-col pointer-events-auto gap-4">
+                <div className="absolute top-4 left-4 bottom-44 z-50 w-72 flex flex-col pointer-events-auto gap-4">
                     <SidebarHeaderInfo />
                     <SaveLoadPanel
                         onSave={handleSaveClick}
