@@ -6,7 +6,7 @@ import { labelCls, inputCls } from '../../node-ui/styles/inputStyles';
 interface MidiInputNodeData { deviceId?: string; channel?: number | 'all'; status?: string; devices?: Array<{ id: string; name: string }>; error?: string; onParameterChange?: (nodeId: string, key: string, value: unknown) => void;[k: string]: unknown; }
 interface MidiInputNodeProps { id: string; selected?: boolean; data: MidiInputNodeData; }
 
-const spec: NodeSpec = {
+export const spec: NodeSpec = {
     type: 'midi-input',
     // title omitted (registry provides)
     // accentColor & icon centralized in registry

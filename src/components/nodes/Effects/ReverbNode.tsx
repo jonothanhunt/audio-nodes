@@ -14,7 +14,7 @@ interface ReverbNodeData {
 interface ReverbNodeProps { id: string; selected?: boolean; data: ReverbNodeData; }
 
 // Node-local spec & help metadata (kept here so everything unique to this node stays in this file)
-const spec: NodeSpec = {
+export const spec: NodeSpec = {
     type: 'reverb',
     // title omitted (registry provides)
     // accentColor & icon centralized in registry

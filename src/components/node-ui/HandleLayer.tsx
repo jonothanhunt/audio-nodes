@@ -9,27 +9,25 @@ import {
 } from "./styles/handleStyles";
 
 interface HandleLayerProps {
-    outputId?: string | null;
     includeMidiIn?: boolean;
     inputHandleVariant?: HandleVariant; // variant for the top input slot (default midi)
     inputHandleId?: string; // id override (default 'midi')
-    outputVariant?: HandleVariant; // variant for the right-side output (default 'audio')
     includeParamTargets?: boolean; // render left-side param handles (default true)
+    outputs?: Array<{ id: string; variant: HandleVariant }>; // descriptors for output handles to render
 }
 
 export function HandleLayer({
-    outputId = "output",
     includeMidiIn = true,
     inputHandleVariant = "midi",
     inputHandleId = "midi",
-    outputVariant = "audio",
     includeParamTargets = true,
+    outputs = [],
 }: HandleLayerProps) {
     const {
         accentColor,
         paramTops,
         midiTop,
-        outputTop,
+        outputTops,
         getVariantFor,
         baseBg,
     } = useNodeUI();
@@ -96,34 +94,39 @@ export function HandleLayer({
                     </Handle>
                 );
             })}
-            {outputId && (
-                <Handle
-                    type="source"
-                    position={Position.Right}
-                    id={outputId}
-                    className="react-flow__handle"
-                    style={makeHandleStyle({
-                        top: outputTop,
-                        side: "right",
-                        connected: false,
-                        variant: outputVariant,
-                        accentColor,
-                        baseBg,
-                    })}
-                    onMouseEnter={(e) => {
-                        (
-                            e.currentTarget as HTMLElement
-                        ).style.setProperty("--fill", accentColor);
-                    }}
-                    onMouseLeave={(e) => {
-                        (
-                            e.currentTarget as HTMLElement
-                        ).style.setProperty("--fill", baseBg);
-                    }}
-                >
-                    {renderHandleInner(outputVariant, accentColor)}
-                </Handle>
-            )}
+            {outputs.map(({ id, variant }) => {
+                const top = outputTops[id];
+                if (top === undefined) return null; // not registered yet
+                return (
+                    <Handle
+                        key={id}
+                        type="source"
+                        position={Position.Right}
+                        id={id}
+                        className="react-flow__handle"
+                        style={makeHandleStyle({
+                            top,
+                            side: "right",
+                            connected: false,
+                            variant: variant,
+                            accentColor,
+                            baseBg,
+                        })}
+                        onMouseEnter={(e) => {
+                            (
+                                e.currentTarget as HTMLElement
+                            ).style.setProperty("--fill", accentColor);
+                        }}
+                        onMouseLeave={(e) => {
+                            (
+                                e.currentTarget as HTMLElement
+                            ).style.setProperty("--fill", baseBg);
+                        }}
+                    >
+                        {renderHandleInner(variant, accentColor)}
+                    </Handle>
+                );
+            })}
         </>
     );
 }

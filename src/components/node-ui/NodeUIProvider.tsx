@@ -13,11 +13,11 @@ interface TopsMap {
 interface NodeUIContextValue {
     accentColor: string;
     registerParam: (key: string, el: HTMLElement | null) => void;
+    registerOutput: (id: string, el: HTMLElement | null) => void;
     midiEl: (el: HTMLElement | null) => void;
-    outputEl: (el: HTMLElement | null) => void;
     paramTops: TopsMap;
+    outputTops: TopsMap;
     midiTop: number;
-    outputTop: number;
     getVariantFor: (key: string) => HandleVariant;
     baseBg: string;
     isParamConnected: (key: string) => boolean;
@@ -46,13 +46,14 @@ export function NodeUIProvider({
 }: NodeUIProviderProps) {
     const rootRef = React.useRef<HTMLDivElement | null>(null);
     const midiRef = React.useRef<HTMLElement | null>(null);
-    const outRef = React.useRef<HTMLElement | null>(null);
     const paramRefs = React.useRef<RegistrationMap>({});
+    const outputRefs = React.useRef<RegistrationMap>({});
 
     const [midiTop, setMidiTop] = React.useState(0);
-    const [outputTop, setOutputTop] = React.useState(0);
     const [paramTops, setParamTops] = React.useState<TopsMap>({});
+    const [outputTops, setOutputTops] = React.useState<TopsMap>({});
     const lastParamTopsRef = React.useRef<TopsMap>({});
+    const lastOutputTopsRef = React.useRef<TopsMap>({});
 
     // Derive isParamConnected from ConnectedParamsContext (single source of truth)
     const isParamConnected = useConnectedParamChecker(nodeId);
@@ -79,16 +80,24 @@ export function NodeUIProvider({
             return top + (el.offsetHeight || 0) / 2;
         };
         const nextMidi = centerFromRoot(midiRef.current);
-        const nextOut = centerFromRoot(outRef.current);
-        const tops: TopsMap = {};
+        const pTops: TopsMap = {};
         Object.keys(paramRefs.current).forEach((k) => {
-            tops[k] = centerFromRoot(paramRefs.current[k]);
+            pTops[k] = centerFromRoot(paramRefs.current[k]);
         });
+        const oTops: TopsMap = {};
+        Object.keys(outputRefs.current).forEach((k) => {
+            oTops[k] = centerFromRoot(outputRefs.current[k]);
+        });
+
         setMidiTop((prev) => (prev === nextMidi ? prev : nextMidi));
-        setOutputTop((prev) => (prev === nextOut ? prev : nextOut));
-        if (!shallowEqual(lastParamTopsRef.current, tops)) {
-            lastParamTopsRef.current = tops;
-            setParamTops(tops);
+
+        if (!shallowEqual(lastParamTopsRef.current, pTops)) {
+            lastParamTopsRef.current = pTops;
+            setParamTops(pTops);
+        }
+        if (!shallowEqual(lastOutputTopsRef.current, oTops)) {
+            lastOutputTopsRef.current = oTops;
+            setOutputTops(oTops);
         }
     }, []);
 
@@ -131,10 +140,10 @@ export function NodeUIProvider({
         [requestCompute],
     );
 
-    const outputEl = React.useCallback(
-        (el: HTMLElement | null) => {
-            if (outRef.current === el) return;
-            outRef.current = el;
+    const registerOutput = React.useCallback(
+        (id: string, el: HTMLElement | null) => {
+            if (outputRefs.current[id] === el) return;
+            outputRefs.current[id] = el;
             requestCompute();
         },
         [requestCompute],
@@ -144,11 +153,11 @@ export function NodeUIProvider({
         () => ({
             accentColor,
             registerParam,
+            registerOutput,
             midiEl,
-            outputEl,
             paramTops,
+            outputTops,
             midiTop,
-            outputTop,
             getVariantFor: (key: string) => {
                 if (stringKeys.includes(key)) return "string";
                 if (numericKeys.includes(key)) return "numeric";
@@ -161,11 +170,11 @@ export function NodeUIProvider({
         [
             accentColor,
             registerParam,
+            registerOutput,
             midiEl,
-            outputEl,
             paramTops,
+            outputTops,
             midiTop,
-            outputTop,
             numericKeys,
             stringKeys,
             boolKeys,

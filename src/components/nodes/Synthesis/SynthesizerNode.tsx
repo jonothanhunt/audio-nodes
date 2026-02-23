@@ -6,7 +6,7 @@ import { NodeSpec } from "../../node-framework/types";
 interface SynthNodeData { preset?: string; waveform?: string; attack?: number; decay?: number; sustain?: number; release?: number; cutoff?: number; resonance?: number; glide?: number; gain?: number; maxVoices?: number; _connectedParams?: string[]; onParameterChange: (nodeId: string, key: string, value: unknown) => void;[k: string]: unknown; }
 interface SynthNodeProps { id: string; selected?: boolean; data: SynthNodeData; }
 
-const spec: NodeSpec = {
+export const spec: NodeSpec = {
     type: 'synth',
     // title omitted (registry provides)
     // accentColor & icon centralized in registry

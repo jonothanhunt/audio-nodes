@@ -6,7 +6,7 @@ import { NodeSpec } from "../../node-framework/types";
 interface LFONodeData { waveform?: string; beatsPerCycle?: number; depth?: number; offset?: number; bipolar?: boolean; phase?: number; onParameterChange: (nodeId: string, key: string, value: unknown) => void;[k: string]: unknown; }
 interface LFONodeProps { id: string; selected?: boolean; data: LFONodeData; }
 
-const spec: NodeSpec = {
+export const spec: NodeSpec = {
   type: 'lfo',
   // title omitted (registry provides)
   // accentColor & icon centralized in registry

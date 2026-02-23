@@ -84,8 +84,8 @@ export function NumberParam({
 
     const invalid = raw.trim() === "" || Number.isNaN(parseFloat(raw));
     const showSlider = useSlider ?? (min != null && max != null);
-    const liveModNum = typeof liveModDelta === 'number' ? liveModDelta : 0;
-    const displayValue = lastCommittedRef.current + (liveModNum || 0);
+    const liveModNum = typeof liveModDelta === 'number' ? liveModDelta : undefined;
+    const displayValue = liveModNum !== undefined ? liveModNum : lastCommittedRef.current;
 
     const percent =
         min != null && max != null
@@ -140,7 +140,7 @@ export function NumberParam({
         <ParamRow label={label} paramKey={paramKey} badge={badge}>
             <input
                 type="number"
-                value={raw}
+                value={disabledComputed ? (Number.isInteger(displayValue) ? displayValue : Number(displayValue.toFixed(4))) : raw}
                 min={min}
                 max={max}
                 step={step}

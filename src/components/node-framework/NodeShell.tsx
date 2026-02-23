@@ -28,21 +28,21 @@ function NodeShellBase(props: NodeShellProps) {
   const boolKeys = spec.params.filter(p => p.kind === 'bool').map(p => p.key);
 
 
-  // Detect primary in/out (first declared)
   const primaryIn = spec.inputs?.[0];
-  const primaryOut = spec.outputs?.[0];
   const inVariant: 'audio' | 'midi' | 'numeric' | 'string' | 'bool' = primaryIn?.role.startsWith('midi') ? 'midi' : primaryIn?.role.startsWith('audio') ? 'audio' : 'midi';
-  let outVariant: 'audio' | 'midi' | 'numeric' | 'string' | 'bool' = 'midi';
-  if (primaryOut) {
-    if (primaryOut.role === 'param-out') {
-      // Heuristic: find first non-hidden param to determine variant; fallback numeric
+
+  // Helper to determine output variant based on role and params
+  const getOutVariant = (role: string): 'audio' | 'midi' | 'numeric' | 'string' | 'bool' => {
+    if (role === 'param-out') {
       const firstParam = spec.params.find(p => !p.hidden);
-      if (firstParam?.kind === 'bool') outVariant = 'bool';
-      else if (firstParam?.kind === 'text' || firstParam?.kind === 'select') outVariant = 'string';
-      else outVariant = 'numeric';
-    } else if (primaryOut.role.startsWith('midi')) outVariant = 'midi';
-    else if (primaryOut.role.startsWith('audio')) outVariant = 'audio';
-  }
+      if (firstParam?.kind === 'bool') return 'bool';
+      if (firstParam?.kind === 'text' || firstParam?.kind === 'select') return 'string';
+      return 'numeric';
+    }
+    if (role.startsWith('midi')) return 'midi';
+    if (role.startsWith('audio')) return 'audio';
+    return 'midi';
+  };
 
   // Use category accent from registry if available
   const registryMeta = getNodeMeta(spec.type);
@@ -90,22 +90,8 @@ function NodeShellBase(props: NodeShellProps) {
             />
           )}
         </div>
-        {primaryOut ? (
-          <div className="grid grid-cols-[minmax(16rem,_auto)_auto] gap-x-4">
-            <div className="flex flex-col gap-2 col-span-1">
-              {primaryIn && <AudioInRow label={primaryIn.label} variant={inVariant} />}
-              {spec.renderBeforeParams && spec.renderBeforeParams({ id, data, params, update: (k, v) => onParameterChange(id, k, v) })}
-              {params.map(p => (
-                <ParamAuto key={p.spec.key} runtime={p} nodeId={id} onParameterChange={onParameterChange} />
-              ))}
-              {spec.renderAfterParams && spec.renderAfterParams({ id, data, params, update: (k, v) => onParameterChange(id, k, v) })}
-            </div>
-            <div className="flex flex-col items-stretch col-span-1">
-              <AudioOutRow label={primaryOut.label} />
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
+        <div className="grid grid-cols-[minmax(16rem,_auto)_auto] gap-x-4">
+          <div className="flex flex-col gap-2 col-span-1">
             {primaryIn && <AudioInRow label={primaryIn.label} variant={inVariant} />}
             {spec.renderBeforeParams && spec.renderBeforeParams({ id, data, params, update: (k, v) => onParameterChange(id, k, v) })}
             {params.map(p => (
@@ -113,7 +99,14 @@ function NodeShellBase(props: NodeShellProps) {
             ))}
             {spec.renderAfterParams && spec.renderAfterParams({ id, data, params, update: (k, v) => onParameterChange(id, k, v) })}
           </div>
-        )}
+          {(spec.outputs && spec.outputs.length > 0) && (
+            <div className="flex flex-col items-stretch col-span-1 gap-2">
+              {spec.outputs.map(out => (
+                <AudioOutRow key={out.id} id={out.id} label={out.label} />
+              ))}
+            </div>
+          )}
+        </div>
         {/* Full-width custom content (e.g., sequencer grid) */}
         {children && (
           <div className="mt-4">
@@ -121,8 +114,14 @@ function NodeShellBase(props: NodeShellProps) {
           </div>
         )}
       </div>
-      {/* If there is no primaryOut we explicitly pass null so HandleLayer suppresses the default output handle (avoids phantom output on sink nodes like Speaker). */}
-      <HandleLayer includeMidiIn={!!primaryIn} inputHandleVariant={inVariant} inputHandleId={primaryIn?.id || 'midi'} includeParamTargets={spec.paramHandles !== false} outputId={primaryOut ? primaryOut.id : null} outputVariant={outVariant} />
+      {/* Render the HandleLayer which now queries outputTops */}
+      <HandleLayer
+        includeMidiIn={!!primaryIn}
+        inputHandleVariant={inVariant}
+        inputHandleId={primaryIn?.id || 'midi'}
+        includeParamTargets={spec.paramHandles !== false}
+        outputs={spec.outputs?.map(o => ({ id: o.id, variant: getOutVariant(o.role) }))}
+      />
     </NodeUIProvider>
   );
 }
@@ -139,10 +138,10 @@ function AudioInRow({ label, variant }: { label: string; variant: string }) {
   );
 }
 
-function AudioOutRow({ label }: { label: string }) {
-  const { outputEl } = useNodeUI();
+function AudioOutRow({ id, label }: { id: string; label: string }) {
+  const { registerOutput } = useNodeUI();
   return (
-    <div className="relative flex items-center justify-end h-7 mt-2" ref={el => outputEl(el)}>
+    <div className="relative flex items-center justify-end h-8 mb-1" ref={el => registerOutput(id, el)}>
       <span className="text-xs text-gray-300 mr-2">{label}</span>
     </div>
   );

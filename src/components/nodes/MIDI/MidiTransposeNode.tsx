@@ -6,7 +6,7 @@ import { NodeSpec } from "../../node-framework/types";
 interface MidiTransposeNodeData { semitones?: number; clampLow?: number; clampHigh?: number; passOther?: boolean; _connectedParams?: string[]; onParameterChange: (nodeId: string, key: string, value: unknown) => void;[k: string]: unknown; }
 interface MidiTransposeNodeProps { id: string; selected?: boolean; data: MidiTransposeNodeData; }
 
-const spec: NodeSpec = {
+export const spec: NodeSpec = {
     type: 'midi-transpose',
     // title omitted (registry provides)
     // accentColor & icon centralized in registry

@@ -4,7 +4,7 @@ import { NodeSpec } from "../../node-framework/types";
 interface ValueTextData { value?: string; onParameterChange: (nodeId: string, key: string, value: unknown) => void;[k: string]: unknown; }
 interface ValueTextNodeProps { id: string; selected?: boolean; data: ValueTextData; }
 
-const spec: NodeSpec = {
+export const spec: NodeSpec = {
     type: 'value-text',
     // title omitted (registry provides)
     // accentColor centralized in registry category (Value)

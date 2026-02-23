@@ -6,7 +6,7 @@ import { NodeSpec } from "../../node-framework/types";
 interface OscillatorNodeData { frequency?: number; amplitude?: number; waveform?: string; _connectedParams?: string[]; onParameterChange: (nodeId: string, key: string, value: unknown) => void;[k: string]: unknown; }
 interface OscillatorNodeProps { id: string; selected?: boolean; data: OscillatorNodeData; }
 
-const spec: NodeSpec = {
+export const spec: NodeSpec = {
     type: 'oscillator',
     // title omitted (registry provides)
     // accentColor & icon centralized in registry

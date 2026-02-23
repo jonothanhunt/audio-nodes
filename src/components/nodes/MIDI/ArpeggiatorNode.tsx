@@ -2,13 +2,13 @@
 import React from 'react';
 import { NodeShell } from "../../node-framework/NodeShell";
 import { NodeSpec } from "../../node-framework/types";
+import { useAudioManager } from "../../../lib/AudioManagerContext";
 
 interface ArpeggiatorNodeData {
   playing?: boolean;
-  rateMultiplier?: number; // 0.25,0.5,1,2,4
-  mode?: string; // up,down,up-down,random,chord
-  octaves?: number; // 1-4
-  _connectedParams?: string[];
+  rateMultiplier?: number;
+  mode?: string;
+  octaves?: number;
   onParameterChange: (nodeId: string, key: string, value: unknown) => void;
   [k: string]: unknown;
 }
@@ -17,7 +17,7 @@ interface ArpeggiatorNodeProps { id: string; selected?: boolean; data: Arpeggiat
 const MODES = ['up', 'down', 'up-down', 'random', 'chord'] as const;
 const RATES = ['0.25', '0.5', '1', '2', '4'] as const; // matches sequencer allowed rates
 
-const spec: NodeSpec = {
+export const spec: NodeSpec = {
   type: 'arpeggiator',
   // title omitted (registry provides)
   // accentColor & icon centralized in registry
@@ -45,6 +45,8 @@ const spec: NodeSpec = {
 
 export default function ArpeggiatorNode({ id, data, selected }: ArpeggiatorNodeProps) {
   const { onParameterChange } = data;
+  const audioManager = useAudioManager();
+
   // Initialize defaults once
   React.useEffect(() => {
     const ensure = (k: keyof ArpeggiatorNodeData, v: unknown) => { if ((data as Record<string, unknown>)[k as string] == null) onParameterChange(id, k as string, v); };
@@ -63,23 +65,15 @@ export default function ArpeggiatorNode({ id, data, selected }: ArpeggiatorNodeP
     if (key === 'octaves') val = Math.max(1, Math.min(4, Number(value)));
     onParameterChange(nid, key, val as unknown);
     if (key === 'playing') {
-      try { window.dispatchEvent(new CustomEvent('audioNodesArpPlayToggle', { detail: { nodeId: nid, play: value } })); } catch { }
+      audioManager.setArpPlay(nid, !!value);
     } else if (key === 'rateMultiplier') {
-      try { window.dispatchEvent(new CustomEvent('audioNodesArpRateChange', { detail: { nodeId: nid, rate: Number(value) } })); } catch { }
+      audioManager.setArpRate(nid, Number(value));
+      setRateHint(true);
+      window.setTimeout(() => setRateHint(false), 1400);
     }
-  }, [onParameterChange]);
+  }, [onParameterChange, audioManager]);
 
   const [rateHint, setRateHint] = React.useState(false);
-  React.useEffect(() => {
-    if (!playing) return; // only hint while active
-    const off = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { nodeId: string; rate: number } | undefined;
-      if (!detail || detail.nodeId !== id) return;
-      setRateHint(true); window.setTimeout(() => setRateHint(false), 1400);
-    };
-    window.addEventListener('audioNodesArpRateChange', off as EventListener);
-    return () => window.removeEventListener('audioNodesArpRateChange', off as EventListener);
-  }, [playing, id]);
 
   const enhancedSpec: NodeSpec = React.useMemo(() => ({
     ...spec,

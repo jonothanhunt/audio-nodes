@@ -4,7 +4,7 @@ import { NodeSpec } from "../../node-framework/types";
 interface ValueSelectData { value?: string; options?: string; _connectedParams?: string[]; onParameterChange: (nodeId: string, key: string, value: unknown) => void;[k: string]: unknown; }
 interface ValueSelectNodeProps { id: string; selected?: boolean; data: ValueSelectData; }
 
-const spec: NodeSpec = {
+export const spec: NodeSpec = {
     type: 'value-select',
     // title omitted (registry provides)
     // accentColor centralized in registry category (Value)

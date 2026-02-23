@@ -4,7 +4,7 @@ import { NodeSpec } from "../../node-framework/types";
 interface ValueBoolData { value?: boolean; onParameterChange: (nodeId: string, key: string, value: unknown) => void;[k: string]: unknown; }
 interface ValueBoolNodeProps { id: string; selected?: boolean; data: ValueBoolData; }
 
-const spec: NodeSpec = {
+export const spec: NodeSpec = {
     type: 'value-bool',
     // title omitted (registry provides)
     // accentColor centralized in registry category (Value)

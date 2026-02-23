@@ -81,6 +81,13 @@ export class AudioManager {
                                 if (typeof v === 'number' && isFinite(v)) clean[k] = v;
                                 else if (typeof v === 'boolean') clean[k] = v;
                             }
+
+                            // Keep a global synchronized cache of the latest mod value so newly mounted
+                            // components (like NumberParam) can establish their initial state.
+                            const win = window as any;
+                            win.__MOD_PREVIEW_CACHE__ = win.__MOD_PREVIEW_CACHE__ || {};
+                            win.__MOD_PREVIEW_CACHE__[nid] = { ...(win.__MOD_PREVIEW_CACHE__[nid] || {}), ...clean };
+
                             this.modPreviewListeners.forEach(cb => { try { cb(nid, clean); } catch { } });
                             try { window.dispatchEvent(new CustomEvent('audioNodesNodeRendered', { detail: { nodeId: nid, data: clean } })); } catch { }
                         }

@@ -1,11 +1,11 @@
 import { NodeShell } from "../../node-framework/NodeShell";
 import { NodeSpec } from "../../node-framework/types";
 
-interface ValueNumberData { value?: number; ranged?: boolean; min?: number; max?: number; step?: number; _connectedParams?: string[]; onParameterChange: (nodeId: string, key: string, value: unknown) => void;[k: string]: unknown; }
+interface ValueNumberData { value?: number; ranged?: boolean; min?: number; max?: number; step?: number; onParameterChange: (nodeId: string, key: string, value: unknown) => void;[k: string]: unknown; }
 interface ValueNumberNodeProps { id: string; selected?: boolean; data: ValueNumberData; }
 
 // We'll implement range support using additional params; slider min/max/step only applied when ranged=true
-const spec: NodeSpec = {
+export const spec: NodeSpec = {
     type: 'value-number',
     // title omitted (registry provides)
     // accentColor centralized in registry category (Value)

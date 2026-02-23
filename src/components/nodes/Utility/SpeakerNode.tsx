@@ -6,7 +6,7 @@ import { NodeSpec } from "../../node-framework/types";
 interface SpeakerNodeData { volume?: number; muted?: boolean; _connectedParams?: string[]; onParameterChange: (nodeId: string, key: string, value: unknown) => void;[k: string]: unknown; }
 interface SpeakerNodeProps { id: string; selected?: boolean; data: SpeakerNodeData; }
 
-const spec: NodeSpec = {
+export const spec: NodeSpec = {
     type: 'speaker',
     // title omitted (registry provides)
     // accentColor & icon centralized in registry

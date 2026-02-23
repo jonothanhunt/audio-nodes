@@ -5,6 +5,7 @@ import { NodeShell } from "../../node-framework/NodeShell";
 import { NodeSpec } from "../../node-framework/types";
 import { SequencerGrid, NOTE_NAMES } from "../../node-ui/SequencerGrid";
 import { useConnectedParamChecker } from "../../node-ui/useConnectedParam";
+import { useAudioManager } from "../../../lib/AudioManagerContext";
 
 interface SequencerNodeData {
     length?: number;
@@ -28,9 +29,9 @@ const NOTE_OPTIONS = OCTAVES.flatMap((oct) =>
     NOTE_NAMES.map((n) => `${n}${oct}`),
 );
 
-// Static portions of the spec (params, IO, help) never change — only renderAfterParams
-// closes over rateHint/playingProp so those stay inside useMemo.
-const SEQUENCER_SPEC_BASE = {
+// Static portions of the spec (params, IO, help) — renderAfterParams is added
+// dynamically in useMemo because it closes over rateHint and playingProp.
+export const spec = {
     type: 'sequencer',
     params: [
         { key: 'fromNote', kind: 'select' as const, default: 'C4', label: 'From', options: NOTE_OPTIONS },
@@ -67,6 +68,7 @@ function noteToMidi(note: string): number {
 
 export default function SequencerNode({ id, data, selected }: SequencerNodeProps) {
     const { onParameterChange } = data;
+    const audioManager = useAudioManager();
     const isConnected = useConnectedParamChecker(id);
     const playingIsConnected = isConnected('playing');
 
@@ -338,9 +340,8 @@ export default function SequencerNode({ id, data, selected }: SequencerNodeProps
 
     const [rateHint, setRateHint] = React.useState(false);
 
-    // Node-local spec (params, help, IO) now dynamic for hint placement
-    const spec: NodeSpec = React.useMemo(() => ({
-        ...SEQUENCER_SPEC_BASE,
+    const specWithGrid: NodeSpec = React.useMemo(() => ({
+        ...spec,
         renderAfterParams: () => (
             rateHint && playingProp ? <div className="text-[10px] text-amber-400/80 -mt-1 mb-1">Rate change applies next beat</div> : null
         )
@@ -349,18 +350,14 @@ export default function SequencerNode({ id, data, selected }: SequencerNodeProps
     // Wrapper to intercept play & rate changes for events + hint
     const handleParamChange = React.useCallback((nid: string, key: string, value: unknown) => {
         onParameterChange(nid, key, key === 'rateMultiplier' ? Number(value) : value as (string | number | boolean | boolean[][]));
-        if (key === 'playing') {
-            // Only dispatch the window event when 'playing' is NOT modulated by an external connection.
-            // When connected, the worklet's _applyParamModulations path owns play/stop.
-            if (!playingIsConnected) {
-                try { window.dispatchEvent(new CustomEvent('audioNodesSequencerPlayToggle', { detail: { nodeId: nid, play: value } })); } catch { }
-            }
+        if (key === 'playing' && !playingIsConnected) {
+            audioManager.setSequencerPlay(nid, !!value);
         } else if (key === 'rateMultiplier') {
-            try { window.dispatchEvent(new CustomEvent('audioNodesSequencerRateChange', { detail: { nodeId: nid, rate: Number(value) } })); } catch { }
+            audioManager.setSequencerRate(nid, Number(value));
             setRateHint(true);
             window.setTimeout(() => setRateHint(false), 1600);
         }
-    }, [onParameterChange, playingIsConnected]);
+    }, [onParameterChange, playingIsConnected, audioManager]);
 
     const grid = (
         <SequencerGrid
@@ -379,7 +376,7 @@ export default function SequencerNode({ id, data, selected }: SequencerNodeProps
         <NodeShell
             id={id}
             data={data as unknown as Record<string, unknown>}
-            spec={spec}
+            spec={specWithGrid}
             selected={selected}
             onParameterChange={handleParamChange}
         >
