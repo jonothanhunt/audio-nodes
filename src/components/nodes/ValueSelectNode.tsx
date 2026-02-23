@@ -1,0 +1,29 @@
+import { NodeShell } from "@/components/editor/NodeShell";
+import { NodeSpec } from "@/components/editor/types";
+
+interface ValueSelectData { value?: string; options?: string; _connectedParams?: string[]; onParameterChange: (nodeId: string, key: string, value: unknown) => void;[k: string]: unknown; }
+interface ValueSelectNodeProps { id: string; selected?: boolean; data: ValueSelectData; }
+
+export const spec: NodeSpec = {
+    type: 'value-select',
+    // title omitted (registry provides)
+    // accentColor centralized in registry category (Value)
+    params: [
+        { key: 'value', kind: 'text', default: '', label: 'Value' },
+        { key: 'options', kind: 'text', default: '', label: 'Options (CSV)' }
+    ],
+    outputs: [{ id: 'param-out', role: 'param-out', label: 'Select Out' }],
+    help: {
+        description: 'Dropdown string value. Provide options via the options CSV (e.g., A,B,C).',
+        inputs: [
+            { name: 'Value (string)', description: 'Optional param input overriding local selection.' },
+            { name: 'Options (string)', description: 'Comma-separated list used for dropdown choices.' }
+        ],
+        outputs: [{ name: 'Select Out', description: 'Selected string value.' }]
+    }
+};
+
+export default function ValueSelectNode({ id, data, selected }: ValueSelectNodeProps) {
+    const { onParameterChange } = data;
+    return <NodeShell id={id} data={data} spec={spec} selected={selected} onParameterChange={onParameterChange} />;
+}

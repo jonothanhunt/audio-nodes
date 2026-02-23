@@ -1,7 +1,7 @@
 "use client";
 import dynamic from "next/dynamic";
 
-const AudioNodesEditor = dynamic(() => import("@/components/AudioNodesEditor"), {
+const AudioNodesEditor = dynamic(() => import("@/components/editor/AudioNodesEditor"), {
     ssr: false,
 });
 

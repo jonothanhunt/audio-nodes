@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getHandleRole, HandleRole } from '../../lib/handles';
+import { getHandleRole, HandleRole } from '@core-audio/client/handles';
 
 // Pure connection validator extracted from useGraph for testability.
 // Mirrors the logic in isValidConnection but without React hook deps.

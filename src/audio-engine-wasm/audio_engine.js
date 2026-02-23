@@ -1,3 +1,5 @@
+/* eslint-disable */
+
 /* @ts-self-types="./audio_engine.d.ts" */
 
 export class LfoNode {
