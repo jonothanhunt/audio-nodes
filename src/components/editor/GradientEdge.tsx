@@ -34,26 +34,26 @@ export default function GradientEdge(props: EdgeProps) {
         sourcePosition === "right"
             ? sourceX - INSET
             : sourcePosition === "left"
-              ? sourceX + INSET
-              : sourceX;
+                ? sourceX + INSET
+                : sourceX;
     const tx =
         targetPosition === "right"
             ? targetX - INSET
             : targetPosition === "left"
-              ? targetX + INSET
-              : targetX;
+                ? targetX + INSET
+                : targetX;
     const sy =
         sourcePosition === "top"
             ? sourceY + INSET
             : sourcePosition === "bottom"
-              ? sourceY - INSET
-              : sourceY;
+                ? sourceY - INSET
+                : sourceY;
     const ty =
         targetPosition === "top"
             ? targetY + INSET
             : targetPosition === "bottom"
-              ? targetY - INSET
-              : targetY;
+                ? targetY - INSET
+                : targetY;
 
     const [edgePath, labelX, labelY] = getBezierPath({
         sourceX: sx,

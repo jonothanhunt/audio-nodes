@@ -1,6 +1,5 @@
-"use client";
 import React from "react";
-import { Handle, Position } from "reactflow";
+import { Handle, Position, useEdges } from "reactflow";
 import { useNodeUI } from "./NodeUIProvider";
 import {
     makeHandleStyle,
@@ -30,8 +29,17 @@ export function HandleLayer({
         outputTops,
         getVariantFor,
         baseBg,
+        nodeId,
     } = useNodeUI();
 
+    const edges = useEdges();
+
+    const isHandleConnected = (handleId: string, type: 'source' | 'target') => {
+        return edges.some(e =>
+            (type === 'target' && e.target === nodeId && e.targetHandle === handleId) ||
+            (type === 'source' && e.source === nodeId && e.sourceHandle === handleId)
+        );
+    };
     return (
         <>
             {includeMidiIn && (
@@ -43,12 +51,12 @@ export function HandleLayer({
                     style={makeHandleStyle({
                         top: midiTop,
                         side: "left",
-                        connected: false,
+                        connected: isHandleConnected(inputHandleId, 'target'),
                         variant: inputHandleVariant,
                         accentColor,
                         baseBg,
                     })}
-
+                    data-connected={isHandleConnected(inputHandleId, 'target')}
                 >
                     {renderHandleInner(inputHandleVariant, accentColor)}
                 </Handle>
@@ -65,12 +73,12 @@ export function HandleLayer({
                         style={makeHandleStyle({
                             top,
                             side: "left",
-                            connected: false,
+                            connected: isHandleConnected(key, 'target'),
                             variant,
                             accentColor,
                             baseBg,
                         })}
-
+                        data-connected={isHandleConnected(key, 'target')}
                     >
                         {renderHandleInner(variant, accentColor)}
                     </Handle>
@@ -89,12 +97,12 @@ export function HandleLayer({
                         style={makeHandleStyle({
                             top,
                             side: "right",
-                            connected: false,
+                            connected: isHandleConnected(id, 'source'),
                             variant: variant,
                             accentColor,
                             baseBg,
                         })}
-
+                        data-connected={isHandleConnected(id, 'source')}
                     >
                         {renderHandleInner(variant, accentColor)}
                     </Handle>

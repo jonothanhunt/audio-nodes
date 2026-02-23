@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, Info } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 
 export default function SidebarHeaderInfo() {
     const [modalOpen, setModalOpen] = useState(false);
@@ -29,10 +29,20 @@ export default function SidebarHeaderInfo() {
             </h1>
             <button
                 onClick={() => setModalOpen(true)}
-                className="p-1 text-gray-400 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 rounded-full"
+                className="px-2 py-1 text-white hover:text-white/80 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 rounded-md"
                 aria-label="App Info"
             >
-                <Info className="w-5 h-5" />
+                <span
+                    style={{
+                        fontFamily: "var(--font-lastik)",
+                        fontWeight: 200,
+                        fontVariationSettings: '"wght" 20',
+                        fontStyle: 'italic',
+                    }}
+                    className="text-lg lowercase leading-none"
+                >
+                    info
+                </span>
             </button>
 
             {modalOpen && (
@@ -62,10 +72,14 @@ export default function SidebarHeaderInfo() {
 
                         <div className="text-sm text-gray-300 mb-6 space-y-4">
                             <p>
-                                Welcome to Audio Nodes—a modular audio & MIDI playground in the browser powered by Rust + WebAssembly.
+                                Hey! Thanks for giving Audio Nodes a try.
                             </p>
                             <p>
-                                [Personalised message goes here]
+                                This is very much work in progress, so expect some funny behaviour!
+                            </p>
+                            <p>You can learn more about the project on the <a href="https://github.com/jonothanhunt/audio-nodes#readme">GitHub repo</a>.</p>
+                            <p>
+                                Jonothan.dev
                             </p>
                         </div>
 

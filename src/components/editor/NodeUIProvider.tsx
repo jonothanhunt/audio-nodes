@@ -21,6 +21,7 @@ interface NodeUIContextValue {
     getVariantFor: (key: string) => HandleVariant;
     baseBg: string;
     isParamConnected: (key: string) => boolean;
+    nodeId: string;
 }
 
 const NodeUIContext = React.createContext<NodeUIContextValue | null>(null);
@@ -166,6 +167,7 @@ export function NodeUIProvider({
             },
             baseBg,
             isParamConnected,
+            nodeId,
         }),
         [
             accentColor,
@@ -180,6 +182,7 @@ export function NodeUIProvider({
             boolKeys,
             baseBg,
             isParamConnected,
+            nodeId,
         ],
     );
 

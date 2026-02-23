@@ -33,8 +33,7 @@ export class AudioManager {
         if (this.isInitialized) return true;
 
         try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
             this.audioContext = new AudioContextClass();
             if (this.audioContext.state === "suspended") await this.audioContext.resume();
 
@@ -85,8 +84,7 @@ export class AudioManager {
 
                             // Keep a global synchronized cache of the latest mod value so newly mounted
                             // components (like NumberParam) can establish their initial state.
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            const win = window as any;
+                            const win = window as unknown as { __MOD_PREVIEW_CACHE__?: Record<string, Record<string, number | boolean>> };
                             win.__MOD_PREVIEW_CACHE__ = win.__MOD_PREVIEW_CACHE__ || {};
                             win.__MOD_PREVIEW_CACHE__[nid] = { ...(win.__MOD_PREVIEW_CACHE__[nid] || {}), ...clean };
 

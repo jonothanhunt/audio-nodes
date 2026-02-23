@@ -34,10 +34,8 @@ export function useProjectPersistence(
         // Attempt to read global BPM from window (TransportPill drives audioManager which holds bpm)
         let transportBpm: number | undefined;
         try {
-            const anyWin = window as unknown as { __audioNodesTransportBpm?: number };
-            if (typeof anyWin.__audioNodesTransportBpm === "number") {
-                transportBpm = anyWin.__audioNodesTransportBpm;
-            }
+            const win = window as unknown as { __audioNodesTransportBpm?: number };
+            transportBpm = win.__audioNodesTransportBpm;
         } catch { }
         return {
             version: 1,
@@ -125,7 +123,8 @@ export function useProjectPersistence(
             // Apply transport BPM if present
             try {
                 if (maybe.transport && typeof maybe.transport.bpm === "number") {
-                    (window as unknown as { __audioNodesTransportBpm?: number }).__audioNodesTransportBpm = maybe.transport.bpm;
+                    const win = window as unknown as { __audioNodesTransportBpm?: number };
+                    win.__audioNodesTransportBpm = maybe.transport.bpm;
                 }
             } catch { }
             return true;

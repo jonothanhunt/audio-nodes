@@ -1,3 +1,4 @@
+// src/hooks/audio/useLiveParamModulation.ts
 import React from 'react';
 
 // Hook to subscribe to worklet-sent live param modulation updates.
@@ -6,8 +7,8 @@ import React from 'react';
 export function useLiveParamModulation(nodeId: string, paramKey: string, connected: boolean) {
   const [value, setValue] = React.useState<number | boolean | undefined>(() => {
     if (!connected || typeof window === 'undefined') return undefined;
-    const cache = (window as unknown as Record<string, Record<string, Record<string, unknown>>>).__MOD_PREVIEW_CACHE__;
-    return cache?.[nodeId]?.[paramKey] as number | boolean | undefined;
+    const win = window as unknown as { __MOD_PREVIEW_CACHE__?: Record<string, Record<string, number | boolean>> };
+    return win.__MOD_PREVIEW_CACHE__?.[nodeId]?.[paramKey];
   });
 
   React.useEffect(() => {
@@ -18,8 +19,8 @@ export function useLiveParamModulation(nodeId: string, paramKey: string, connect
     }
     // Re-synchronize on mount in case the cache updated just before effect ran
     if (typeof window !== 'undefined') {
-      const cache = (window as unknown as Record<string, Record<string, Record<string, unknown>>>).__MOD_PREVIEW_CACHE__;
-      const v = cache?.[nodeId]?.[paramKey] as number | boolean | undefined;
+      const win = window as unknown as { __MOD_PREVIEW_CACHE__?: Record<string, Record<string, number | boolean>> };
+      const v = win.__MOD_PREVIEW_CACHE__?.[nodeId]?.[paramKey];
       if (v !== undefined) setValue(v);
     }
     const handler = (e: Event) => {

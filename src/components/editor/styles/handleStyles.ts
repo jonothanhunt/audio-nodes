@@ -36,11 +36,17 @@ export function makeHandleStyle({
         transition: "background 140ms, box-shadow 140ms, filter 140ms",
         cursor: "crosshair",
         position: "absolute",
+        zIndex: 20,
         "--accent": accentColor,
         "--base-bg": baseBg,
     } as React.CSSProperties;
     // Container remains unrotated for all variants; shapes drawn via inner SVG
-    return base;
+    return {
+        ...base,
+        // We can pass data attributes via styled-components or similar, but for React Flow
+        // we might need to rely on the Handle's own props if it supports them.
+        // Actually, React Flow's Handle accepts standard HTML attributes.
+    } as React.CSSProperties;
 }
 
 export function getHandleColor(_variant: HandleVariant): string {

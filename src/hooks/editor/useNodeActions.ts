@@ -27,14 +27,19 @@ interface UseNodeActionsOptions {
 function getViewportCenter(rfInstanceRef: React.RefObject<ReactFlowInstance | null>) {
     const inst = rfInstanceRef.current;
     if (!inst) return { x: 0, y: 0 };
-    const container =
-        (inst as unknown as { wrapper?: HTMLDivElement }).wrapper ||
-        (document.querySelector(".react-flow") as HTMLDivElement | null);
+
+    // Attempt to find the wrapper element for better center calculation
+    const container = (inst as any).wrapper || (document.querySelector(".react-flow") as HTMLDivElement | null);
     const rect = container?.getBoundingClientRect();
     const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
     const cy = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
-    const screenToFlow = (inst as unknown as { screenToFlowPosition?: (p: { x: number; y: number }) => { x: number; y: number } }).screenToFlowPosition;
+
+    // Use the latest screenToFlowPosition if available (React Flow >= 11.10)
+    const instAny = inst as any;
+    const screenToFlow = instAny.screenToFlowPosition as ((p: { x: number; y: number }) => { x: number; y: number }) | undefined;
     if (typeof screenToFlow === "function") return screenToFlow({ x: cx, y: cy });
+
+    // Fallback for older versions
     return inst.project({ x: cx, y: cy });
 }
 
@@ -127,7 +132,13 @@ export function useNodeActions({
                 const base = centerInViewport && centerTarget
                     ? { x: centerTarget.x + delta.x, y: centerTarget.y + delta.y }
                     : { x: (n.position?.x || 0) + bump, y: (n.position?.y || 0) + bump };
-                return { ...n, id: idMap.get(n.id)!, position: base, selected: true, data: { ...(n.data as unknown as Record<string, unknown>) } as unknown as Node["data"] } as Node;
+                return {
+                    ...n,
+                    id: idMap.get(n.id)!,
+                    position: base,
+                    selected: true,
+                    data: { ...n.data }
+                } as Node;
             });
             const newEdges: Edge[] = edgesToCopy
                 .map(e => {

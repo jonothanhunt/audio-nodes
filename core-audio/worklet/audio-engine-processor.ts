@@ -1,4 +1,4 @@
-// src/audio/audio-engine-processor.ts
+// core-audio/worklet/audio-engine-processor.ts
 // AudioWorkletProcessor that runs the WASM audio engine off the main thread.
 // It mirrors the processing previously done in AudioManager ScriptProcessorNode.
 
@@ -1368,19 +1368,31 @@ if (typeof globalThis.TextDecoder === 'undefined') {
         }
     }
 
+    /**
+     * Propagate values between "Value" nodes (like Bool, Number, Text) that are connected.
+     * Value nodes act as sources or pass-throughs. If A -> B, then B.value = A.value.
+     * We run multiple passes to handle chains of connections (A -> B -> C).
+     * 
+     * We also notify the main thread via 'modPreview' so the UI can reflect these
+     * real-time value changes (e.g. showing a checkbox toggle when its input changes).
+     */
     _propagateValueNodes() {
         if (!this._paramConnections || !this._paramConnections.length) return;
+
         // Collect connections that target value nodes (used as pass-through signal sources).
         const valueTargets = this._paramConnections.filter(m => {
             const n = this._nodes.get(m.to);
             return n && typeof n.type === 'string' && n.type.startsWith('value-');
         });
+
         if (!valueTargets.length) return;
+
         // Lazy-init cache: tracks last value actually sent via modPreview, keyed by
         // connection identity. This is independent of _nodes, which React's node-sync
         // periodically resets to the React-state value (causing false "no-change" skips).
         if (!this._propagatedValues) this._propagatedValues = new Map();
-        // Propagate up to 4 levels deep to handle chained value nodes.
+
+        // Propagate up to 4 levels deep to handle chained value nodes (A -> B -> C -> D).
         for (let pass = 0; pass < 4; pass++) {
             let anyChanged = false;
             for (const m of valueTargets) {
@@ -1388,26 +1400,39 @@ if (typeof globalThis.TextDecoder === 'undefined') {
                 if (!srcNode) continue;
                 const targetNode = this._nodes.get(m.to);
                 if (!targetNode) continue;
-                // Determine which field to read from the source
+
+                // Determine which field to read from the source.
+                // If it's a specific output port, use that; otherwise default to 'value'.
                 const outKey = m.fromOutput && m.fromOutput !== 'param-out' && m.fromOutput !== 'output'
                     ? m.fromOutput : 'value';
+
                 const raw = srcNode[outKey];
                 if (raw === undefined || raw === null) continue;
-                // Always write into _nodes so downstream chains (pass 1, 2...) see the updated value.
+
+                // Always update the internal node state so downstream chains (pass 1, 2...)
+                // can see the latest value in the same block.
                 const prevNodeVal = targetNode[m.targetParam];
                 if (prevNodeVal !== raw) {
                     this._nodes.set(m.to, { ...targetNode, [m.targetParam]: raw });
                     anyChanged = true;
                 }
-                // Use the propagated-values cache (not _nodes) to determine if we should notify the UI.
-                // _nodes gets reset by React's sync, so it is not a reliable signal for "did value change".
+
+                // Notify main thread UI.
+                // We use a separate cache because the `_nodes` map is periodically
+                // overwritten by the Host's React state, which might be stale.
                 const cacheKey = `${m.from}:${m.to}:${m.targetParam}`;
                 if (this._propagatedValues.get(cacheKey) !== raw) {
                     this._propagatedValues.set(cacheKey, raw);
-                    try { this.port.postMessage({ type: 'modPreview', nodeId: m.to, data: { [m.targetParam]: raw } }); } catch { }
+                    try {
+                        this.port.postMessage({
+                            type: 'modPreview',
+                            nodeId: m.to,
+                            data: { [m.targetParam]: raw }
+                        });
+                    } catch { }
                 }
             }
-            if (!anyChanged) break; // converged — no further chain propagation needed
+            if (!anyChanged) break; // Converged — no further pass needed
         }
     }
 

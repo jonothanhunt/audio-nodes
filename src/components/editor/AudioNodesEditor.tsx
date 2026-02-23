@@ -1,4 +1,8 @@
 "use client";
+/**
+ * Main node-based audio editor entry point.
+ * Orchestrates React Flow, the AudioEngine, MIDI integration, and project persistence.
+ */
 
 import React, { useCallback } from "react";
 import ReactFlow, {
@@ -256,15 +260,17 @@ export default function AudioNodesEditor() {
                             }}
                         >
                             <MiniMap
-                                className="react-flow-minimap-dark !top-auto !right-auto bg-gray-800/80 backdrop-blur-md rounded-xl border border-gray-700/80 shadow"
+                                className="react-flow-minimap-dark !top-auto !right-auto bg-gray-800/80 backdrop-blur-md rounded-xl border border-gray-700/80"
                                 style={{ width: 288, height: 146, strokeLinejoin: "round" }}
                                 nodeBorderRadius={24}
+                                nodeStrokeWidth={0}
+                                nodeStrokeColor="transparent"
                                 nodeColor={(node) => {
                                     return getNodeMeta(node.type).accentColor;
                                 }}
                                 maskColor="rgba(17, 24, 39, 0.6)"
-                                maskStrokeColor="rgba(17, 24, 39, 0.6)"
-                                maskStrokeWidth={20}
+                                maskStrokeColor="transparent"
+                                maskStrokeWidth={0}
                                 pannable
                                 zoomable
                                 offsetScale={0}

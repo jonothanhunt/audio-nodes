@@ -76,19 +76,22 @@ Tip: If the browser blocks autoplay, click anywhere to unlock the AudioContext.
 
 ```
 audio-nodes/
+├── core-audio/                  # Unified Audio Domain
+│   ├── wasm/                    # Rust DSP crate (compiled to WASM)
+│   ├── worklet/                 # AudioWorkletProcessor script & types
+│   └── client/                  # Main thread audio managers & registries
 ├── public/
-│   ├── worklets/                # AudioWorkletProcessor script
-│   ├── audio-engine-wasm/       # Served WASM bundle
-│   └── projects/                # Example / default project JSON
+│   ├── worklets/                # Compiled Worklet (served)
+│   └── audio-engine-wasm/       # Compiled WASM bundle (served)
 ├── src/
-│   ├── app/                     # Next.js App Router entry
-│   ├── components/              # React components (nodes, editor, UI chrome)
-│   ├── hooks/                   # Engine, graph, persistence hooks
-│   ├── lib/                     # Core managers, registry, helpers
-│   ├── types/                   # Shared TypeScript types
-│   └── audio-engine-wasm/       # Local copy of wasm-bindgen pkg (types)
-├── audio-engine/                # Rust DSP crate (compiled to WASM)
-└── build-wasm.sh                # Convenience build + copy script
+│   ├── app/                     # Next.js App Router entry & globals
+│   ├── components/
+│   │   ├── editor/              # Graph editor UI & framework
+│   │   ├── nodes/               # Flattened node components
+│   │   └── shared/              # Reusable UI elements
+│   ├── hooks/                   # Categorized hooks (audio, editor, state, etc.)
+│   └── utils/                   # Generic utility functions
+└── scripts/                     # Build & automation scripts (WASM, Worklet)
 ```
 
 ---
@@ -97,154 +100,36 @@ audio-nodes/
 
 ### Architecture Overview
 
-Layered for clarity & iteration speed:
-- **Rust (WASM):** Sample‑level DSP (oscillator, poly synth, reverb, LFO, MIDI transpose). Compiled via `wasm-bindgen`.
-- **AudioWorkletProcessor** (`public/worklets/audio-engine-processor.js`): Owns the instantiated WASM module. Executes the per‑block render, routes audio/MIDI, advances the global beat clock, dispatches transport events, and applies param modulations.
-- **Main thread** (`AudioManager`, `GraphSync`, `Transport`): Maintains the declarative graph & param state; serializes diffs to the worklet; routes worklet events back to React.
-- **React UI:** Graph editing (React Flow), parameter panels (auto‑generated from `NodeSpec`), custom node UIs (sequencer grid, etc.).
-
-### Audio Processing Pipeline
-1. User edits graph in React → diff sent to worklet via `GraphSync`.
-2. Each audio block the worklet runs a pre-pass: value-node chains propagated (`_propagateValueNodes`), then sequencer/arp param modulations applied.
-3. Worklet resolves a topological order and pulls audio upstream each block via WASM instances.
-4. Output written to the worklet's output channels → system audio.
-
-### Param Modulation System
-Param connections (e.g. Bool → sequencer `playing`, LFO → oscillator `frequency`) are a first-class feature:
-- **Source types:** `value-bool`, `value-number`, `value-select` (static values), or `lfo` (per-block computed values).
-- **Value-node chaining:** Bool A → Bool B → sequencer works; the worklet propagates value-node chains before running modulations (`_propagateValueNodes`), supporting up to 4 levels of depth per block.
-- **Live UI preview:** When a param handle has an incoming connection, the control is disabled but its colour/value updates in real time via `modPreview` messages from the worklet → `audioNodesNodeRendered` window event → `useLiveParamModulation` hook → `BooleanParam` / `NumberParam` display.
-- **Single-source rule:** MIDI and param handles each accept only one incoming connection. Audio inputs allow fan-in (mixing).
-- **Logic & Math Processing:** Dynamic nodes (Add, Subtract, Gate, Comparator, Conditional) are instantly evaluated synchronously within the modulation loop (up to 4 levels deep), enabling you to perform boolean mapping, variable routing, and arithmetic per-block.
-
-### Transport & Scheduling (Beat‑Only)
-- Single global beat clock (no bars / signatures) encourages polymeter & drifting patterns.
-- BPM changes, sequencer starts, rate changes & global sync requests are quantized to the next beat boundary for deterministic alignment.
-- Sequencers accumulate fractional beats; when threshold reached, they advance a step and emit events (used by UI for visual feedback / grid highlight).
-
-### MIDI & Routing
-- Raw MIDI bytes (status, data1, data2) for maximum flexibility.
-- Edges are type-safe: audio↔audio, midi↔midi, param↔param (no implicit conversions). Enforced in `isValidConnection` in `useGraph.ts` via `handles.ts`.
-- Worklet maintains per-node MIDI queues processed each render quantum.
-
-### Node Metadata & UI Generation
-- **Visual/descriptive metadata** lives centrally in `nodeRegistry.ts` (display name, icon, accent colour, description, category).
-- **Functional spec** (params, IO handles, help text) lives in each node component as a `NodeSpec` object — for static nodes this is a module-level `const`, with only dynamic render callbacks inside `useMemo`.
-- **Handle connection roles** are registered separately in `handles.ts` (`getHandleRole`). This is the one area where two files must stay in sync when adding a new node type.
-- `NodeShell` consumes both to render a consistent layout (param rows, handles, help popover) while allowing custom `children` for rich UIs (e.g. sequencer grid).
-
-### Parameters vs Streaming IO
-- **Parameters:** Discrete control values (numbers, bools, selects) that can be both directly edited via UI and overridden by connected param sources.
-- **Streaming IO:** Continuous audio or MIDI buffers routed every block.
-
-This separation keeps bandwidth low and timing precise.
+The system is organized into a clean separation of concerns:
+- **`core-audio/wasm`**: Sample-level DSP in Rust. Performance-critical code that runs inside the AudioWorklet.
+- **`core-audio/worklet`**: The interface between Web Audio and WASM. Handles per-block processing, beat scheduling, and param modulations.
+- **`core-audio/client`**: High-level state management. Serializes the React Flow graph into instructions for the worklet.
+- **`src/components/editor`**: The React Flow integration. Provides the framework for rendering nodes and edges.
+- **`src/components/nodes`**: Individual UI definitions for each node type, using `NodeShell` for consistency.
 
 ---
 
 ## Authoring a Node
 
-A node has up to four concerns: **registry entry**, **handle roles**, **UI component**, and **worklet handler**. Steps 1–2 are always required; 3 and 4 only if the node does something the worklet needs to know about.
+Adding a new node involves updating the Rust DSP and the React UI.
 
-### 1. Registry entry — `src/lib/nodeRegistry.ts`
+### 1. Rust DSP (`core-audio/wasm/`)
+- Define node logic in `src/nodes/`.
+- Register the node in `src/lib.rs` by adding it to the `AudioNode` enum and `NodeFactory`.
 
-Add a record with `type`, `displayName`, `icon`, `accentColor`, `description`, and `category`:
+### 2. Audio Client (`core-audio/client/`)
+- **Metadata**: Add display info to `nodeRegistry.ts`.
+- **Handles**: Define connection roles in `handles.ts`.
+- **Types**: (Optional) Add specific data types to `types.ts` if the node has custom state.
 
-```ts
-{ type: 'my-node', displayName: 'My Node', icon: SomeIcon, accentColor: '#7c3aed', description: '...', category: 'Utility' }
-```
+### 3. UI Component (`src/components/nodes/`)
+- Create a new component using `NodeShell`.
+- Define a `NodeSpec` to declare parameters, inputs, and outputs.
+- Register the component in `src/components/editor/AudioNodesEditor.tsx` in the `nodeTypes` map.
 
-### 2. Handle roles — `src/lib/handles.ts`
-
-Add a `case` for your node type in `getHandleRole`. This is what enforces type-safe connections (audio↔audio, midi↔midi, param↔param):
-
-```ts
-case 'my-node':
-    if (handleId === 'output') return 'audio-out';
-    if (handleId === 'cutoff') return 'param-in';  // allows LFO/value modulation
-    return 'unknown';
-```
-
-> **Note:** This is currently the one place where two files (`handles.ts` + the component's `NodeSpec`) must stay in sync. A param handle only receives modulation connections if it is listed as `param-in` here **and** declared in `NodeSpec.params` with `handle: true` (the default).
-
-### 3. UI component — `src/components/nodes/<Category>/<Name>Node.tsx`
-
-Define a `NodeSpec` (as a **module-level const** for static data — only `renderBeforeParams`/`renderAfterParams` closures go inside `useMemo`):
-
-```tsx
-"use client";
-import { NodeShell } from '../../node-framework/NodeShell';
-import { NodeSpec } from '../../node-framework/types';
-
-const spec: NodeSpec = {
-  type: 'my-node',
-  params: [
-    { key: 'cutoff', kind: 'number', default: 800, min: 20, max: 20000, step: 1, label: 'Cutoff' },
-    { key: 'enabled', kind: 'bool', default: true, label: 'Enabled' },
-    // handle: false — hides the param-in handle for this param (user-only control)
-    { key: 'mode', kind: 'select', default: 'low', options: ['low', 'high', 'band'], label: 'Mode' },
-  ],
-  inputs:  [{ id: 'input', role: 'audio-in', label: 'In' }],
-  outputs: [{ id: 'output', role: 'audio-out', label: 'Out' }],
-  help: {
-    description: 'A filter node.',
-    inputs:  [{ name: 'In', description: 'Audio input.' }],
-    outputs: [{ name: 'Out', description: 'Filtered audio.' }],
-  },
-};
-
-interface Props { id: string; selected?: boolean; data: Record<string, unknown> & { onParameterChange: (...) => void }; }
-
-export default function MyNode({ id, data, selected }: Props) {
-  return <NodeShell id={id} data={data} spec={spec} selected={selected} onParameterChange={data.onParameterChange} />;
-}
-```
-
-`NodeShell` handles param rows, input/output handles, the help popover, and the live modulated param preview automatically. Pass optional `children` for custom UI (e.g. a grid or scope).
-
-#### Param kinds
-
-| `kind`    | Control rendered   | Value type         |
-|-----------|--------------------|--------------------|
-| `number`  | Number input + optional slider (when `min`+`max` set) | `number` |
-| `bool`    | Toggle button (shows live modulated state when connected) | `boolean` |
-| `select`  | Dropdown           | `string`           |
-| `text`    | Text input         | `string`           |
-
-All param-in handles automatically support modulation from `value-bool`, `value-number`, `value-select`, and `lfo` nodes. Disable the handle for a param with `handle: false` in its spec entry.
-
-#### Pure value / pass-through nodes
-
-If your node just emits a value (no audio/MIDI), omit `inputs` and use a `param-out` output:
-
-```ts
-outputs: [{ id: 'param-out', role: 'param-out', label: 'Out' }]
-```
-
-The worklet's `_propagateValueNodes` automatically propagates value-node chains (`_nodes.value`) before running modulations each block — chains up to 4 levels deep work without any extra worklet code.
-
-### 4. Worklet handler — `public/worklets/audio-engine-processor.js`
-
-Only needed if your node produces audio or MIDI, or has stateful per-block logic. Add:
-- A `_nodes.type === 'my-node'` branch in `_processInputNode` (for audio) or the MIDI queue drain (for MIDI processors).
-- Call `this._applyParamModulations(nodeId, data)` at the **start** of your render function to apply any incoming param connections before reading values.
-- If WASM-backed: instantiate lazily via a `_getMyNodeInstance(nodeId)` pattern matching `_getOscInstance`, `_getSynthInstance`, etc.
-
-### 5. Register in the editor — `src/components/AudioNodesEditor.tsx`
-
-Add to the `nodeTypes` map:
-
-```ts
-import MyNode from './nodes/Category/MyNode';
-// ...
-const nodeTypes = { ..., 'my-node': MyNode };
-```
-
-### 6. Test
-
-- Add node to canvas, connect cables, wiggle all params.
-- Connect a `value-bool` or `value-number` to param handles — confirm they disable in UI and correctly modulate the value.
-- Save, reload, confirm state persists via localStorage/JSON round-trip.
-- Check DevTools console for worklet errors.
+### 4. Build and Test
+- Run `npm run build:wasm` to recompile the Rust core.
+- Drag your new node into the editor and verify its parameters and audio output.
 
 ---
 
@@ -254,9 +139,8 @@ const nodeTypes = { ..., 'my-node': MyNode };
 |---------|-----|
 | Silence | Ensure a Speaker node is in the chain & receiving audio. |
 | Audio won’t start | Click the page (user gesture needed to start AudioContext). |
-| WASM 404 / load error | Run `npm run build:wasm` and verify files in `public/audio-engine-wasm/`. Hard refresh. |
-| Params not updating | Confirm node type spec keys match what worklet expects; check devtools messages. |
-| Timing feels off | Verify BPM change or sequencer start was scheduled before the desired beat (changes quantize to next beat). |
+| WASM 404 / load error | Run `npm run build:wasm` and verify files in `public/audio-engine-wasm/`. |
+| Missing Handles | Check `core-audio/client/handles.ts` and the component's `NodeSpec`. |
 
 Still stuck? Open an issue with console logs + reproduction steps.
 
