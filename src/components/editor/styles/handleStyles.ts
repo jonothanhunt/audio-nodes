@@ -50,6 +50,7 @@ export function makeHandleStyle({
 }
 
 export function getHandleColor(_variant: HandleVariant): string {
+    void _variant;
     // Implementation for getHandleColor would go here
     // As the user only provided the signature, we'll leave it empty for now.
     // This function was inserted based on the provided Code Edit snippet.

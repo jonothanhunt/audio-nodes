@@ -75,12 +75,16 @@ export default function SidebarHeaderInfo() {
                                 Hey! Thanks for giving Audio Nodes a try.
                             </p>
                             <p>
-                                This is very much work in progress, so expect some funny behaviour!
+                                This is very much work in progress, so expect some funny behaviour! Try the links below for info and code.
                             </p>
-                            <p>You can learn more about the project on the <a href="https://github.com/jonothanhunt/audio-nodes#readme">GitHub repo</a>.</p>
-                            <p>
-                                Jonothan.dev
-                            </p>
+                            <div className="pt-1">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                    src="/signature.svg"
+                                    alt="Jonothan's Signature"
+                                    className="h-10 w-auto opacity-80"
+                                />
+                            </div>
                         </div>
 
                         <nav className="flex flex-col gap-3 font-medium">

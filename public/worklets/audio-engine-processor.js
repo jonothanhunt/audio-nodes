@@ -1176,16 +1176,33 @@ if (typeof globalThis.TextDecoder === 'undefined') {
       this._midiQueues.set(edge.to, q);
     }
   }
+  /**
+   * Propagate values between "Value" nodes (like Bool, Number, Text) that are connected.
+   * Value nodes act as sources or pass-throughs. If A -> B, then B.value = A.value.
+   * We run multiple passes to handle chains of connections (A -> B -> C).
+   * 
+   * We also notify the main thread via 'modPreview' so the UI can reflect these
+   * real-time value changes (e.g. showing a checkbox toggle when its input changes).
+   */
   _propagateValueNodes() {
     if (!this._paramConnections || !this._paramConnections.length) return;
     const valueTargets = this._paramConnections.filter((m) => {
       const n = this._nodes.get(m.to);
-      return n && typeof n.type === "string" && n.type.startsWith("value-");
+      return n && typeof n.type === "string" && (n.type.startsWith("value-") || n.type.startsWith("logic-"));
     });
     if (!valueTargets.length) return;
     if (!this._propagatedValues) this._propagatedValues = /* @__PURE__ */ new Map();
     for (let pass = 0; pass < 4; pass++) {
       let anyChanged = false;
+      for (const [id, node] of this._nodes) {
+        if (typeof node.type === "string" && node.type.startsWith("logic-")) {
+          const newValue = this._computeLogicNodeValue(node);
+          if (newValue !== node.value) {
+            this._nodes.set(id, { ...node, value: newValue });
+            anyChanged = true;
+          }
+        }
+      }
       for (const m of valueTargets) {
         const srcNode = this._nodes.get(m.from);
         if (!srcNode) continue;
@@ -1203,12 +1220,82 @@ if (typeof globalThis.TextDecoder === 'undefined') {
         if (this._propagatedValues.get(cacheKey) !== raw) {
           this._propagatedValues.set(cacheKey, raw);
           try {
-            this.port.postMessage({ type: "modPreview", nodeId: m.to, data: { [m.targetParam]: raw } });
+            this.port.postMessage({
+              type: "modPreview",
+              nodeId: m.to,
+              data: { [m.targetParam]: raw }
+            });
           } catch {
           }
         }
       }
       if (!anyChanged) break;
+    }
+  }
+  _computeLogicNodeValue(node) {
+    const type = node.type;
+    const a = Number(node.a ?? 0);
+    const b = Number(node.b ?? 0);
+    const input = Number(node.inValue ?? 0);
+    const min = Number(node.min ?? 0);
+    const max = Number(node.max ?? (type === "logic-to-range" || type === "logic-from-range" ? 1 : 0));
+    switch (type) {
+      case "logic-add":
+        return a + b;
+      case "logic-subtract":
+        return a - b;
+      case "logic-multiply":
+        return a * b;
+      case "logic-divide":
+        return b === 0 ? 0 : a / b;
+      case "logic-compare": {
+        const op = String(node.operation || "==");
+        switch (op) {
+          case "==":
+            return a === b;
+          case "!=":
+            return a !== b;
+          case ">":
+            return a > b;
+          case "<":
+            return a < b;
+          case ">=":
+            return a >= b;
+          case "<=":
+            return a <= b;
+          default:
+            return false;
+        }
+      }
+      case "logic-gate": {
+        const op = String(node.operation || "and").toLowerCase();
+        const ba = !!node.a;
+        const bb = !!node.b;
+        switch (op) {
+          case "and":
+            return ba && bb;
+          case "or":
+            return ba || bb;
+          case "xor":
+            return ba !== bb;
+          case "nand":
+            return !(ba && bb);
+          case "not":
+            return !ba;
+          default:
+            return false;
+        }
+      }
+      case "logic-condition":
+        return node.condition ? node.trueValue : node.falseValue;
+      case "logic-to-range":
+        return min + input * (max - min);
+      case "logic-from-range": {
+        const denom = max - min;
+        return denom === 0 ? 0 : (input - min) / denom;
+      }
+      default:
+        return node.value;
     }
   }
   _applyParamModulations(nodeId, data) {

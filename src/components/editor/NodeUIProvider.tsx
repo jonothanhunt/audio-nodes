@@ -187,7 +187,7 @@ export function NodeUIProvider({
     );
 
     return (
-        <div ref={rootRef} className="relative">
+        <div ref={rootRef} className="relative h-full w-full">
             <NodeUIContext.Provider value={value}>
                 {children}
             </NodeUIContext.Provider>

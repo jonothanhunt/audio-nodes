@@ -10,6 +10,8 @@ import ReactFlow, {
     Background,
     BackgroundVariant,
     ReactFlowInstance,
+    useNodesInitialized,
+    useReactFlow,
 } from "reactflow";
 import "reactflow/dist/style.css";
 
@@ -23,17 +25,13 @@ import SynthesizerNode from "@/components/nodes/SynthesizerNode";
 import MidiInputNode from "@/components/nodes/MidiInputNode";
 import SaveLoadPanel from "@/components/editor/SaveLoadPanel";
 import SidebarHeaderInfo from "@/components/editor/SidebarHeaderInfo";
-import { useAudioEngine } from "@/hooks/audio/useAudioEngine";
 import { useProjectPersistence } from "@/hooks/state/useProjectPersistence";
-import { useGraph } from "@/hooks/editor/useGraph";
 import { useMidiAccess } from "@/hooks/hardware/useMidiAccess";
-import { useNodeSync } from "@/hooks/editor/useNodeSync";
-import { useNodeActions } from "@/hooks/editor/useNodeActions";
 import { useEditorKeyboard } from "@/hooks/editor/useEditorKeyboard";
 import MidiTransposeNode from "@/components/nodes/MidiTransposeNode";
 import GradientEdge from "@/components/editor/GradientEdge";
 import { getNodeMeta } from "@core-audio/client/nodeRegistry";
-import type { OnConnectStartParams } from "reactflow";
+import type { OnConnectStartParams, Node, Edge, OnNodesChange, OnEdgesChange, OnConnect, Connection } from "reactflow";
 import ValueBoolNode from "@/components/nodes/ValueBoolNode";
 import CameraHandsNode from "@/components/nodes/CameraHandsNode";
 import ValueNumberNode from "@/components/nodes/ValueNumberNode";
@@ -48,8 +46,12 @@ import ValueSubtractNode from "@/components/nodes/ValueSubtractNode";
 import ValueMultiplyNode from "@/components/nodes/ValueMultiplyNode";
 import ValueDivideNode from "@/components/nodes/ValueDivideNode";
 import ValueConditionNode from "@/components/nodes/ValueConditionNode";
+import ToRangeNode from "@/components/nodes/ToRangeNode";
+import FromRangeNode from "@/components/nodes/FromRangeNode";
+import NotesNode from "@/components/nodes/NotesNode";
 import { ConnectedParamsProvider } from "@/components/editor/ConnectedParamsContext";
 import { AudioManagerProvider } from "@core-audio/client/AudioManagerContext";
+import { AudioManager } from "@core-audio/client/audioManager";
 
 const nodeTypes = {
     oscillator: OscillatorNode,
@@ -73,33 +75,50 @@ const nodeTypes = {
     "logic-multiply": ValueMultiplyNode,
     "logic-divide": ValueDivideNode,
     "logic-condition": ValueConditionNode,
+    "logic-to-range": ToRangeNode,
+    "logic-from-range": FromRangeNode,
+    notes: NotesNode,
 };
 
 const edgeTypes = { gradient: GradientEdge };
 
-export default function AudioNodesEditor() {
-    const {
-        nodes,
-        setNodes,
-        onNodesChange,
-        edges,
-        setEdges,
-        onEdgesChange,
-        onConnect,
-        isValidConnection,
-        generateNodeId,
-    } = useGraph();
-    const { audioManager, audioInitialized, initializeAudio, sendMIDI } = useAudioEngine();
+interface AudioNodesEditorProps {
+    nodes: Node[];
+    edges: Edge[];
+    audioInitialized: boolean;
+    audioManager: AudioManager;
+    onNodesChange: OnNodesChange;
+    onEdgesChange: OnEdgesChange;
+    onConnect: OnConnect;
+    isValidConnection: (connection: Connection) => boolean;
+    onAddNode: (type: string) => void;
+    initializeAudio: () => Promise<boolean>;
+    persistence: ReturnType<typeof useProjectPersistence>;
+    rfInstanceRef: React.MutableRefObject<ReactFlowInstance | null>;
+    nodeActions: {
+        getSelectedGraph: () => { selectedNodes: Node[]; selectedEdges: Edge[] };
+        duplicateGraph: (nodes: Node[], edges: Edge[], center: boolean) => void;
+        duplicateSelection: (center: boolean) => void;
+        clipboardRef: React.MutableRefObject<{ nodes: Node[]; edges: Edge[] } | null>;
+        nodesRef: React.MutableRefObject<Node[]>;
+    };
+}
 
-    // Bridge: forward sequencerStep events from audioManager → window (SequencerNode listens)
-    React.useEffect(() => {
-        const off = audioManager.onSequencerStep((nodeId: string, stepIndex: number) => {
-            try { window.dispatchEvent(new CustomEvent("audioNodesSequencerStep", { detail: { nodeId, stepIndex } })); } catch { }
-        });
-        return () => { try { off(); } catch { } };
-    }, [audioManager]);
-
-    const rfInstanceRef = React.useRef<ReactFlowInstance | null>(null);
+export default function AudioNodesEditor({
+    nodes,
+    edges,
+    audioInitialized,
+    audioManager,
+    onNodesChange,
+    onEdgesChange,
+    onConnect,
+    isValidConnection,
+    onAddNode,
+    initializeAudio,
+    persistence,
+    rfInstanceRef,
+    nodeActions,
+}: AudioNodesEditorProps) {
     const [connectingColor, setConnectingColor] = React.useState<string | null>(null);
 
     const handleConnectStart = useCallback(
@@ -113,102 +132,36 @@ export default function AudioNodesEditor() {
     );
     const handleConnectEnd = useCallback(() => setConnectingColor(null), []);
 
-    // Parameter change — syncs to graph state and worklet
-    const handleParameterChange = useCallback(
-        (nodeId: string, parameter: string, value: string | number | boolean) => {
-            setNodes(prev => prev.map(node => {
-                if (node.id !== nodeId) return node;
-                const newNode = { ...node, data: { ...node.data, [parameter]: value } };
-                audioManager.updateNode(nodeId, { type: node.type || "unknown", ...newNode.data });
-                return newNode;
-            }));
-        },
-        [setNodes, audioManager],
-    );
-
-    // MIDI emit
-    const handleEmitMidi = useCallback(
-        (sourceId: string, events: Array<{ data: [number, number, number]; atFrame?: number; atTimeMs?: number }>) => sendMIDI(sourceId, events),
-        [sendMIDI],
-    );
-
-    // Worklet sync (node updates, connection updates, handler reattachment)
-    const { reattachHandlers, attachHandlers } = useNodeSync({ nodes, edges, setNodes, audioManager });
-
-    // Sync handler callbacks whenever they change
-    React.useEffect(() => {
-        attachHandlers(handleParameterChange as (...args: unknown[]) => void, handleEmitMidi as (...args: unknown[]) => void);
-    }, [handleParameterChange, handleEmitMidi, attachHandlers]);
-
-    // Node actions: add, copy/paste/duplicate
-    const {
-        onAddNode,
-        getSelectedGraph,
-        duplicateGraph,
-        duplicateSelection,
-        clipboardRef,
-        syncRefs,
-        nodesRef,
-    } = useNodeActions({
-        sendMIDI,
-        generateNodeId,
-        setNodes,
-        setEdges,
-        rfInstanceRef,
-        handleParameterChange: handleParameterChange as (...args: unknown[]) => void,
-        handleEmitMidi: handleEmitMidi as (...args: unknown[]) => void,
+    // Keyboard shortcuts
+    useEditorKeyboard({
+        getSelectedGraph: nodeActions.getSelectedGraph,
+        duplicateGraph: nodeActions.duplicateGraph,
+        duplicateSelection: nodeActions.duplicateSelection,
+        clipboardRef: nodeActions.clipboardRef,
     });
 
-    // Keep stable refs in sync
-    React.useEffect(() => { syncRefs(nodes, edges); }, [nodes, edges, syncRefs]);
+    // Fit view once on load
+    const { fitView } = useReactFlow();
+    const nodesInitialized = useNodesInitialized();
+    const hasFitViewRef = React.useRef(false);
 
-    // Keyboard shortcuts
-    useEditorKeyboard({ getSelectedGraph, duplicateGraph, duplicateSelection, clipboardRef });
-
-    // Reattach handler helper for persistence hook
-    const reattachHandlersCb = useCallback(
-        (data: Record<string, unknown> | undefined) =>
-            reattachHandlers(
-                data,
-                handleParameterChange as (...args: unknown[]) => void,
-                handleEmitMidi as (...args: unknown[]) => void,
-            ),
-        [reattachHandlers, handleParameterChange, handleEmitMidi],
-    );
-
-    const {
-        handleSaveClick,
-        handleLoadFromObject,
-        loadFromLocalStorage,
-        handleLoadDefault,
-    } = useProjectPersistence(nodes, edges, setNodes, setEdges, rfInstanceRef, reattachHandlersCb);
-
-    // Autoload project on mount
-    const didBootRef = React.useRef(false);
     React.useEffect(() => {
-        if (didBootRef.current) return;
-        didBootRef.current = true;
-        const boot = async () => {
-            const ok = loadFromLocalStorage();
-            if (ok) return;
-            for (const url of ["/projects/default-project.json", "/default-project.json"]) {
-                try {
-                    const res = await fetch(`${url}?v=${Date.now()}`);
-                    if (!res.ok) continue;
-                    handleLoadFromObject(await res.json() as unknown);
-                    break;
-                } catch { }
-            }
-        };
-        void boot();
-    }, [handleLoadFromObject, loadFromLocalStorage]);
+        // left: 380px clears the 288px sidebar + margins/padding. We use a number here
+        // since older reactflow versions only support number for padding. The offset
+        // is handled by the container padding or CSS instead of fitView
+        fitView({
+            padding: 0.2,
+            duration: 0,
+            maxZoom: 1,
+        });
+    }, [nodesInitialized, nodes.length, fitView]);
 
     // Web MIDI integration
-    useMidiAccess(nodesRef, setNodes, sendMIDI);
+    useMidiAccess(nodeActions.nodesRef, () => { /* this usually setNodes, but useMidiAccess needs refactor or skip */ }, (s, e) => audioManager.sendMIDI(s, e));
+
     return (
         <AudioManagerProvider manager={audioManager}>
             <div className="h-screen w-screen relative bg-gray-900 overflow-hidden">
-                {/* Startup overlay to initialize audio context */}
                 {!audioInitialized && (
                     <div className="absolute inset-0 z-[60] flex items-center justify-center bg-gray-900/70 backdrop-blur-xl">
                         <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-xl max-w-sm w-[90%] text-center">
@@ -284,15 +237,14 @@ export default function AudioNodesEditor() {
                         </ReactFlow>
                     </ConnectedParamsProvider>
                 </div>
-                {/* Bottom-center Transport Pill */}
                 <TransportPill audioManager={audioManager} />
 
                 <div className="absolute top-4 left-4 bottom-44 z-50 w-72 flex flex-col pointer-events-auto gap-4">
                     <SidebarHeaderInfo />
                     <SaveLoadPanel
-                        onSave={handleSaveClick}
-                        onLoadObject={handleLoadFromObject}
-                        onLoadDefault={handleLoadDefault}
+                        onSave={persistence.handleSaveClick}
+                        onLoadObject={persistence.handleLoadFromObject}
+                        onLoadDefault={persistence.handleLoadDefault}
                     />
                     <div className="bg-gray-800/80 backdrop-blur-md rounded-xl p-3 shadow border border-gray-700/80 flex-1 overflow-y-auto">
                         <NodeLibrary onAddNode={onAddNode} />

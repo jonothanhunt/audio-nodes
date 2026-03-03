@@ -82,7 +82,7 @@ export function useProjectPersistence(
     }, [makeSaveObject, downloadJSON]);
 
     const handleLoadFromObject = React.useCallback(
-        (obj: unknown) => {
+        (obj: unknown, options?: { ignoreViewport?: boolean }) => {
             if (!isRecord(obj)) return false;
             const maybe = obj as Partial<ProjectSaveFile>;
             const rawNodes = Array.isArray(maybe.nodes) ? maybe.nodes : [];
@@ -113,7 +113,7 @@ export function useProjectPersistence(
             setEdges(loadedEdges);
 
             // Restore viewport if present
-            if (maybe.viewport && rfInstanceRef.current) {
+            if (maybe.viewport && rfInstanceRef.current && !options?.ignoreViewport) {
                 const v = maybe.viewport as Viewport;
                 rfInstanceRef.current.setViewport(
                     { x: v.x || 0, y: v.y || 0, zoom: v.zoom || 1 },
@@ -191,18 +191,18 @@ export function useProjectPersistence(
         return () => clearTimeout(h);
     }, [nodes, edges, saveToLocalStorage]);
 
-    const loadFromLocalStorage = React.useCallback(() => {
+    const loadFromLocalStorage = React.useCallback((options?: { ignoreViewport?: boolean }) => {
         try {
             const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
             if (!raw) return false;
             const obj = JSON.parse(raw);
-            return handleLoadFromObject(obj);
+            return handleLoadFromObject(obj, options);
         } catch {
             return false;
         }
     }, [handleLoadFromObject]);
 
-    const handleLoadDefault = React.useCallback(async () => {
+    const handleLoadDefault = React.useCallback(async (options?: { ignoreViewport?: boolean }) => {
         const candidates = [
             "/projects/default-project.json",
             "/default-project.json",
@@ -212,7 +212,7 @@ export function useProjectPersistence(
                 const res = await fetch(`${url}?v=${Date.now()}`);
                 if (!res.ok) continue;
                 const json = await res.json();
-                handleLoadFromObject(json as unknown);
+                handleLoadFromObject(json as unknown, options);
                 return true;
             } catch {
                 // try next

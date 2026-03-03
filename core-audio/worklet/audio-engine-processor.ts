@@ -1379,47 +1379,50 @@ if (typeof globalThis.TextDecoder === 'undefined') {
     _propagateValueNodes() {
         if (!this._paramConnections || !this._paramConnections.length) return;
 
-        // Collect connections that target value nodes (used as pass-through signal sources).
+        // Collect connections that target value or logic nodes.
         const valueTargets = this._paramConnections.filter(m => {
             const n = this._nodes.get(m.to);
-            return n && typeof n.type === 'string' && n.type.startsWith('value-');
+            return n && typeof n.type === 'string' && (n.type.startsWith('value-') || n.type.startsWith('logic-'));
         });
 
         if (!valueTargets.length) return;
 
-        // Lazy-init cache: tracks last value actually sent via modPreview, keyed by
-        // connection identity. This is independent of _nodes, which React's node-sync
-        // periodically resets to the React-state value (causing false "no-change" skips).
         if (!this._propagatedValues) this._propagatedValues = new Map();
 
-        // Propagate up to 4 levels deep to handle chained value nodes (A -> B -> C -> D).
+        // Propagate up to 4 levels deep to handle chains (Value -> Add -> Mul -> Target).
         for (let pass = 0; pass < 4; pass++) {
             let anyChanged = false;
+
+            // 1. Compute logic nodes based on current param values
+            for (const [id, node] of this._nodes) {
+                if (typeof node.type === 'string' && node.type.startsWith('logic-')) {
+                    const newValue = this._computeLogicNodeValue(node);
+                    if (newValue !== node.value) {
+                        this._nodes.set(id, { ...node, value: newValue });
+                        anyChanged = true;
+                    }
+                }
+            }
+
+            // 2. Propagate values through connections
             for (const m of valueTargets) {
                 const srcNode = this._nodes.get(m.from);
                 if (!srcNode) continue;
                 const targetNode = this._nodes.get(m.to);
                 if (!targetNode) continue;
 
-                // Determine which field to read from the source.
-                // If it's a specific output port, use that; otherwise default to 'value'.
                 const outKey = m.fromOutput && m.fromOutput !== 'param-out' && m.fromOutput !== 'output'
                     ? m.fromOutput : 'value';
 
                 const raw = srcNode[outKey];
                 if (raw === undefined || raw === null) continue;
 
-                // Always update the internal node state so downstream chains (pass 1, 2...)
-                // can see the latest value in the same block.
                 const prevNodeVal = targetNode[m.targetParam];
                 if (prevNodeVal !== raw) {
                     this._nodes.set(m.to, { ...targetNode, [m.targetParam]: raw });
                     anyChanged = true;
                 }
 
-                // Notify main thread UI.
-                // We use a separate cache because the `_nodes` map is periodically
-                // overwritten by the Host's React state, which might be stale.
                 const cacheKey = `${m.from}:${m.to}:${m.targetParam}`;
                 if (this._propagatedValues.get(cacheKey) !== raw) {
                     this._propagatedValues.set(cacheKey, raw);
@@ -1432,7 +1435,55 @@ if (typeof globalThis.TextDecoder === 'undefined') {
                     } catch { }
                 }
             }
-            if (!anyChanged) break; // Converged — no further pass needed
+            if (!anyChanged) break;
+        }
+    }
+
+    _computeLogicNodeValue(node: NodeData): any {
+        const type = node.type;
+        const a = Number(node.a ?? 0);
+        const b = Number(node.b ?? 0);
+        const input = Number(node.inValue ?? 0);
+        const min = Number(node.min ?? 0);
+        const max = Number(node.max ?? (type === 'logic-to-range' || type === 'logic-from-range' ? 1 : 0));
+
+        switch (type) {
+            case 'logic-add': return a + b;
+            case 'logic-subtract': return a - b;
+            case 'logic-multiply': return a * b;
+            case 'logic-divide': return b === 0 ? 0 : a / b;
+            case 'logic-compare': {
+                const op = String(node.operation || '==');
+                switch (op) {
+                    case '==': return a === b;
+                    case '!=': return a !== b;
+                    case '>': return a > b;
+                    case '<': return a < b;
+                    case '>=': return a >= b;
+                    case '<=': return a <= b;
+                    default: return false;
+                }
+            }
+            case 'logic-gate': {
+                const op = String(node.operation || 'and').toLowerCase();
+                const ba = !!node.a;
+                const bb = !!node.b;
+                switch (op) {
+                    case 'and': return ba && bb;
+                    case 'or': return ba || bb;
+                    case 'xor': return ba !== bb;
+                    case 'nand': return !(ba && bb);
+                    case 'not': return !ba;
+                    default: return false;
+                }
+            }
+            case 'logic-condition': return node.condition ? node.trueValue : node.falseValue;
+            case 'logic-to-range': return min + input * (max - min);
+            case 'logic-from-range': {
+                const denom = max - min;
+                return denom === 0 ? 0 : (input - min) / denom;
+            }
+            default: return node.value;
         }
     }
 

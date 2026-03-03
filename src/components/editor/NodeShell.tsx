@@ -62,12 +62,12 @@ function NodeShellBase(props: NodeShellProps) {
           ID: …{id.slice(-8)}
         </div>
       )}
-      <div className="relative bg-gray-900 rounded-lg p-4 shadow-lg transition-all duration-200">
+      <div className="relative bg-gray-900 rounded-lg p-4 shadow-lg transition-all duration-200 h-full w-full flex flex-col">
         <svg className="absolute inset-0 w-full h-full pointer-events-none z-10" style={{ overflow: 'visible' }}>
           <rect x="0" y="0" width="100%" height="100%" rx="8" fill="none" stroke={accent} strokeWidth={selected ? 3 : 1} vectorEffect="non-scaling-stroke" />
         </svg>
         <div className="pointer-events-none absolute inset-0 rounded-lg" style={{ background: `linear-gradient(135deg, ${accent}26, transparent 65%)` }} />
-        <div className="flex items-center gap-2 mb-3 relative">
+        <div className="flex items-center gap-2 mb-2 relative">
           {EffectiveIcon && React.createElement(EffectiveIcon, { className: 'w-4 h-4 -translate-y-0.5', style: { color: accent } })}
           <span className="title-font text-base" style={{ color: accent }}>{effectiveTitle}</span>
           {spec.help && (
@@ -95,8 +95,8 @@ function NodeShellBase(props: NodeShellProps) {
             />
           )}
         </div>
-        <div className={`grid ${props.childrenCenter ? 'grid-cols-[minmax(12rem,_auto)_auto_auto]' : 'grid-cols-[minmax(16rem,_auto)_auto]'} gap-x-4`}>
-          <div className="flex flex-col gap-2 col-start-1">
+        <div className={`grid ${props.childrenCenter ? 'grid-cols-[minmax(12rem,_auto)_auto_auto]' : 'grid-cols-[minmax(16rem,_auto)_auto]'} gap-x-4 min-h-0 ${(!props.childrenCenter && children) ? '' : 'flex-1'}`}>
+          <div className="flex flex-col gap-2 col-start-1 min-h-0">
             {primaryIn && <AudioInRow label={primaryIn.label} variant={inVariant} />}
             {spec.renderBeforeParams && spec.renderBeforeParams({ id, data, params, update: (k, v) => onParameterChange(id, k, v) })}
             {params.map(p => (
@@ -120,9 +120,9 @@ function NodeShellBase(props: NodeShellProps) {
             </div>
           )}
         </div>
-        {/* Full-width custom content (e.g., sequencer grid) */}
+        {/* Full-width custom content (e.g., sequencer grid, notes textarea) */}
         {!props.childrenCenter && children && (
-          <div className="mt-4">
+          <div className="mt-1 flex-1 min-h-0">
             {children}
           </div>
         )}

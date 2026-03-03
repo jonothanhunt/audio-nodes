@@ -159,3 +159,29 @@ input[type="number"] {
 .react-flow__handle[data-connected="true"] {
     --fill: var(--accent);
 }
+
+[data-connected="true"] .react-flow__handle::after {
+    @apply scale-100 opacity-100;
+}
+
+/* Notes Node Resizer Handle Refinement */
+.notes-resizer-handle {
+    width: 20px;
+    height: 20px;
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    z-index: 50;
+    opacity: 1;
+    /* Match border solidness */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: inherit;
+    /* Use node accent color */
+    pointer-events: none;
+}
+
+.notes-resizer-handle svg {
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+}

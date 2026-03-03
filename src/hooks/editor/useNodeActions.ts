@@ -29,14 +29,14 @@ function getViewportCenter(rfInstanceRef: React.RefObject<ReactFlowInstance | nu
     if (!inst) return { x: 0, y: 0 };
 
     // Attempt to find the wrapper element for better center calculation
-    const container = (inst as any).wrapper || (document.querySelector(".react-flow") as HTMLDivElement | null);
+    const container = (inst as { wrapper?: HTMLDivElement }).wrapper || (document.querySelector(".react-flow") as HTMLDivElement | null);
     const rect = container?.getBoundingClientRect();
     const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
     const cy = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
 
     // Use the latest screenToFlowPosition if available (React Flow >= 11.10)
-    const instAny = inst as any;
-    const screenToFlow = instAny.screenToFlowPosition as ((p: { x: number; y: number }) => { x: number; y: number }) | undefined;
+    const instAny = inst as { screenToFlowPosition?: (p: { x: number; y: number }) => { x: number; y: number } };
+    const screenToFlow = instAny.screenToFlowPosition;
     if (typeof screenToFlow === "function") return screenToFlow({ x: cx, y: cy });
 
     // Fallback for older versions

@@ -1,4 +1,4 @@
-import { Waves, Sparkles, Speaker, Music, ToggleRight, Hash, List, Camera, Cpu } from "lucide-react";
+import { Waves, Sparkles, Speaker, Music, ToggleLeft, Hash, Type, List, Camera, Cpu, StickyNote, Divide, FoldVertical, Expand, Split } from "lucide-react";
 
 export type NodeCategoryName = "Synthesis" | "Effects" | "Sequencing" | "Utility" | "Value" | "Logic";
 
@@ -55,6 +55,7 @@ export const NODE_CATEGORIES: CategoryEntry[] = [
         nodes: [
             { type: "speaker", name: "Speaker", description: "Audio output", tag: "utility", icon: Speaker },
             { type: "lfo", name: "LFO", description: "Low frequency modulator (beat-synced)", tag: "utility", icon: Waves },
+            { type: "notes", name: "Note", description: "Free-form text notes on the canvas", tag: "utility", icon: StickyNote },
             { type: "camera-hands", name: "Hand Tracking", description: "MediaPipe hand tracking to param", tag: "utility", icon: Camera },
         ],
     },
@@ -68,8 +69,10 @@ export const NODE_CATEGORIES: CategoryEntry[] = [
             { type: "logic-add", name: "Add", description: "A + B", tag: "logic", icon: Cpu },
             { type: "logic-subtract", name: "Subtract", description: "A - B", tag: "logic", icon: Cpu },
             { type: "logic-multiply", name: "Multiply", description: "A × B", tag: "logic", icon: Cpu },
-            { type: "logic-divide", name: "Divide", description: "A ÷ B", tag: "logic", icon: Cpu },
-            { type: "logic-condition", name: "Condition", description: "If / Then / Else branching", tag: "logic", icon: Cpu },
+            { type: "logic-divide", name: "Divide", description: "Divide A by B", tag: "logic", icon: Divide },
+            { type: "logic-to-range", name: "To Range", description: "Map 0-1 to a custom range [min, max]", tag: "logic", icon: FoldVertical },
+            { type: "logic-from-range", name: "From Range", description: "Map a custom range [min, max] to 0-1", tag: "logic", icon: Expand },
+            { type: "logic-condition", name: "Condition", description: "If condition is true output A, else output B", tag: "logic", icon: Split },
         ],
     },
     {
@@ -77,9 +80,9 @@ export const NODE_CATEGORIES: CategoryEntry[] = [
         color: "#ef4444",
         kind: "value",
         nodes: [
-            { type: "value-bool", name: "Bool", description: "Boolean value source (on/off)", tag: "value", icon: ToggleRight },
-            { type: "value-number", name: "Number", description: "Number value source (with optional range)", tag: "value", icon: Hash },
-            { type: "value-text", name: "Text", description: "Free text value source", tag: "value", icon: List },
+            { type: "value-bool", name: "Boolean", description: "On/Off value source", tag: "value", icon: ToggleLeft },
+            { type: "value-number", name: "Number", description: "Simple numeric value source", tag: "value", icon: Hash },
+            { type: "value-text", name: "Text", description: "Generic string value source", tag: "value", icon: Type },
             { type: "value-select", name: "Select", description: "Dropdown enum value source", tag: "value", icon: List },
         ],
     },

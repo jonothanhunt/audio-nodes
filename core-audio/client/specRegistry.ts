@@ -28,6 +28,8 @@ import { spec as logicSubtractSpec } from "@/components/nodes/ValueSubtractNode"
 import { spec as logicMultiplySpec } from "@/components/nodes/ValueMultiplyNode";
 import { spec as logicDivideSpec } from "@/components/nodes/ValueDivideNode";
 import { spec as logicConditionSpec } from "@/components/nodes/ValueConditionNode";
+import { spec as logicToRangeSpec } from "@/components/nodes/ToRangeNode";
+import { spec as logicFromRangeSpec } from "@/components/nodes/FromRangeNode";
 import { getHandleRole, HandleRole } from './handles';
 import { AudioNodeData } from './audio/types';
 
@@ -55,6 +57,8 @@ const SPEC_REGISTRY: Record<string, SpecLike> = {
     "logic-multiply": logicMultiplySpec,
     "logic-divide": logicDivideSpec,
     "logic-condition": logicConditionSpec,
+    "logic-to-range": logicToRangeSpec,
+    "logic-from-range": logicFromRangeSpec,
 };
 
 /**
