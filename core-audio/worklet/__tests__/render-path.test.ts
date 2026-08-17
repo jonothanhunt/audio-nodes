@@ -486,6 +486,105 @@ describe('MIDI routing', () => {
     });
 });
 
+describe('B3 — MIDI events are applied at their sample offset', () => {
+    function synthPatch() {
+        engine.setNode('midi', { type: 'midi-input' });
+        engine.setNode('syn', { type: 'synth', gain: 1 });
+        engine.setNode('spk', { type: 'speaker', volume: 1, muted: false });
+        engine.setConnections([midiEdge('midi', 'syn'), audioEdge('syn', 'spk')]);
+    }
+
+    it('splits the render at the event frame instead of rounding to the block start', () => {
+        synthPatch();
+        engine.renderBlocks(40); // settle the entry fade
+
+        engine.port.send({
+            type: 'midi',
+            sourceId: 'midi',
+            events: [{ data: [0x90, 60, 100], atFrame: 64 }],
+        });
+        engine.render();
+
+        // The synth fake emits 1 while a note is held and 0 otherwise, so the note-on frame
+        // shows up as the transition point. Applying at the block boundary would render the
+        // whole block as 1.
+        const synth = FakeSynth.instances[0];
+        expect(synth.processCalls).toBeGreaterThan(40); // rendered in segments
+        expect(synth.notesOn).toEqual([60]);
+    });
+
+    it('orders several events within one block by frame', () => {
+        synthPatch();
+        engine.renderBlocks(40);
+
+        engine.port.send({
+            type: 'midi',
+            sourceId: 'midi',
+            events: [
+                { data: [0x90, 67, 100], atFrame: 100 },
+                { data: [0x90, 60, 100], atFrame: 10 },
+                { data: [0x90, 64, 100], atFrame: 50 },
+            ],
+        });
+        engine.render();
+
+        // Sorted by frame, not by arrival order.
+        expect(FakeSynth.instances[0].notesOn).toEqual([60, 64, 67]);
+    });
+
+    it('clamps an out-of-range frame into the block', () => {
+        synthPatch();
+        engine.renderBlocks(40);
+
+        engine.port.send({
+            type: 'midi',
+            sourceId: 'midi',
+            events: [
+                { data: [0x90, 60, 100], atFrame: -50 },
+                { data: [0x90, 64, 100], atFrame: 99999 },
+            ],
+        });
+        engine.render();
+
+        expect(FakeSynth.instances[0].notesOn).toEqual([60, 64]);
+        expect(engine.port.postedOfType('error')).toHaveLength(0);
+    });
+
+    it('drains events for a synth that is not wired to a speaker', () => {
+        // No audio edge, so the synth never renders — its events must not pile up.
+        engine.setNode('midi', { type: 'midi-input' });
+        engine.setNode('syn', { type: 'synth', gain: 1 });
+        engine.setConnections([midiEdge('midi', 'syn')]);
+
+        engine.port.send({ type: 'midi', sourceId: 'midi', events: [{ data: [0x90, 60, 100] }] });
+        engine.render();
+        engine.render();
+
+        expect(FakeSynth.instances[0].notesOn).toEqual([60]);
+        expect(engine.processor._pendingSynthEvents.get('syn')).toHaveLength(0);
+    });
+
+    it('handles the sustain pedal and all-notes-off control changes', () => {
+        synthPatch();
+        engine.renderBlocks(5);
+
+        engine.port.send({
+            type: 'midi',
+            sourceId: 'midi',
+            events: [
+                { data: [0x90, 60, 100] },
+                { data: [0xb0, 64, 127] }, // sustain down
+            ],
+        });
+        engine.render();
+        expect(FakeSynth.instances[0].held.has(60)).toBe(true);
+
+        engine.port.send({ type: 'midi', sourceId: 'midi', events: [{ data: [0xb0, 123, 0] }] });
+        engine.render();
+        expect(FakeSynth.instances[0].held.size).toBe(0);
+    });
+});
+
 describe('message port hygiene', () => {
     it('no longer posts the ack messages nothing consumed', () => {
         oscToSpeaker();

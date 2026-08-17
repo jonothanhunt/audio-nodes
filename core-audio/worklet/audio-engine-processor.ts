@@ -315,6 +315,12 @@ class EngineProcessor extends AudioWorkletProcessor {
     /** Nodes fading out after leaving the graph, with the block count since they left. */
     private _fadingOut: Map<string, number>;
 
+    /**
+     * MIDI events waiting to be applied to a synth, each tagged with the frame within the
+     * current block at which it should take effect. Sorted by frame.
+     */
+    private _pendingSynthEvents: Map<string, Array<{ frame: number; data: number[] }>>;
+
     // --- Param modulation ---
     /** Reused per-node patched-data objects, so modulation allocates nothing per block. */
     private _moddedData: Map<string, NodeData>;
@@ -370,6 +376,7 @@ class EngineProcessor extends AudioWorkletProcessor {
         this._speakerGains = new Map();
         this._fadingOut = new Map();
 
+        this._pendingSynthEvents = new Map();
         this._moddedData = new Map();
         this._previewPending = new Map();
         this._previewLastSentSec = 0;
@@ -1413,6 +1420,15 @@ if (typeof globalThis.TextDecoder === 'undefined') {
                     const stepBeats = 1 / (a.rateMultiplier || 1);
                     if (a.beatsAccum >= stepBeats) {
                         a.beatsAccum -= stepBeats;
+                        // Whatever is left over is how far past the step boundary this block
+                        // already ran, so the step actually fell that many frames before the
+                        // block end. Tagging the emitted notes with it keeps arp timing tight
+                        // instead of rounding every step to the block boundary.
+                        const framesPastStep = a.beatsAccum * t.framesPerBeat;
+                        const stepFrame = Math.max(
+                            0,
+                            Math.min(blockSize - 1, Math.round(blockSize - framesPastStep)),
+                        );
                         // build ordered note list (with octaves) from held set
                         // held notes arrive via MIDI routing; maintain in a.held
                         if (a.held.size === 0) { // no notes held, turn off any currently sounding
@@ -1430,9 +1446,9 @@ if (typeof globalThis.TextDecoder === 'undefined') {
                         }
                         if (a.mode === 'random') {
                             const choice = expanded[Math.floor(Math.random() * expanded.length)];
-                            if (choice != null) this._arpApplyOutputSet(nid, a, new Set([choice]));
+                            if (choice != null) this._arpApplyOutputSet(nid, a, new Set([choice]), stepFrame);
                         } else if (a.mode === 'chord') {
-                            this._arpApplyOutputSet(nid, a, new Set(expanded));
+                            this._arpApplyOutputSet(nid, a, new Set(expanded), stepFrame);
                         } else {
                             // maintain traversal order
                             if (!a.order.length) { a.order = expanded.slice(); a.dir = 1; }
@@ -1452,7 +1468,7 @@ if (typeof globalThis.TextDecoder === 'undefined') {
                                 if (idx >= a.order.length) { a.dir = -1; idx = a.order.length - 2; }
                                 else if (idx < 0) { a.dir = 1; idx = 1; }
                                 const note = a.order[Math.max(0, Math.min(a.order.length - 1, idx))];
-                                if (note != null) this._arpApplyOutputSet(nid, a, new Set([note]));
+                                if (note != null) this._arpApplyOutputSet(nid, a, new Set([note]), stepFrame);
                             } else {
                                 // linear (up or down already sorted)
                                 let lastIdx = -1;
@@ -1461,7 +1477,7 @@ if (typeof globalThis.TextDecoder === 'undefined') {
                                 idx += 1;
                                 if (idx >= a.order.length) idx = 0;
                                 const note = a.order[idx];
-                                if (note != null) this._arpApplyOutputSet(nid, a, new Set([note]));
+                                if (note != null) this._arpApplyOutputSet(nid, a, new Set([note]), stepFrame);
                             }
                         }
                     }
@@ -1473,14 +1489,30 @@ if (typeof globalThis.TextDecoder === 'undefined') {
                 if (!queue || queue.length === 0) continue;
                 const nodeData = this._nodes.get(nodeId);
                 if (!nodeData) continue;
-                if (nodeData.type === "synth" && this._processSynthMIDI) {
+                if (nodeData.type === "synth") {
+                    // Stage the events against their sample offset within this block rather
+                    // than applying them all at the block boundary. `_resolveEventFrame` was
+                    // already being computed and then thrown away, which quantised every note
+                    // to 128 samples (2.9 ms at 44.1 kHz) with a per-event error.
                     const events = queue.splice(0, queue.length);
-                    this._processSynthMIDI(
-                        nodeId,
-                        events,
-                        blockStartTimeSec,
-                        blockSize
-                    );
+                    let pending = this._pendingSynthEvents.get(nodeId);
+                    if (!pending) {
+                        pending = [];
+                        this._pendingSynthEvents.set(nodeId, pending);
+                    }
+                    for (const ev of events) {
+                        if (!ev || !Array.isArray(ev.data)) continue;
+                        pending.push({
+                            frame: this._resolveEventFrame(
+                                ev.atFrame,
+                                ev.atTimeMs,
+                                blockStartTimeSec,
+                                blockSize,
+                            ),
+                            data: ev.data,
+                        });
+                    }
+                    pending.sort((a, b) => a.frame - b.frame);
                 } else if (nodeData.type === "midi-transpose") {
                     const events = queue.splice(0, queue.length);
                     this._processTransposeMIDI(
@@ -1506,6 +1538,21 @@ if (typeof globalThis.TextDecoder === 'undefined') {
             // LFO evaluation was moved to the top of the block
 
             this._processGraph(outL, outR);
+
+            // A synth that is not wired to a speaker never renders, so its staged events would
+            // otherwise pile up. Apply them anyway rather than dropping them: keeping the
+            // note state coherent means a key held while you patch the synth in starts
+            // sounding as soon as it is connected (faded in, so it still does not click).
+            if (this._pendingSynthEvents.size) {
+                for (const [nodeId, pending] of this._pendingSynthEvents.entries()) {
+                    if (!pending.length) continue;
+                    const synth = this._getSynthInstance(nodeId);
+                    if (synth) {
+                        for (const ev of pending) this._applySynthEvent(synth, ev.data);
+                    }
+                    pending.length = 0;
+                }
+            }
 
             // If capturing, send a copy of this block to main thread (Float32 PCM)
             if (this._captureActive) {
@@ -1536,12 +1583,12 @@ if (typeof globalThis.TextDecoder === 'undefined') {
         return true;
     }
 
-    _arpApplyOutputSet(nodeId: string, a: ArpEntry, newSet: Set<number>): void {
+    _arpApplyOutputSet(nodeId: string, a: ArpEntry, newSet: Set<number>, atFrame?: number): void {
         // Determine off/on differences
         const offs = [];
-        for (const n of a.activeOut.values()) if (!newSet.has(n)) offs.push({ data: [0x80, n & 0x7f, 0] });
+        for (const n of a.activeOut.values()) if (!newSet.has(n)) offs.push({ data: [0x80, n & 0x7f, 0], atFrame });
         const ons = [];
-        for (const n of newSet.values()) if (!a.activeOut.has(n)) ons.push({ data: [0x90, n & 0x7f, 100] });
+        for (const n of newSet.values()) if (!a.activeOut.has(n)) ons.push({ data: [0x90, n & 0x7f, 100], atFrame });
         if (offs.length) this._broadcastArpMIDI(nodeId, offs);
         if (ons.length) this._broadcastArpMIDI(nodeId, ons);
         a.activeOut = newSet;
@@ -1635,22 +1682,15 @@ if (typeof globalThis.TextDecoder === 'undefined') {
         return inst;
     }
 
-    // Deliver MIDI events to a Synth instance (Note On/Off handling)
-    _processSynthMIDI(nodeId: string, events: MidiEvent[], _blockStartTimeSec: number, _blockSize: number): void {
-
-        const synth =
-            this._synthInstances.get(nodeId) || this._getSynthInstance(nodeId);
-        if (!synth) return;
-        for (const ev of events) {
-            const [status, d1, d2] = ev.data;
-            const cmd = status & 0xf0;
+    /** Apply one MIDI message to a synth instance. */
+    _applySynthEvent(synth: WasmSynthNode, data: number[]): void {
+        const [status, d1, d2] = data;
+        const cmd = status & 0xf0;
+        try {
             switch (cmd) {
-                case 0x90: // Note On
-                    if ((d2 & 0x7f) > 0) {
-                        synth.note_on?.(d1 & 0x7f, d2 & 0x7f);
-                    } else {
-                        synth.note_off?.(d1 & 0x7f); // treated as Note Off when velocity = 0
-                    }
+                case 0x90: // Note On (velocity 0 means Note Off)
+                    if ((d2 & 0x7f) > 0) synth.note_on?.(d1 & 0x7f, d2 & 0x7f);
+                    else synth.note_off?.(d1 & 0x7f);
                     break;
                 case 0x80: // Note Off
                     synth.note_off?.(d1 & 0x7f);
@@ -1659,31 +1699,21 @@ if (typeof globalThis.TextDecoder === 'undefined') {
                     // Control Change
                     const controller = d1 & 0x7f;
                     if (controller === 64) {
-                        // Sustain pedal
-                        const down = (d2 & 0x7f) >= 64;
-                        synth.sustain_pedal?.(down);
+                        synth.sustain_pedal?.((d2 & 0x7f) >= 64); // sustain pedal
                     } else if (controller === 123) {
                         // All Notes Off
-                        if (typeof synth.all_notes_off === "function") {
-                            try {
-                                synth.all_notes_off();
-                            } catch { }
+                        if (typeof synth.all_notes_off === 'function') {
+                            synth.all_notes_off();
                         } else {
-                            // Fallback: manually send note_off for all notes
-                            for (let n = 0; n < 128; n++) {
-                                try {
-                                    synth.note_off?.(n);
-                                } catch { }
-                            }
+                            for (let n = 0; n < 128; n++) synth.note_off?.(n);
                         }
                     }
                     break;
                 }
                 default:
-                    // ignore others for now
-                    break;
+                    break; // other messages are not handled yet
             }
-        }
+        } catch { }
     }
 
     _processTransposeMIDI(
@@ -2155,7 +2185,31 @@ if (typeof globalThis.TextDecoder === 'undefined') {
             if (typeof modded.glide === 'number') synth.set_glide?.(modded.glide);
             if (typeof modded.gain === 'number') synth.set_gain?.(modded.gain);
 
-            synth.process(outL);
+            // Render in segments split at each event's frame, so a note lands on the sample
+            // it was scheduled for instead of at the next block boundary.
+            const pending = this._pendingSynthEvents.get(nodeId);
+            if (!pending || !pending.length) {
+                synth.process(outL);
+                outR.set(outL);
+                return;
+            }
+
+            let cursor = 0;
+            let index = 0;
+            while (index < pending.length) {
+                const frame = Math.max(cursor, Math.min(outL.length, pending[index].frame));
+                if (frame > cursor) {
+                    synth.process(outL.subarray(cursor, frame));
+                    cursor = frame;
+                }
+                // Apply every event landing on this frame before rendering onward.
+                while (index < pending.length && pending[index].frame <= cursor) {
+                    this._applySynthEvent(synth, pending[index].data);
+                    index++;
+                }
+            }
+            if (cursor < outL.length) synth.process(outL.subarray(cursor));
+            pending.length = 0;
             outR.set(outL);
         } catch {
             /* ignore per-block errors */

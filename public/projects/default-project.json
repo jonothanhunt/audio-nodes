@@ -688,10 +688,10 @@
   ],
   "edges": [
     {
-      "id": "reactflow__edge-8midi-7midi",
+      "id": "reactflow__edge-8midi-out-7midi",
       "source": "8",
       "target": "7",
-      "sourceHandle": "midi",
+      "sourceHandle": "midi-out",
       "targetHandle": "midi"
     },
     {

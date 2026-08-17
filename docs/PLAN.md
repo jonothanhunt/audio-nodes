@@ -55,11 +55,18 @@ Ordered by audible impact. IDs match `docs/AUDIO-AUDIT.md`.
 - [x] B1 — per-block render cache; fan-out was rendering a node twice and doubling its
       pitch
 - [x] B2 — pooled scratch buffers; nested reverbs were corrupting each other
-- [ ] B3 — sample-accurate MIDI (`atFrame` is computed and then ignored)
+- [x] B3 — sample-accurate MIDI; the synth now renders in segments split at event frames,
+      and arp steps carry the sub-block frame they fell on
+- [x] B7 — the shipped default project had an edge React Flow could not draw (stale
+      `sourceHandle`), so one cable was invisible on first load
+- [ ] B6 — **sequencer steps round-trip through React.** Bigger than B3 was: every note
+      goes audio thread → main thread → React render → audio thread, so timing is at the
+      mercy of UI work. Fix is to let the worklet emit sequencer notes directly, as it
+      already does for the arpeggiator. Behavioural change — **agree before building.**
 - [ ] B5 — the Synth's **Cutoff**, **Resonance** and **Preset** controls are wired to
       nothing: no filter exists in the Rust crate and no preset handling exists anywhere.
       Fixing this is the same work as the roadmap's Filter node, so it is folded into
-      phase 3 below. **Highest-value item remaining.**
+      phase 3 below.
 - [ ] B4 — stereo path and a real reverb topology (defer to the effects roadmap)
 
 ### 2c. Audio-thread and message-port cost ✅ done
@@ -79,7 +86,7 @@ Ordered by audible impact. IDs match `docs/AUDIO-AUDIT.md`.
       node's `data`
 
 ### 2e. Verification
-- [x] Regression tests for the render plan, fade envelopes, and fan-out pitch — 76 vitest
+- [x] Regression tests for the render plan, fade envelopes, and fan-out pitch — 81 vitest
       specs (up from 14, one suite of which was erroring) plus 35 native Rust DSP tests.
       `npm run test:all` runs both.
 - [x] Measured in a real browser against the compiled WASM: fan-out now renders at 440 Hz

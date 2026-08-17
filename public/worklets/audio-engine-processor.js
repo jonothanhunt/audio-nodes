@@ -108,6 +108,7 @@ class EngineProcessor extends AudioWorkletProcessor {
     this._nodeGains = /* @__PURE__ */ new Map();
     this._speakerGains = /* @__PURE__ */ new Map();
     this._fadingOut = /* @__PURE__ */ new Map();
+    this._pendingSynthEvents = /* @__PURE__ */ new Map();
     this._moddedData = /* @__PURE__ */ new Map();
     this._previewPending = /* @__PURE__ */ new Map();
     this._previewLastSentSec = 0;
@@ -1072,6 +1073,11 @@ if (typeof globalThis.TextDecoder === 'undefined') {
           const stepBeats = 1 / (a.rateMultiplier || 1);
           if (a.beatsAccum >= stepBeats) {
             a.beatsAccum -= stepBeats;
+            const framesPastStep = a.beatsAccum * t.framesPerBeat;
+            const stepFrame = Math.max(
+              0,
+              Math.min(blockSize - 1, Math.round(blockSize - framesPastStep))
+            );
             if (a.held.size === 0) {
               if (a.activeOut.size) {
                 const offs = [];
@@ -1095,9 +1101,9 @@ if (typeof globalThis.TextDecoder === 'undefined') {
             }
             if (a.mode === "random") {
               const choice = expanded[Math.floor(Math.random() * expanded.length)];
-              if (choice != null) this._arpApplyOutputSet(nid, a, /* @__PURE__ */ new Set([choice]));
+              if (choice != null) this._arpApplyOutputSet(nid, a, /* @__PURE__ */ new Set([choice]), stepFrame);
             } else if (a.mode === "chord") {
-              this._arpApplyOutputSet(nid, a, new Set(expanded));
+              this._arpApplyOutputSet(nid, a, new Set(expanded), stepFrame);
             } else {
               if (!a.order.length) {
                 a.order = expanded.slice();
@@ -1124,7 +1130,7 @@ if (typeof globalThis.TextDecoder === 'undefined') {
                   idx = 1;
                 }
                 const note = a.order[Math.max(0, Math.min(a.order.length - 1, idx))];
-                if (note != null) this._arpApplyOutputSet(nid, a, /* @__PURE__ */ new Set([note]));
+                if (note != null) this._arpApplyOutputSet(nid, a, /* @__PURE__ */ new Set([note]), stepFrame);
               } else {
                 let lastIdx = -1;
                 if (a.activeOut.size === 1) {
@@ -1135,7 +1141,7 @@ if (typeof globalThis.TextDecoder === 'undefined') {
                 idx += 1;
                 if (idx >= a.order.length) idx = 0;
                 const note = a.order[idx];
-                if (note != null) this._arpApplyOutputSet(nid, a, /* @__PURE__ */ new Set([note]));
+                if (note != null) this._arpApplyOutputSet(nid, a, /* @__PURE__ */ new Set([note]), stepFrame);
               }
             }
           }
@@ -1145,14 +1151,26 @@ if (typeof globalThis.TextDecoder === 'undefined') {
         if (!queue || queue.length === 0) continue;
         const nodeData = this._nodes.get(nodeId);
         if (!nodeData) continue;
-        if (nodeData.type === "synth" && this._processSynthMIDI) {
+        if (nodeData.type === "synth") {
           const events = queue.splice(0, queue.length);
-          this._processSynthMIDI(
-            nodeId,
-            events,
-            blockStartTimeSec,
-            blockSize
-          );
+          let pending = this._pendingSynthEvents.get(nodeId);
+          if (!pending) {
+            pending = [];
+            this._pendingSynthEvents.set(nodeId, pending);
+          }
+          for (const ev of events) {
+            if (!ev || !Array.isArray(ev.data)) continue;
+            pending.push({
+              frame: this._resolveEventFrame(
+                ev.atFrame,
+                ev.atTimeMs,
+                blockStartTimeSec,
+                blockSize
+              ),
+              data: ev.data
+            });
+          }
+          pending.sort((a, b) => a.frame - b.frame);
         } else if (nodeData.type === "midi-transpose") {
           const events = queue.splice(0, queue.length);
           this._processTransposeMIDI(
@@ -1178,6 +1196,16 @@ if (typeof globalThis.TextDecoder === 'undefined') {
         }
       }
       this._processGraph(outL, outR);
+      if (this._pendingSynthEvents.size) {
+        for (const [nodeId, pending] of this._pendingSynthEvents.entries()) {
+          if (!pending.length) continue;
+          const synth = this._getSynthInstance(nodeId);
+          if (synth) {
+            for (const ev of pending) this._applySynthEvent(synth, ev.data);
+          }
+          pending.length = 0;
+        }
+      }
       if (this._captureActive) {
         const left = new Float32Array(outL);
         const right = new Float32Array(outR);
@@ -1200,11 +1228,11 @@ if (typeof globalThis.TextDecoder === 'undefined') {
     }
     return true;
   }
-  _arpApplyOutputSet(nodeId, a, newSet) {
+  _arpApplyOutputSet(nodeId, a, newSet, atFrame) {
     const offs = [];
-    for (const n of a.activeOut.values()) if (!newSet.has(n)) offs.push({ data: [128, n & 127, 0] });
+    for (const n of a.activeOut.values()) if (!newSet.has(n)) offs.push({ data: [128, n & 127, 0], atFrame });
     const ons = [];
-    for (const n of newSet.values()) if (!a.activeOut.has(n)) ons.push({ data: [144, n & 127, 100] });
+    for (const n of newSet.values()) if (!a.activeOut.has(n)) ons.push({ data: [144, n & 127, 100], atFrame });
     if (offs.length) this._broadcastArpMIDI(nodeId, offs);
     if (ons.length) this._broadcastArpMIDI(nodeId, ons);
     a.activeOut = newSet;
@@ -1297,20 +1325,15 @@ if (typeof globalThis.TextDecoder === 'undefined') {
     }
     return inst;
   }
-  // Deliver MIDI events to a Synth instance (Note On/Off handling)
-  _processSynthMIDI(nodeId, events, _blockStartTimeSec, _blockSize) {
-    const synth = this._synthInstances.get(nodeId) || this._getSynthInstance(nodeId);
-    if (!synth) return;
-    for (const ev of events) {
-      const [status, d1, d2] = ev.data;
-      const cmd = status & 240;
+  /** Apply one MIDI message to a synth instance. */
+  _applySynthEvent(synth, data) {
+    const [status, d1, d2] = data;
+    const cmd = status & 240;
+    try {
       switch (cmd) {
         case 144:
-          if ((d2 & 127) > 0) {
-            synth.note_on?.(d1 & 127, d2 & 127);
-          } else {
-            synth.note_off?.(d1 & 127);
-          }
+          if ((d2 & 127) > 0) synth.note_on?.(d1 & 127, d2 & 127);
+          else synth.note_off?.(d1 & 127);
           break;
         case 128:
           synth.note_off?.(d1 & 127);
@@ -1318,21 +1341,12 @@ if (typeof globalThis.TextDecoder === 'undefined') {
         case 176: {
           const controller = d1 & 127;
           if (controller === 64) {
-            const down = (d2 & 127) >= 64;
-            synth.sustain_pedal?.(down);
+            synth.sustain_pedal?.((d2 & 127) >= 64);
           } else if (controller === 123) {
             if (typeof synth.all_notes_off === "function") {
-              try {
-                synth.all_notes_off();
-              } catch {
-              }
+              synth.all_notes_off();
             } else {
-              for (let n = 0; n < 128; n++) {
-                try {
-                  synth.note_off?.(n);
-                } catch {
-                }
-              }
+              for (let n = 0; n < 128; n++) synth.note_off?.(n);
             }
           }
           break;
@@ -1340,6 +1354,7 @@ if (typeof globalThis.TextDecoder === 'undefined') {
         default:
           break;
       }
+    } catch {
     }
   }
   _processTransposeMIDI(nodeId, data, events) {
@@ -1767,7 +1782,27 @@ if (typeof globalThis.TextDecoder === 'undefined') {
       }
       if (typeof modded.glide === "number") synth.set_glide?.(modded.glide);
       if (typeof modded.gain === "number") synth.set_gain?.(modded.gain);
-      synth.process(outL);
+      const pending = this._pendingSynthEvents.get(nodeId);
+      if (!pending || !pending.length) {
+        synth.process(outL);
+        outR.set(outL);
+        return;
+      }
+      let cursor = 0;
+      let index = 0;
+      while (index < pending.length) {
+        const frame = Math.max(cursor, Math.min(outL.length, pending[index].frame));
+        if (frame > cursor) {
+          synth.process(outL.subarray(cursor, frame));
+          cursor = frame;
+        }
+        while (index < pending.length && pending[index].frame <= cursor) {
+          this._applySynthEvent(synth, pending[index].data);
+          index++;
+        }
+      }
+      if (cursor < outL.length) synth.process(outL.subarray(cursor));
+      pending.length = 0;
       outR.set(outL);
     } catch {
     }

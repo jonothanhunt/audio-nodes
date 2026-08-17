@@ -137,15 +137,52 @@ already summed, so the outer reverb processes only part of its input.
 **Fix:** the scratch buffers became a pooled stack (`_acquireBuffer` / `_releaseBuffer`),
 so each recursion level gets its own.
 
-### ☐ B3. MIDI events are quantised to the block boundary
-`_processSynthMIDI` ignores `atFrame` / `atTimeMs` and applies every event at the start of
-the block. `_resolveEventFrame` exists and is computed but its result is never used. Live
-playing and sequencer steps are therefore quantised to 128 samples (2.9 ms at 44.1 kHz),
-with the error varying per event — audible as timing looseness on fast material rather
-than as a click.
+### ☑ B3. MIDI events were quantised to the block boundary
+`_processSynthMIDI` ignored `atFrame` / `atTimeMs` and applied every event at the start of
+the block. `_resolveEventFrame` existed and was computed, and its result was then thrown
+away. Live playing was therefore quantised to 128 samples (2.9 ms at 44.1 kHz), with the
+error varying per event — audible as timing looseness on fast material rather than as a
+click.
 
-**Planned fix:** split synth rendering at event frames, and give sequencer/arp steps
-sub-block frame offsets.
+**Fix:** incoming events are staged against their resolved frame and the synth renders in
+segments split at those frames, so a note lands on the sample it was scheduled for.
+Arpeggiator steps now carry the sub-block frame they actually fell on, computed from the
+leftover in the beat accumulator. Events for a synth with no audio path are still applied
+(rather than dropped) so note state stays coherent if it is patched in while a key is held.
+
+### ☐ B6. Sequencer steps make a round trip through React
+This one dwarfs B3 and was found while fixing it.
+
+The worklet detects a sequencer step and posts `sequencerStep` to the main thread.
+`SequencerNode` receives it in a `useEffect`, works out which notes changed, and calls
+`onEmitMidi` — which posts the notes *back* to the worklet, with no timing information
+attached. So every sequencer note is: audio thread → main thread → React render → audio
+thread, and lands at whatever block boundary it happens to arrive on.
+
+Block quantisation is 2.9 ms. A main-thread round trip through a React render is tens of
+milliseconds under load, and it varies with whatever else the page is doing — so sequencer
+timing is at the mercy of UI work. Every fix in section C reduces main-thread load and so
+tightens this indirectly, but the jitter is structural.
+
+**Planned fix:** let the worklet emit sequencer notes itself, the way it already does for
+the arpeggiator. It has everything it needs — the step grid, `fromNote`/`toNote` and
+`length` all arrive via `updateNode` already. The `sequencerStep` message stays, but purely
+to drive the UI's step highlight, where late delivery is invisible. This is a behavioural
+change to how patterns are played, so it is worth agreeing before building.
+
+### ☑ B7. The shipped default project had an unrenderable edge
+`public/projects/default-project.json` wired its first Sequencer to a Synth with
+`sourceHandle: "midi"`, but the Sequencer's `NodeSpec` declares its output handle as
+`midi-out` (`midi` is the *Synth's input* id). React Flow refuses to draw an edge whose
+source handle does not exist and logs error #008, so that cable was invisible on first load
+— while the audio engine, which accepts either spelling, still made the connection. A patch
+that plays but shows no cable reads as a rendering bug.
+
+**Fix:** corrected the handle id in the project file. Worth noting the underlying trap: MIDI
+input handles are spelled `midi` on the Synth but `midi-in` on the Arpeggiator, and outputs
+are `midi-out` on both. Normalising those ids would prevent a repeat, but it would also
+invalidate the edges in any project users have already saved, so it needs a migration rather
+than a rename.
 
 ### ☐ B5. Three Synth controls are wired to nothing
 The Synth node's `NodeSpec` declares **Cutoff** (20–20000 Hz), **Resonance** (0–1) and a
@@ -289,7 +326,7 @@ Both are UI-internal — they do not change how anything looks or behaves.
 
 Two layers, both automated (`npm run test:all`):
 
-- **76 vitest specs** drive the *compiled* worklet through its real message port, with
+- **81 vitest specs** drive the *compiled* worklet through its real message port, with
   stand-ins for the worklet globals and fake WASM nodes. The fake oscillator's sample
   counter doubles as its phase, which makes the B1 fan-out regression directly assertable.
 - **35 native Rust tests** (`cargo test`, enabled by adding `rlib` to `crate-type`). Most
