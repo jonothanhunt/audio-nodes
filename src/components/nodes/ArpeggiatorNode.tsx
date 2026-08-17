@@ -61,6 +61,8 @@ export default function ArpeggiatorNode({ id, data, selected }: ArpeggiatorNodeP
 
   const playing = !!data.playing;
 
+  const [rateHint, setRateHint] = React.useState(false);
+
   const handleParamChange = React.useCallback((nid: string, key: string, value: unknown) => {
     let val: unknown = value;
     if (key === 'rateMultiplier') val = Number(value);
@@ -74,8 +76,6 @@ export default function ArpeggiatorNode({ id, data, selected }: ArpeggiatorNodeP
       window.setTimeout(() => setRateHint(false), 1400);
     }
   }, [onParameterChange, audioManager]);
-
-  const [rateHint, setRateHint] = React.useState(false);
 
   const enhancedSpec: NodeSpec = React.useMemo(() => ({
     ...spec,

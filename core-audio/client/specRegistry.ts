@@ -30,8 +30,7 @@ import { spec as logicDivideSpec } from "@/components/nodes/ValueDivideNode";
 import { spec as logicConditionSpec } from "@/components/nodes/ValueConditionNode";
 import { spec as logicToRangeSpec } from "@/components/nodes/ToRangeNode";
 import { spec as logicFromRangeSpec } from "@/components/nodes/FromRangeNode";
-import { getHandleRole, HandleRole } from './handles';
-import { AudioNodeData } from './audio/types';
+import { HandleRole } from './handles';
 
 type SpecLike = Pick<NodeSpec, "params" | "inputs" | "outputs">;
 

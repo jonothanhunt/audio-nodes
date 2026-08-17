@@ -1,26 +1,13 @@
-use wasm_bindgen::prelude::*;
+//! Rust/WASM DSP core for Audio Nodes.
+//!
+//! The exported components in this WASM module are individual DSP and MIDI nodes
+//! (e.g. Oscillator, Reverb, Transpose) rather than a single monolithic engine.
+//! The AudioWorkletProcessor in `core-audio/worklet` instantiates these nodes and
+//! orchestrates the routing, rendering, and timing for the entire graph.
 
-pub mod nodes;
 pub mod dsp;
-
-// Import the `console.log` function from the `console` module of web_sys
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = console)]
-    fn log(s: &str);
-}
-
-// Define a macro for logging
-macro_rules! console_log {
-    ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
-}
-
-// The exported components in this WASM module are individual DSP and MIDI nodes 
-// (e.g. Oscillator, Reverb, Transpose) rather than a single monolithic engine.
-// The Javascript AudioWorkletProcessor instantiates these nodes and orchestrates
-// the routing, rendering, and timing for the entire graph.
-
-pub use nodes::transpose::MidiTransposeNode;
+pub mod nodes;
 
 // Node implementations are exported from their respective modules
-// (e.g., SynthNode, OscillatorNode, ReverbNode, LfoNode)
+// (e.g., SynthNode, OscillatorNode, ReverbNode, LfoNode).
+pub use nodes::transpose::MidiTransposeNode;

@@ -5,7 +5,7 @@
 <h1 align="center">Audio Nodes</h1>
 
 <p align="center">
-  <a href="https://nodejs.org/"><img alt="node >=18" src="https://img.shields.io/badge/node-%3E%3D18-brightgreen" /></a>
+  <a href="https://nodejs.org/"><img alt="node >=20.9" src="https://img.shields.io/badge/node-%3E%3D20.9-brightgreen" /></a>
   <a href="https://www.rust-lang.org/"><img alt="rust stable" src="https://img.shields.io/badge/rust-stable-orange" /></a>
   <a href="https://github.com/rustwasm/wasm-pack"><img alt="wasm-pack" src="https://img.shields.io/badge/wasm--pack-ready-purple" /></a>
   <a href="./LICENSE"><img alt="License MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg" /></a>
@@ -40,8 +40,8 @@ I love node‑based creative workflows and making music—so this project is a g
 
 ### Prerequisites
 
-- Node.js 18+
-- Rust toolchain + wasm-pack
+- Node.js 20.9+ (required by Next.js 16)
+- Rust toolchain + wasm-pack (`cargo install wasm-pack`)
 
 ### Install
 
@@ -55,7 +55,7 @@ npm install
 
 ### Build the Audio Engine (WASM)
 
-Compiles the Rust crate and copies wasm-bindgen artifacts into `public/audio-engine-wasm/` (served) and `src/audio-engine-wasm/` (type usage).
+Compiles the Rust crate and copies the wasm-bindgen artifacts into `public/audio-engine-wasm/`. That is the only output that matters: the AudioWorklet fetches the glue + `.wasm` from there at runtime and evaluates them inside the worklet isolate, so the engine never passes through the bundler.
 
 ```bash
 npm run build:wasm
@@ -81,8 +81,8 @@ audio-nodes/
 │   ├── worklet/                 # AudioWorkletProcessor script & types
 │   └── client/                  # Main thread audio managers & registries
 ├── public/
-│   ├── worklets/                # Compiled Worklet (served)
-│   └── audio-engine-wasm/       # Compiled WASM bundle (served)
+│   ├── worklets/                # Compiled Worklet (served, committed)
+│   └── audio-engine-wasm/       # Compiled WASM bundle (served, committed)
 ├── src/
 │   ├── app/                     # Next.js App Router entry & globals
 │   ├── components/

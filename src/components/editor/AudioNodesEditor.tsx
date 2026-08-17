@@ -5,15 +5,16 @@
  */
 
 import React, { useCallback } from "react";
-import ReactFlow, {
+import {
+    ReactFlow,
     MiniMap,
     Background,
     BackgroundVariant,
     ReactFlowInstance,
     useNodesInitialized,
     useReactFlow,
-} from "reactflow";
-import "reactflow/dist/style.css";
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 
 import NodeLibrary from "@/components/editor/NodeLibrary";
 import OscillatorNode from "@/components/nodes/OscillatorNode";
@@ -31,7 +32,7 @@ import { useEditorKeyboard } from "@/hooks/editor/useEditorKeyboard";
 import MidiTransposeNode from "@/components/nodes/MidiTransposeNode";
 import GradientEdge from "@/components/editor/GradientEdge";
 import { getNodeMeta } from "@core-audio/client/nodeRegistry";
-import type { OnConnectStartParams, Node, Edge, OnNodesChange, OnEdgesChange, OnConnect, Connection } from "reactflow";
+import type { OnConnectStartParams, Node, Edge, OnNodesChange, OnEdgesChange, OnConnect, Connection } from "@xyflow/react";
 import ValueBoolNode from "@/components/nodes/ValueBoolNode";
 import CameraHandsNode from "@/components/nodes/CameraHandsNode";
 import ValueNumberNode from "@/components/nodes/ValueNumberNode";
@@ -90,7 +91,7 @@ interface AudioNodesEditorProps {
     onNodesChange: OnNodesChange;
     onEdgesChange: OnEdgesChange;
     onConnect: OnConnect;
-    isValidConnection: (connection: Connection) => boolean;
+    isValidConnection: (connection: Connection | Edge) => boolean;
     onAddNode: (type: string) => void;
     initializeAudio: () => Promise<boolean>;
     persistence: ReturnType<typeof useProjectPersistence>;
@@ -143,12 +144,10 @@ export default function AudioNodesEditor({
     // Fit view once on load
     const { fitView } = useReactFlow();
     const nodesInitialized = useNodesInitialized();
-    const hasFitViewRef = React.useRef(false);
 
     React.useEffect(() => {
         // left: 380px clears the 288px sidebar + margins/padding. We use a number here
-        // since older reactflow versions only support number for padding. The offset
-        // is handled by the container padding or CSS instead of fitView
+        // since the offset is handled by the container padding or CSS instead of fitView
         fitView({
             padding: 0.2,
             duration: 0,

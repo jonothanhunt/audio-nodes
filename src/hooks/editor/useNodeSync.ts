@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef } from "react";
-import { Node, Edge } from "reactflow";
+import { Node, Edge } from "@xyflow/react";
 import { AudioManager } from "@core-audio/client/audioManager";
 
 interface UseNodeSyncOptions {

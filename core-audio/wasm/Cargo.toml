@@ -6,19 +6,17 @@ edition = "2024"
 [lib]
 crate-type = ["cdylib"]
 
+# DSP runs sample-by-sample inside the AudioWorklet's render quantum, so cross-crate
+# inlining matters more here than compile time. `panic = "abort"` also drops the
+# formatting/unwinding machinery, which is dead weight in a worklet.
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+
+# The crate is pure DSP: it exposes node structs over wasm-bindgen and never touches
+# the Web Audio API itself (the AudioWorklet in core-audio/worklet owns all routing and
+# scheduling). `js-sys`/`web-sys` were declared but unused, so they are gone.
 [dependencies]
 wasm-bindgen = "0.2"
-js-sys = "0.3"
-
-[dependencies.web-sys]
-version = "0.3"
-features = [
-  "console",
-  "AudioContext",
-  "AudioBuffer",
-  "AudioBufferSourceNode",
-  "AudioDestinationNode",
-  "AudioNode",
-  "AudioParam",
-  "GainNode",
-]

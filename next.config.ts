@@ -1,27 +1,12 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
-    webpack: (config, { isServer }) => {
-        // Handle WASM files
-        config.experiments = {
-            ...config.experiments,
-            asyncWebAssembly: true,
-            layers: true,
-        };
-
-        config.module.rules.push({
-            test: /\.wasm$/,
-            type: "webassembly/async",
-        });
-
-        // Don't parse WASM modules on the server
-        if (isServer) {
-            config.output.webassemblyModuleFilename =
-                "static/wasm/[modulehash].wasm";
-        }
-
-        return config;
-    },
-};
+/**
+ * The Rust/WASM audio engine is never imported through the bundler — the
+ * AudioWorklet fetches `public/audio-engine-wasm/*` at runtime and evaluates the
+ * wasm-bindgen glue inside the worklet isolate (see `core-audio/client/audioManager.ts`
+ * → `bootstrapWasmToWorklet`). So no `asyncWebAssembly` bundler config is needed,
+ * which keeps us on the default Turbopack pipeline in Next 16.
+ */
+const nextConfig: NextConfig = {};
 
 export default nextConfig;

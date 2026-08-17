@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useRef } from "react";
-import { Node, Edge, ReactFlowInstance } from "reactflow";
+import { Node, Edge, ReactFlowInstance } from "@xyflow/react";
 
 type SendMidi = (
     sourceId: string,
@@ -34,13 +34,7 @@ function getViewportCenter(rfInstanceRef: React.RefObject<ReactFlowInstance | nu
     const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
     const cy = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
 
-    // Use the latest screenToFlowPosition if available (React Flow >= 11.10)
-    const instAny = inst as { screenToFlowPosition?: (p: { x: number; y: number }) => { x: number; y: number } };
-    const screenToFlow = instAny.screenToFlowPosition;
-    if (typeof screenToFlow === "function") return screenToFlow({ x: cx, y: cy });
-
-    // Fallback for older versions
-    return inst.project({ x: cx, y: cy });
+    return inst.screenToFlowPosition({ x: cx, y: cy });
 }
 
 function getSelectionCentroid(nodesList: Node[]) {

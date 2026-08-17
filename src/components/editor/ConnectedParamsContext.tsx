@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import type { Edge } from "reactflow";
+import type { Edge } from "@xyflow/react";
 
 // Maps nodeId → Set of param keys that are driven by an incoming connection.
 // Derived from React Flow edges. Pure UI concern — used to disable param inputs.

@@ -1,5 +1,5 @@
 import React from "react";
-import { Handle, Position, useEdges } from "reactflow";
+import { Handle, Position, useEdges } from "@xyflow/react";
 import { useNodeUI } from "./NodeUIProvider";
 import {
     makeHandleStyle,

@@ -1,4 +1,4 @@
-import { NodeResizeControl, useReactFlow } from 'reactflow';
+import { NodeResizeControl, useReactFlow } from '@xyflow/react';
 import { NodeShell } from "@/components/editor/NodeShell";
 import { NodeSpec } from "@/components/editor/types";
 import { getNodeMeta } from "@core-audio/client/nodeRegistry";

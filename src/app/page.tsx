@@ -1,13 +1,13 @@
 "use client";
 import React, { useCallback, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
-import { ReactFlowProvider } from "reactflow";
+import { ReactFlowProvider } from "@xyflow/react";
 import { useGraph } from "@/hooks/editor/useGraph";
 import { useAudioEngine } from "@/hooks/audio/useAudioEngine";
 import { useNodeSync } from "@/hooks/editor/useNodeSync";
 import { useNodeActions } from "@/hooks/editor/useNodeActions";
 import { useProjectPersistence } from "@/hooks/state/useProjectPersistence";
-import type { ReactFlowInstance, Node, Edge } from "reactflow";
+import type { ReactFlowInstance, Node, Edge } from "@xyflow/react";
 
 import { useMidiAccess } from "@/hooks/hardware/useMidiAccess";
 

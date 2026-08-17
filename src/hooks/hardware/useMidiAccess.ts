@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Node } from 'reactflow';
+import { Node } from '@xyflow/react';
 import { parseMidiMessage } from '@core-audio/client/midi/MidiParser';
 
 export interface MidiNodeData {

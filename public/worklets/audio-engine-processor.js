@@ -116,7 +116,9 @@ if (typeof globalThis.TextDecoder === 'undefined') {
           "WASM init function not found after transforming glue"
         );
       }
-      await _global.__wbg_init_default(wasmBytes);
+      await _global.__wbg_init_default({
+        module_or_path: wasmBytes
+      });
       this._wasm = {
         AudioEngine: _global.AudioEngine,
         OscillatorNode: _global.OscillatorNode,
@@ -756,7 +758,7 @@ if (typeof globalThis.TextDecoder === 'undefined') {
               continue;
             }
             const baseNotes = Array.from(a.held.values()).sort((x, y) => x - y);
-            let expanded = baseNotes.slice();
+            const expanded = baseNotes.slice();
             const octs = Math.max(1, Math.min(4, a.octaves | 0));
             if (octs > 1) {
               for (let o = 1; o < octs; o++) {

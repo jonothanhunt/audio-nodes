@@ -1,6 +1,6 @@
 "use client";
 import { useEffect } from "react";
-import { Node, Edge } from "reactflow";
+import { Node, Edge } from "@xyflow/react";
 
 interface UseEditorKeyboardOptions {
     getSelectedGraph: () => { selectedNodes: Node[]; selectedEdges: Edge[] };

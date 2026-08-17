@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import type { Edge, Node, ReactFlowInstance, Viewport } from "reactflow";
+import type { Edge, Node, ReactFlowInstance, Viewport } from "@xyflow/react";
 import type { ProjectSaveFile } from "@/types/project";
 import { isRecord } from "@/utils/utils";
 

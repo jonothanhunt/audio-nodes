@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { getBezierPath, type EdgeProps, useReactFlow } from "reactflow";
+import { getBezierPath, type EdgeProps, useReactFlow } from "@xyflow/react";
 import { getNodeMeta } from "@core-audio/client/nodeRegistry";
 
 // Custom gradient edge: stroke fades from source node accentColor to target node accentColor

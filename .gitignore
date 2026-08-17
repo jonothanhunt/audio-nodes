@@ -41,22 +41,16 @@ yarn-error.log*
 next-env.d.ts
 
 # rust/wasm build artifacts
-/audio-engine/target/
-/audio-engine/pkg/
-/audio-engine/Cargo.lock
-# (Allow committing generated wasm-bindgen JS/types so Vercel serves them)
-# Previously ignored (commented out so they are now tracked):
-# /src/audio-engine-wasm/*.wasm
-# /src/audio-engine-wasm/*.js
-# /src/audio-engine-wasm/*.d.ts
-# /src/audio-engine-wasm/package.json
-# /src/audio-engine-wasm/.gitignore
+/core-audio/wasm/target/
+/core-audio/wasm/pkg/
 
-# Explicitly include wasm-bindgen artifacts (in case of broader patterns elsewhere)
+# public/audio-engine-wasm and public/worklets hold generated output that IS committed,
+# so Vercel can serve them without a Rust toolchain in the build image.
+# Explicitly un-ignore them in case a broader pattern is added above.
 !public/audio-engine-wasm/
 !public/audio-engine-wasm/**
-!src/audio-engine-wasm/
-!src/audio-engine-wasm/**
+!public/worklets/
+!public/worklets/**
 
 # personal learning notes (do not commit)
 LEARNING-RUST-WASM.md

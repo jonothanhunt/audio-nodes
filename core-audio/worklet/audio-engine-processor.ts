@@ -109,7 +109,7 @@ type WorkletMessage =
     | { type: 'stopCapture' };
 
 // Cast globalThis for WASM bootstrap dynamic code evaluation
-const _global = globalThis as Record<string, any>;
+const _global = globalThis as Record<string, unknown>;
 
 // Waveform name to index mapping
 type WaveformName = 'sine' | 'square' | 'sawtooth' | 'triangle';
@@ -282,12 +282,16 @@ if (typeof globalThis.TextDecoder === 'undefined') {
             code +=
                 '\ntry { globalThis.LfoNode = typeof LfoNode !== "undefined" ? LfoNode : globalThis.LfoNode; } catch(_){}';
             new Function(code)();
-            if (typeof (_global as Record<string, any>).__wbg_init_default !== "function") {
+            if (typeof _global.__wbg_init_default !== "function") {
                 throw new Error(
                     "WASM init function not found after transforming glue"
                 );
             }
-            await (_global.__wbg_init_default as (bytes: ArrayBuffer) => Promise<void>)(wasmBytes);
+            // wasm-bindgen >= 0.2.113 wants a single options object; passing the bytes
+            // positionally still works but logs a deprecation warning on every load.
+            await (_global.__wbg_init_default as (opts: { module_or_path: ArrayBuffer }) => Promise<void>)({
+                module_or_path: wasmBytes,
+            });
             this._wasm = {
                 AudioEngine: _global.AudioEngine,
                 OscillatorNode: _global.OscillatorNode as WasmOscillatorNodeConstructor,
@@ -927,7 +931,7 @@ if (typeof globalThis.TextDecoder === 'undefined') {
                             continue;
                         }
                         const baseNotes = Array.from(a.held.values()).sort((x, y) => x - y);
-                        let expanded = baseNotes.slice();
+                        const expanded = baseNotes.slice();
                         const octs = Math.max(1, Math.min(4, a.octaves | 0));
                         if (octs > 1) {
                             for (let o = 1; o < octs; o++) {
@@ -1439,7 +1443,7 @@ if (typeof globalThis.TextDecoder === 'undefined') {
         }
     }
 
-    _computeLogicNodeValue(node: NodeData): any {
+    _computeLogicNodeValue(node: NodeData): NodeData[string] {
         const type = node.type;
         const a = Number(node.a ?? 0);
         const b = Number(node.b ?? 0);

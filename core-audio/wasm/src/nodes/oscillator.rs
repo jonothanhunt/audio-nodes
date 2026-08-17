@@ -1,5 +1,5 @@
 use wasm_bindgen::prelude::*;
-use crate::dsp::{OscillatorCore, Waveform};
+use crate::dsp::OscillatorCore;
 
 #[wasm_bindgen]
 pub struct OscillatorNode {

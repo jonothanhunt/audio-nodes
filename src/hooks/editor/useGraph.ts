@@ -8,12 +8,12 @@ import {
     Connection,
     Edge,
     Node,
-} from "reactflow";
+} from "@xyflow/react";
 import { getHandleRole } from "@core-audio/client/handles";
 
 export function useGraph() {
-    const [nodes, setNodes, onNodesChange] = useNodesState<Node[]>([]);
-    const [edges, setEdges, onEdgesChange] = useEdgesState<Edge[]>([]);
+    const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+    const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
     const generateNodeId = useCallback(() => {
         const existing = new Set(nodes.map((n) => n.id));
@@ -31,7 +31,7 @@ export function useGraph() {
     }, [nodes]);
 
     const isValidConnection = useCallback(
-        (connection: Connection) => {
+        (connection: Connection | Edge) => {
             // Disallow self-connections entirely
             if (
                 connection.source != null &&
