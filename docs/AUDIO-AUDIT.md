@@ -16,7 +16,7 @@ Status legend: ☐ open · ☑ fixed · ◐ partially addressed
 
 ## A. Discontinuities that produce clicks and pops
 
-### ☐ A1. Speaker volume and mute are stepped, not ramped
+### ☑ A1. Speaker volume and mute are stepped, not ramped
 `_processGraph` computed one gain per block and multiplied:
 
 ```ts
@@ -30,19 +30,19 @@ A mute is therefore a full-scale step to zero on a block boundary — the single
 click in the app — and dragging the volume slider produces a stair-step of ~344 gain
 changes per second (classic zipper noise).
 
-**Planned fix:** per-sample interpolation from the previous block's gain to the target, plus a
+**Fix:** per-sample interpolation from the previous block's gain to the target, plus a
 one-pole smoother so mute/unmute becomes a short fade. Implemented as a shared
 `SmoothedGain` helper in the worklet.
 
-### ☐ A2. Master gain is set with `.value =`
+### ☑ A2. Master gain is set with `.value =`
 `AudioManager.updateMasterGainVolume` did `this.masterGain.gain.value = 0 or 1`. An
 `AudioParam` assignment takes effect immediately with no ramp, so both the user mute
 button and the recording-preview mute click.
 
-**Planned fix:** `setTargetAtTime` with a ~15 ms time constant, cancelling any in-flight ramp
+**Fix:** `setTargetAtTime` with a ~15 ms time constant, cancelling any in-flight ramp
 first.
 
-### ☐ A3. Nodes enter and leave the mix at full amplitude
+### ☑ A3. Nodes enter and leave the mix at full amplitude
 When an edge is connected or a node is added, its output appears in the sum at whatever
 instantaneous value its waveform happens to be at. Disconnecting is worse: the signal
 truncates mid-cycle, and for a reverb the tail is cut dead because the WASM instance is
@@ -51,23 +51,23 @@ freed in the same message handler.
 This is the "popping when starting/stopping things" the report is really about — it fires
 on every patch change, which is constantly during normal use.
 
-**Planned fix:** each audio-producing node carries a `SmoothedGain` envelope. Newly-reachable
+**Fix:** each audio-producing node carries a `SmoothedGain` envelope. Newly-reachable
 nodes fade in over ~8 ms; nodes that stop being reachable fade out over ~8 ms and are only
 then dropped from the render plan. Instance teardown is deferred until the fade completes,
 so reverb tails ring out instead of being chopped.
 
-### ☐ A4. Synth retrigger and voice stealing hard-reset the envelope
+### ☑ A4. Synth retrigger and voice stealing hard-reset the envelope
 `SynthNode::note_on` did `v.env = 0.0` and `v.core.phase = 0.0` in all three branches —
 including when reusing a voice that is currently sounding at sustain level, and when
 stealing the quietest active voice. Dropping a live voice from 0.7 to 0.0 in one sample is
 a click, and the phase reset adds a second discontinuity.
 
-**Planned fix:** retrigger keeps the current envelope value and re-gates instead of zeroing.
+**Fix:** retrigger keeps the current envelope value and re-gates instead of zeroing.
 Stealing goes through a `Stealing` voice state that ramps the old note out over ~2 ms
 before the new note takes the voice. Phase is only reset when the voice was actually
 silent.
 
-### ☐ A5. Voice-count normalisation pumps the whole mix
+### ☑ A5. Voice-count normalisation pumps the whole mix
 ```rust
 let target = if voices_on > 0 { 1.0 / voices_on as f32 } else { 1.0 };
 self.mix_gain += (target - self.mix_gain) * a;
@@ -79,31 +79,31 @@ notes to a quarter of their level. The 5 ms smoothing does not hide it — it ju
 step into a fast swell. This is heard as breathing/pumping rather than a click, and it is
 why chords feel unstable.
 
-**Planned fix:** replace dynamic normalisation with a fixed headroom scale plus a soft clipper, so
+**Fix:** replace dynamic normalisation with a fixed headroom scale plus a soft clipper, so
 each voice keeps a constant level and the sum is tamed by saturation instead of gain
 riding.
 
-### ☐ A6. Zero-length envelope stages snap
+### ☑ A6. Zero-length envelope stages snap
 `if self.release <= 0.0 { v.env = 0.0; }` (and the same for attack/decay) lets a
 UI value of 0 produce an instantaneous jump.
 
-**Planned fix:** clamp attack/decay/release to a 1.5 ms floor. Still effectively instant musically,
+**Fix:** clamp attack/decay/release to a 1.5 ms floor. Still effectively instant musically,
 but band-limited.
 
-### ☐ A7. Oscillator amplitude and frequency jump per block
+### ☑ A7. Oscillator amplitude and frequency jump per block
 `_processOscillator` assigned `osc.amplitude` / `osc.frequency` straight from the
 (possibly LFO-modulated) value each block. Amplitude steps click; frequency steps produce
 a phase-slope discontinuity that is audible on low notes.
 
-**Planned fix:** both are smoothed inside the Rust node, per sample, toward the block's target.
+**Fix:** both are smoothed inside the Rust node, per sample, toward the block's target.
 
-### ☐ A8. Reverb parameter changes are stepped
+### ☑ A8. Reverb parameter changes are stepped
 `rev.feedback` / `rev.wet_mix` were assigned per block. Changing wet mix while audio flows
 steps the dry/wet balance.
 
-**Planned fix:** smoothed per sample inside `ReverbNode::process`.
+**Fix:** smoothed per sample inside `ReverbNode::process`.
 
-### ☐ A9. `startRecording` double-connects the worklet
+### ☑ A9. `startRecording` double-connects the worklet
 ```ts
 this.audioWorklet.connect(this.audioContext.destination);
 ```
@@ -112,29 +112,29 @@ recording starts the output jumps +6 dB **and** the extra path bypasses mute ent
 muting does nothing while recording. Not a click as such, but a very audible level jump at
 exactly the moment you least want one.
 
-**Planned fix:** deleted. Capture is taken from the worklet's `captureBlock` messages, so no extra
+**Fix:** deleted. Capture is taken from the worklet's `captureBlock` messages, so no extra
 routing is needed.
 
 ---
 
 ## B. Correctness bugs in the render path
 
-### ☐ B1. Fan-out renders a node twice, doubling its pitch
+### ☑ B1. Fan-out renders a node twice, doubling its pitch
 `_processGraph` called `_processInputNode(..., new Set())` per speaker input, and
 `_processReverb` passed its own `visited` down. A node feeding two destinations is
 therefore rendered twice in one block, and because oscillator/synth phase is stateful,
 **its phase advances twice per quantum — the note sounds an octave up.** Patch an
 oscillator into both a reverb and the speaker directly and it goes sharp.
 
-**Planned fix:** a per-block render cache. Each node renders at most once per quantum into a
+**Fix:** a per-block render cache. Each node renders at most once per quantum into a
 pooled buffer; extra consumers read the cached buffer.
 
-### ☐ B2. Nested reverbs corrupt each other's input buffer
+### ☑ B2. Nested reverbs corrupt each other's input buffer
 `_processReverb` accumulated its input into the single shared `this._scratch.inL/inR`.
 Reverb → reverb means the inner call runs `inL.fill(0)` and wipes what the outer call had
 already summed, so the outer reverb processes only part of its input.
 
-**Planned fix:** the scratch buffers became a pooled stack (`_acquireBuffer` / `_releaseBuffer`),
+**Fix:** the scratch buffers became a pooled stack (`_acquireBuffer` / `_releaseBuffer`),
 so each recursion level gets its own.
 
 ### ☐ B3. MIDI events are quantised to the block boundary
@@ -163,7 +163,7 @@ Anything allocating inside `process()` feeds the GC, and a GC pause in the audio
 is a dropout. At 44.1 kHz the block rate is ~344 Hz, so every allocation below happens
 344 times a second.
 
-### ☐ C1. The graph is re-derived from scratch every block
+### ☑ C1. The graph is re-derived from scratch every block
 Per quantum, the old `process()` did:
 
 - `Array.from(this._nodes.entries()).filter(...)` to find LFO nodes — two allocations
@@ -173,29 +173,29 @@ Per quantum, the old `process()` did:
 - `new Set()` per speaker input for cycle detection
 - `this._paramConnections.filter(...)` in `_applyParamModulations`, once per node
 
-**Planned fix:** a render plan (`_rebuildRenderPlan`) computed once when nodes or connections
+**Fix:** a render plan (`_rebuildRenderPlan`) computed once when nodes or connections
 change, holding the topologically-ordered node list, per-node input arrays, and per-node
 param-modulation lists. `process()` now walks pre-built arrays.
 
-### ☐ C2. `_applyParamModulations` allocates two objects per node per block
+### ☑ C2. `_applyParamModulations` allocates two objects per node per block
 It built a `modAccum` record and then `{ ...data, ...modAccum }`. For a graph with a
 handful of modulated nodes that is thousands of short-lived objects per second.
 
-**Planned fix:** modulated values are written into a persistent per-node scratch object that is
+**Fix:** modulated values are written into a persistent per-node scratch object that is
 reused across blocks.
 
-### ☐ C3. `_propagateValueNodes` spreads and re-inserts nodes up to 4× per block
+### ☑ C3. `_propagateValueNodes` spreads and re-inserts nodes up to 4× per block
 ```ts
 this._nodes.set(id, { ...node, value: newValue });
 ```
 inside a 4-pass fixpoint loop, every block, for every value/logic node. This was the
 single largest allocator in the file.
 
-**Planned fix:** values are mutated in place, and the fixpoint only runs when an input actually
+**Fix:** values are mutated in place, and the fixpoint only runs when an input actually
 changed. The pass order comes from the render plan's topological sort, so one pass
 usually suffices.
 
-### ☐ C4. `modPreview` floods the main thread
+### ☑ C4. `modPreview` floods the main thread
 Both `_applyParamModulations` and `_propagateValueNodes` posted a `modPreview` message
 **every block per modulated node** — ~344 messages/sec each. On the main thread
 `AudioManager` then allocated a `CustomEvent` per message and dispatched it to every
@@ -203,10 +203,10 @@ Both `_applyParamModulations` and `_propagateValueNodes` posted a `modPreview` m
 `setValue` → React re-render. With a few modulated params this is a self-inflicted
 re-render storm, and it competes with the very thread that has to service the audio graph.
 
-**Planned fix:** coalesce all preview values into one batched message and throttle to ~30 Hz,
+**Fix:** coalesce all preview values into one batched message and throttle to ~30 Hz,
 which is well past what the eye resolves on a number readout.
 
-### ☐ C5. Dragging a node re-pushes the entire graph to the worklet
+### ☑ C5. Dragging a node re-pushes the entire graph to the worklet
 `useNodeSync` pushes **every node** on any change to `nodes`:
 
 ```ts
@@ -219,15 +219,15 @@ sends ~1,200 `updateNode` messages/sec. Each one runs `GraphSync.sanitizeForPost
 boundary, and the worklet replies with an `ackNode` message that **nothing consumes**.
 This is why interacting with the canvas makes the audio crackle.
 
-**Planned fix:** `useNodeSync` diffs each node's audio-relevant data and skips nodes whose data is
+**Fix:** `useNodeSync` diffs each node's audio-relevant data and skips nodes whose data is
 unchanged (position moves no longer touch the audio thread at all); `GraphSync` keeps a
 signature per node and drops redundant posts; the unused `ack*` replies are gone.
 
-### ☐ C6. Unused `ack*` chatter
+### ☑ C6. Unused `ack*` chatter
 `ackNode`, `ackRemove`, `ackConnections`, `ackClear`, `ackBootstrap` are posted by the
 worklet and read by nobody.
 
-**Planned fix:** removed.
+**Fix:** removed.
 
 ### ◐ C7. Capture allocates two Float32Arrays per block
 `startCapture` copies both channels into fresh arrays each quantum and transfers them.

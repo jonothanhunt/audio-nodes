@@ -17,29 +17,56 @@ interface UseNodeSyncOptions {
  * - Pushes connection updates to the worklet whenever `edges` changes
  * - Reattaches handler callbacks whenever they change
  */
+/**
+ * Cheap comparison key for the parts of a node the audio engine cares about.
+ *
+ * Position, selection and drag state are deliberately excluded, as are the injected
+ * `onParameterChange` / `onEmitMidi` callbacks (new function identities every render).
+ * Without this the effect below pushed every node in the graph to the worklet on every
+ * React Flow change — and React Flow emits a change per pointer-move while dragging, so a
+ * 20-node graph produced well over a thousand deep-cloned postMessages per second and made
+ * the audio crackle whenever the canvas was touched.
+ */
+function audioDataSignature(type: string, data: Record<string, unknown>): string {
+    const keys = Object.keys(data).sort();
+    let sig = type;
+    for (const key of keys) {
+        const value = data[key];
+        if (typeof value === 'function') continue;
+        sig += `|${key}=`;
+        sig += typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value);
+    }
+    return sig;
+}
+
 export function useNodeSync({
     nodes,
     edges,
     setNodes,
     audioManager,
 }: UseNodeSyncOptions) {
-    const prevNodeIdsRef = useRef<Set<string>>(new Set());
+    const prevSignaturesRef = useRef<Map<string, string>>(new Map());
 
     // Sync nodes to worklet (updates and removals)
     useEffect(() => {
-        const currentIds = new Set(nodes.map(n => n.id));
-        const prevIds = prevNodeIdsRef.current;
-        for (const id of prevIds) {
-            if (!currentIds.has(id)) {
+        const prevSignatures = prevSignaturesRef.current;
+        const nextSignatures = new Map<string, string>();
+
+        for (const node of nodes) {
+            if (!node.data || !node.type) continue;
+            const signature = audioDataSignature(node.type, node.data);
+            nextSignatures.set(node.id, signature);
+            if (prevSignatures.get(node.id) === signature) continue; // position-only change
+            audioManager.updateNode(node.id, { type: node.type, ...node.data });
+        }
+
+        for (const id of prevSignatures.keys()) {
+            if (!nextSignatures.has(id)) {
                 try { audioManager.removeNode(id); } catch { }
             }
         }
-        nodes.forEach(node => {
-            if (node.data && node.type) {
-                audioManager.updateNode(node.id, { type: node.type, ...node.data });
-            }
-        });
-        prevNodeIdsRef.current = currentIds;
+
+        prevSignaturesRef.current = nextSignatures;
     }, [nodes, audioManager]);
 
     // Sync connections to worklet whenever edges change

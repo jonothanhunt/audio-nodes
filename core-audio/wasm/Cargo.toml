@@ -4,7 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [lib]
-crate-type = ["cdylib"]
+# `rlib` alongside `cdylib` so the DSP can be unit-tested natively with `cargo test`.
+# Envelope and smoothing behaviour is much easier to pin down here than through the worklet.
+crate-type = ["cdylib", "rlib"]
 
 # DSP runs sample-by-sample inside the AudioWorklet's render quantum, so cross-crate
 # inlining matters more here than compile time. `panic = "abort"` also drops the

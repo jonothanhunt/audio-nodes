@@ -32,22 +32,25 @@ export class ReverbNode {
     [Symbol.dispose](): void;
     constructor(sample_rate: number);
     process(input: Float32Array, output: Float32Array): void;
+    /**
+     * Peak absolute value still circulating in the delay line. The worklet uses this to
+     * decide when a disconnected reverb has finished ringing and can be dropped, so a
+     * tail decays naturally instead of being cut off mid-air.
+     */
+    tail_peak(): number;
     feedback: number;
     wet_mix: number;
-}
-
-export class SpeakerNode {
-    free(): void;
-    [Symbol.dispose](): void;
-    constructor();
-    process(input: Float32Array, output: Float32Array): void;
-    muted: boolean;
-    volume: number;
 }
 
 export class SynthNode {
     free(): void;
     [Symbol.dispose](): void;
+    /**
+     * True while any voice is still producing signal. The worklet uses this to know when
+     * a synth has gone quiet, so a removed node's release tail can ring out before the
+     * instance is dropped.
+     */
+    is_active(): boolean;
     constructor(sample_rate: number);
     note_off(note: number): void;
     note_on(note: number, velocity: number): void;
@@ -73,8 +76,8 @@ export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_lfonode_free: (a: number, b: number) => void;
     readonly __wbg_miditransposenode_free: (a: number, b: number) => void;
+    readonly __wbg_oscillatornode_free: (a: number, b: number) => void;
     readonly __wbg_reverbnode_free: (a: number, b: number) => void;
-    readonly __wbg_speakernode_free: (a: number, b: number) => void;
     readonly __wbg_synthnode_free: (a: number, b: number) => void;
     readonly lfonode_new: (a: number) => number;
     readonly lfonode_next_value: (a: number, b: number, c: number) => number;
@@ -94,12 +97,9 @@ export interface InitOutput {
     readonly reverbnode_process: (a: number, b: number, c: number, d: number, e: number, f: any) => void;
     readonly reverbnode_set_feedback: (a: number, b: number) => void;
     readonly reverbnode_set_wet_mix: (a: number, b: number) => void;
+    readonly reverbnode_tail_peak: (a: number) => number;
     readonly reverbnode_wet_mix: (a: number) => number;
-    readonly speakernode_muted: (a: number) => number;
-    readonly speakernode_new: () => number;
-    readonly speakernode_process: (a: number, b: number, c: number, d: number, e: number, f: any) => void;
-    readonly speakernode_set_muted: (a: number, b: number) => void;
-    readonly speakernode_set_volume: (a: number, b: number) => void;
+    readonly synthnode_is_active: (a: number) => number;
     readonly synthnode_new: (a: number) => number;
     readonly synthnode_note_off: (a: number, b: number) => void;
     readonly synthnode_note_on: (a: number, b: number, c: number) => void;
@@ -110,8 +110,6 @@ export interface InitOutput {
     readonly synthnode_set_max_voices: (a: number, b: number) => void;
     readonly synthnode_set_waveform: (a: number, b: number) => void;
     readonly synthnode_sustain_pedal: (a: number, b: number) => void;
-    readonly speakernode_volume: (a: number) => number;
-    readonly __wbg_oscillatornode_free: (a: number, b: number) => void;
     readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;

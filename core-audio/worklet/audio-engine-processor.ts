@@ -39,15 +39,6 @@ interface Timebase {
     audioCurrentTimeSec: number;
 }
 
-interface ScratchBuffers {
-    temp: Float32Array | null;
-    inL: Float32Array | null;
-    inR: Float32Array | null;
-    sumL: Float32Array | null;
-    sumR: Float32Array | null;
-    size: number;
-}
-
 interface Transport {
     bpm: number;
     frameCounter: number;
@@ -129,6 +120,137 @@ const LFO_WAVEFORM_INDEX: Record<string, number> = {
 };
 
 // ---------------------------------------------------------------------------
+// Gain smoothing
+// ---------------------------------------------------------------------------
+
+/** Distance below which a gain snaps to its target rather than creeping. -80 dB. */
+const GAIN_SETTLE_EPSILON = 1e-4;
+
+/**
+ * One-pole smoothed gain, ticked per sample.
+ *
+ * Every gain in this file used to be applied as a bare multiply that could change between
+ * render quanta. A gain that steps once per 128 samples is a ~344 Hz square wave riding on
+ * the signal: a click on a mute, zipper noise on a slider drag, and a hard pop whenever a
+ * node joins or leaves the mix mid-waveform. Ramping through the block removes all three.
+ */
+class SmoothedGain {
+    current: number;
+    target: number;
+    private coeff: number;
+
+    constructor(initial: number, timeConstantSec: number) {
+        this.current = initial;
+        this.target = initial;
+        const dt = 1 / sampleRate;
+        this.coeff = timeConstantSec <= 0 ? 1 : dt / (timeConstantSec + dt);
+    }
+
+    setTarget(value: number): void {
+        if (Number.isFinite(value)) this.target = value;
+    }
+
+    /** Jump without ramping — only correct when there is no signal to discontinue. */
+    snap(value: number): void {
+        if (Number.isFinite(value)) {
+            this.current = value;
+            this.target = value;
+        }
+    }
+
+    get isSettled(): boolean {
+        return this.current === this.target;
+    }
+
+    /** Converged on zero: the node is silent and safe to drop. */
+    get isSilent(): boolean {
+        return this.target === 0 && this.current === 0;
+    }
+
+    /**
+     * Advance one sample.
+     *
+     * A one-pole approach never quite arrives, so the last stretch is snapped once the
+     * remaining distance is inaudible (-80 dB). Without it a faded-out node would sit at a
+     * small non-zero gain forever and never be retired.
+     */
+    tick(): number {
+        const remaining = this.target - this.current;
+        if (Math.abs(remaining) < GAIN_SETTLE_EPSILON) {
+            this.current = this.target;
+        } else {
+            this.current += remaining * this.coeff;
+        }
+        return this.current;
+    }
+}
+
+/**
+ * Fade applied when a node starts or stops contributing to the mix (a patch change, a node
+ * added or deleted). Long enough to remove the click, short enough to feel immediate.
+ */
+const NODE_FADE_SEC = 0.008;
+
+/** Speaker volume/mute smoothing. Mute is the loudest click in the app without this. */
+const SPEAKER_GAIN_SMOOTHING_SEC = 0.010;
+
+/**
+ * A faded-out node is kept alive this long (in blocks) before its WASM instance is freed,
+ * so a reverb tail or a synth release can ring out instead of being cut off.
+ */
+const TEARDOWN_GRACE_BLOCKS = 512;
+
+/** Below this peak a lingering tail is inaudible and the instance can go. */
+const TAIL_SILENCE_THRESHOLD = 1e-4;
+
+/**
+ * `modPreview` messages exist to drive number readouts in the UI. They used to be posted
+ * every block per modulated node (~344/sec each), which flooded the main thread and
+ * triggered a React re-render per message. 30 Hz is past what the eye resolves.
+ */
+const MOD_PREVIEW_INTERVAL_SEC = 1 / 30;
+
+// ---------------------------------------------------------------------------
+// Render plan
+// ---------------------------------------------------------------------------
+
+/**
+ * Everything about the graph that `process()` needs, derived once per graph change instead
+ * of being re-filtered out of `_connections` on every 128-sample quantum.
+ */
+interface RenderPlan {
+    /** Speaker sink node ids. */
+    speakers: string[];
+    /** Audio source node ids feeding each node's main audio input, in connection order. */
+    audioInputs: Map<string, string[]>;
+    /** Audio-producing nodes reachable from a speaker, in depth-first (post-order) order. */
+    reachable: Set<string>;
+    /** LFO node ids, evaluated once per block. */
+    lfoNodes: string[];
+    /** Param modulations grouped by destination node. */
+    paramModsByTarget: Map<string, ParamConnection[]>;
+    /** MIDI destinations per source node id. */
+    midiDownstream: Map<string, string[]>;
+    /** Param connections whose destination is a value/logic node, in dependency order. */
+    valueEdges: ParamConnection[];
+    /** Value/logic node ids in dependency order, for the propagation pass. */
+    valueNodeOrder: string[];
+}
+
+const EMPTY_STRINGS: string[] = [];
+const EMPTY_PARAM_CONNECTIONS: ParamConnection[] = [];
+
+/** Handle ids that carry audio or MIDI rather than naming a parameter. */
+const NON_PARAM_HANDLES = new Set([
+    'input',
+    'output',
+    'midi',
+    'midi-out',
+    'audio-in',
+    'audio-out',
+]);
+
+// ---------------------------------------------------------------------------
 // EngineProcessor
 // ---------------------------------------------------------------------------
 
@@ -151,14 +273,55 @@ class EngineProcessor extends AudioWorkletProcessor {
 
     private _midiQueues: Map<string, MidiEvent[]>;
     private _timebase: Timebase;
-    private _scratch: ScratchBuffers;
 
     private _transposeNoteState: Map<string, TransposeNoteState>;
     private _transport: Transport;
     private _captureActive: boolean;
     private _sequencers: Map<string, SequencerEntry>;
     private _arps: Map<string, ArpEntry>;
-    private _propagatedValues?: Map<string, string | number | boolean | object | null | undefined>;
+
+    // --- Render plan (see RenderPlan) ---
+    private _plan: RenderPlan;
+    private _planDirty: boolean;
+    /**
+     * The audio adjacency and speaker list the last plan actually rendered, including any
+     * retiring entries. Fading a node out means continuing to render it into the destination
+     * it *used* to feed, so the previous topology has to outlive the edit that removed it.
+     */
+    private _lastAudioInputs: Map<string, string[]>;
+    private _lastSpeakers: string[];
+    /** Last-known data for nodes deleted from the graph but still fading out. */
+    private _retiredNodeData: Map<string, NodeData>;
+
+    // --- Buffer pool ---
+    // Reverb recursion needs its own input buffer per level. These used to be five fixed
+    // scratch buffers on the processor, which meant a reverb feeding another reverb had the
+    // inner call zero the buffer the outer call was still accumulating into.
+    private _bufferPool: Float32Array[];
+    private _bufferSize: number;
+
+    // --- Per-block render cache ---
+    // A node feeding two destinations must render exactly once per quantum. Rendering it
+    // twice advanced its oscillator phase twice, which sounded an octave up.
+    private _renderedL: Map<string, Float32Array>;
+    private _renderedR: Map<string, Float32Array>;
+    private _blockBuffers: Float32Array[];
+
+    // --- Fade envelopes ---
+    /** Per-node fade gain, so nodes never enter or leave the mix at full amplitude. */
+    private _nodeGains: Map<string, SmoothedGain>;
+    /** Per-speaker volume/mute gain. */
+    private _speakerGains: Map<string, SmoothedGain>;
+    /** Nodes fading out after leaving the graph, with the block count since they left. */
+    private _fadingOut: Map<string, number>;
+
+    // --- Param modulation ---
+    /** Reused per-node patched-data objects, so modulation allocates nothing per block. */
+    private _moddedData: Map<string, NodeData>;
+    /** Values accumulated for the next batched modPreview message. */
+    private _previewPending: Map<string, Record<string, number | boolean>>;
+    private _previewLastSentSec: number;
+    private _previewDirty: boolean;
 
     constructor() {
         super();
@@ -181,14 +344,36 @@ class EngineProcessor extends AudioWorkletProcessor {
 
         this._midiQueues = new Map();
         this._timebase = { perfNowMs: 0, audioCurrentTimeSec: 0 };
-        this._scratch = {
-            temp: null,
-            inL: null,
-            inR: null,
-            sumL: null,
-            sumR: null,
-            size: 0,
+
+        this._plan = {
+            speakers: [],
+            audioInputs: new Map(),
+            reachable: new Set(),
+            lfoNodes: [],
+            paramModsByTarget: new Map(),
+            midiDownstream: new Map(),
+            valueEdges: [],
+            valueNodeOrder: [],
         };
+        this._planDirty = true;
+        this._lastAudioInputs = new Map();
+        this._lastSpeakers = [];
+        this._retiredNodeData = new Map();
+
+        this._bufferPool = [];
+        this._bufferSize = 0;
+        this._renderedL = new Map();
+        this._renderedR = new Map();
+        this._blockBuffers = [];
+
+        this._nodeGains = new Map();
+        this._speakerGains = new Map();
+        this._fadingOut = new Map();
+
+        this._moddedData = new Map();
+        this._previewPending = new Map();
+        this._previewLastSentSec = 0;
+        this._previewDirty = false;
 
         this.port.onmessage = (e: MessageEvent) => this._handleMessage(e.data);
 
@@ -224,19 +409,33 @@ class EngineProcessor extends AudioWorkletProcessor {
         }
     }
 
+    /** The pending MIDI queue for a node, created on first use. */
+    _queueFor(nodeId: string): MidiEvent[] {
+        let q = this._midiQueues.get(nodeId);
+        if (!q) {
+            q = [];
+            this._midiQueues.set(nodeId, q);
+        }
+        return q;
+    }
+
     // Queue All Notes Off (CC 123) to all synth nodes to ensure hanging notes are stopped
     _queueAllNotesOffToAllSynths() {
-        try {
-            for (const [nid, data] of this._nodes.entries()) {
-                if (!data || data.type !== "synth") continue;
-                const q = this._midiQueues.get(nid) || [];
-                for (let ch = 0; ch < 16; ch++) {
-                    q.push({ data: [0xb0 | ch, 123, 0] }); // CC 123 All Notes Off
-                }
-                this._midiQueues.set(nid, q);
+        for (const [nid, data] of this._nodes.entries()) {
+            if (!data || data.type !== "synth") continue;
+            const q = this._queueFor(nid);
+            for (let ch = 0; ch < 16; ch++) {
+                q.push({ data: [0xb0 | ch, 123, 0] }); // CC 123 All Notes Off
             }
-        } catch {
-            /* ignore */
+        }
+    }
+
+    /** Send events to every MIDI destination of `nodeId`, per the render plan. */
+    _fanOutMIDI(nodeId: string, events: MidiEvent[]): void {
+        if (!events.length) return;
+        for (const targetId of this._plan.midiDownstream.get(nodeId) ?? EMPTY_STRINGS) {
+            const q = this._queueFor(targetId);
+            for (const ev of events) q.push(ev);
         }
     }
 
@@ -268,13 +467,9 @@ if (typeof globalThis.TextDecoder === 'undefined') {
             code = code.replace(/import\.meta\.url/g, "'/audio-engine-wasm/'");
             // Explicitly expose classes to globalThis
             code +=
-                '\ntry { globalThis.AudioEngine = typeof AudioEngine !== "undefined" ? AudioEngine : globalThis.AudioEngine; } catch(_){}';
-            code +=
                 '\ntry { globalThis.OscillatorNode = typeof OscillatorNode !== "undefined" ? OscillatorNode : globalThis.OscillatorNode; } catch(_){}';
             code +=
                 '\ntry { globalThis.ReverbNode = typeof ReverbNode !== "undefined" ? ReverbNode : globalThis.ReverbNode; } catch(_){}';
-            code +=
-                '\ntry { globalThis.SpeakerNode = typeof SpeakerNode !== "undefined" ? SpeakerNode : globalThis.SpeakerNode; } catch(_){}';
             code +=
                 '\ntry { globalThis.SynthNode = typeof SynthNode !== "undefined" ? SynthNode : globalThis.SynthNode; } catch(_){}';
             code +=
@@ -293,10 +488,8 @@ if (typeof globalThis.TextDecoder === 'undefined') {
                 module_or_path: wasmBytes,
             });
             this._wasm = {
-                AudioEngine: _global.AudioEngine,
                 OscillatorNode: _global.OscillatorNode as WasmOscillatorNodeConstructor,
                 ReverbNode: _global.ReverbNode as WasmReverbNodeConstructor,
-                SpeakerNode: _global.SpeakerNode as WasmSpeakerNodeConstructor,
                 SynthNode: _global.SynthNode as WasmSynthNodeConstructor,
                 MidiTransposeNode: _global.MidiTransposeNode as WasmMidiTransposeNodeConstructor,
                 LfoNode: _global.LfoNode as WasmLfoNodeConstructor,
@@ -444,9 +637,6 @@ if (typeof globalThis.TextDecoder === 'undefined') {
             case "bootstrapWasm": {
                 const { glue, wasm } = msg;
                 this._bootstrapFromMain(glue, wasm);
-                try {
-                    this.port.postMessage({ type: "ackBootstrap" });
-                } catch { }
                 break;
             }
             case "updateNode": {
@@ -509,9 +699,9 @@ if (typeof globalThis.TextDecoder === 'undefined') {
                         }
                     }
                 }
-                try {
-                    this.port.postMessage({ type: "ackNode", nodeId });
-                } catch { }
+                // A new or retyped node changes what the render plan must cover. Position-only
+                // updates never reach here (see useNodeSync), so this stays cheap.
+                this._planDirty = true;
                 break;
             }
             case "removeNode": {
@@ -539,19 +729,9 @@ if (typeof globalThis.TextDecoder === 'undefined') {
                                 ],
                             });
                         }
-                        const downstream = this._connections.filter(
-                            (c) =>
-                                c.from === nodeId &&
-                                (c.fromOutput === "midi-out" ||
-                                    c.fromOutput === "midi" ||
-                                    c.fromOutput == null)
-                        );
-                        if (downstream.length) {
-                            for (const edge of downstream) {
-                                const q = this._midiQueues.get(edge.to) || [];
-                                for (const ev of outEvents) q.push(ev);
-                                this._midiQueues.set(edge.to, q);
-                            }
+                        const downstream = this._plan.midiDownstream.get(nodeId);
+                        if (downstream && downstream.length) {
+                            this._fanOutMIDI(nodeId, outEvents);
                         } else {
                             this._queueAllNotesOffToAllSynths();
                         }
@@ -568,40 +748,16 @@ if (typeof globalThis.TextDecoder === 'undefined') {
                 ) {
                     this._queueAllNotesOffToAllSynths();
                 }
-                // Proceed with removal and free
+                // Drop the node from the graph, but leave its WASM instances alone. The
+                // render plan will see it is no longer reachable, fade it out over
+                // NODE_FADE_SEC, and only then free it (_collectFadedOutNodes) — otherwise
+                // deleting a reverb chops its tail dead and deleting a synth cuts every
+                // sounding note mid-cycle.
+                const removed = this._nodes.get(nodeId);
+                if (removed) this._retiredNodeData.set(nodeId, removed);
                 this._nodes.delete(nodeId);
-                const osc = this._oscInstances.get(nodeId);
-                if (osc) {
-                    try {
-                        osc.free?.();
-                    } catch { }
-                    this._oscInstances.delete(nodeId);
-                }
-                const rev = this._reverbInstances.get(nodeId);
-                if (rev) {
-                    try {
-                        rev.free?.();
-                    } catch { }
-                    this._reverbInstances.delete(nodeId);
-                }
-                const syn = this._synthInstances.get(nodeId);
-                if (syn) {
-                    try {
-                        syn.free?.();
-                    } catch { }
-                    this._synthInstances.delete(nodeId);
-                }
-                const tr = this._transposeInstances.get(nodeId);
-                if (tr) {
-                    try {
-                        tr.free?.();
-                    } catch { }
-                    this._transposeInstances.delete(nodeId);
-                }
-                this._transposeNoteState.delete(nodeId);
-                try {
-                    this.port.postMessage({ type: "ackRemove", nodeId });
-                } catch { }
+                this._paramCache.delete(nodeId);
+                this._planDirty = true;
                 break;
             }
             case "updateConnections": {
@@ -609,21 +765,9 @@ if (typeof globalThis.TextDecoder === 'undefined') {
                 this._connections = Array.isArray(connections)
                     ? connections
                     : [];
-                // Rebuild parameter connections: any edge targeting a param-in
-                this._paramConnections = [];
-                for (const c of this._connections) {
-                    if (c.toInput && !['input', 'output', 'midi', 'midi-out', 'audio-in', 'audio-out'].includes(c.toInput)) {
-                        let tp = c.toInput;
-                        if (tp.startsWith('param-')) tp = tp.substring(6);
-                        this._paramConnections.push({ from: c.from, to: c.to, fromOutput: c.fromOutput, targetParam: tp });
-                    }
-                }
-                try {
-                    this.port.postMessage({
-                        type: "ackConnections",
-                        count: this._connections.length,
-                    });
-                } catch { }
+                // Param connections, audio adjacency, MIDI fan-out and reachability are all
+                // derived together in _rebuildRenderPlan on the next block.
+                this._planDirty = true;
                 break;
             }
             case "clear": {
@@ -654,13 +798,27 @@ if (typeof globalThis.TextDecoder === 'undefined') {
                         inst.free?.();
                     } catch { }
                 }
+                for (const inst of this._lfoInstances.values()) {
+                    try {
+                        inst.free?.();
+                    } catch { }
+                }
                 this._oscInstances.clear();
                 this._reverbInstances.clear();
                 this._synthInstances.clear();
                 this._transposeInstances.clear();
-                try {
-                    this.port.postMessage({ type: "ackClear" });
-                } catch { }
+                this._lfoInstances.clear();
+                this._transposeNoteState.clear();
+                this._midiQueues.clear();
+                this._nodeGains.clear();
+                this._speakerGains.clear();
+                this._fadingOut.clear();
+                this._moddedData.clear();
+                this._previewPending.clear();
+                this._retiredNodeData.clear();
+                this._lastAudioInputs.clear();
+                this._lastSpeakers.length = 0;
+                this._planDirty = true;
                 break;
             }
             case "timebase": {
@@ -673,26 +831,18 @@ if (typeof globalThis.TextDecoder === 'undefined') {
             }
             case "midi": {
                 const { sourceId, events } = msg;
-                const midiEdges = this._connections.filter(
-                    (c) =>
-                        c.from === sourceId &&
-                        (c.fromOutput === "midi" ||
-                            c.fromOutput === "midi-out" ||
-                            c.fromOutput == null)
-                );
-                for (const edge of midiEdges) {
-                    const q = this._midiQueues.get(edge.to) || [];
-                    if (Array.isArray(events)) {
-                        for (const ev of events) {
-                            if (!ev || !Array.isArray(ev.data)) continue;
-                            q.push({
-                                data: ev.data.slice(0, 3),
-                                atFrame: ev.atFrame,
-                                atTimeMs: ev.atTimeMs,
-                            });
-                        }
+                if (!Array.isArray(events)) break;
+                if (this._planDirty) this._rebuildRenderPlan();
+                for (const targetId of this._plan.midiDownstream.get(sourceId) ?? EMPTY_STRINGS) {
+                    const q = this._queueFor(targetId);
+                    for (const ev of events) {
+                        if (!ev || !Array.isArray(ev.data)) continue;
+                        q.push({
+                            data: ev.data.slice(0, 3),
+                            atFrame: ev.atFrame,
+                            atTimeMs: ev.atTimeMs,
+                        });
                     }
-                    this._midiQueues.set(edge.to, q);
                 }
                 break;
             }
@@ -708,6 +858,348 @@ if (typeof globalThis.TextDecoder === 'undefined') {
             default:
                 break;
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Render plan
+    // -----------------------------------------------------------------------
+
+    /**
+     * Derive everything `process()` needs from `_nodes` + `_connections`.
+     *
+     * Called only when the graph changes. Previously each of these lookups was an
+     * `Array.prototype.filter` executed inside the render callback, once per node, once per
+     * quantum — so ~344 array allocations per second per node, all of it garbage for the GC
+     * to collect during audio rendering.
+     */
+    _rebuildRenderPlan(): void {
+        const plan = this._plan;
+        plan.speakers.length = 0;
+        plan.lfoNodes.length = 0;
+        plan.valueEdges.length = 0;
+        plan.valueNodeOrder.length = 0;
+        plan.audioInputs.clear();
+        plan.paramModsByTarget.clear();
+        plan.midiDownstream.clear();
+        plan.reachable.clear();
+
+        const liveSpeakers: string[] = [];
+        for (const [nodeId, data] of this._nodes.entries()) {
+            if (!data || typeof data.type !== 'string') continue;
+            if (data.type === 'speaker') liveSpeakers.push(nodeId);
+            else if (data.type === 'lfo') plan.lfoNodes.push(nodeId);
+        }
+
+        // Audio adjacency and MIDI fan-out as the graph currently stands.
+        const liveAudioInputs = new Map<string, string[]>();
+        for (const c of this._connections) {
+            const isAudioEdge =
+                c.toInput === 'input' && (c.fromOutput === 'output' || !c.fromOutput);
+            if (isAudioEdge) {
+                let list = liveAudioInputs.get(c.to);
+                if (!list) {
+                    list = [];
+                    liveAudioInputs.set(c.to, list);
+                }
+                list.push(c.from);
+                continue;
+            }
+
+            const isMidiEdge =
+                c.fromOutput === 'midi-out' || c.fromOutput === 'midi' || c.fromOutput == null;
+            if (isMidiEdge) {
+                let list = plan.midiDownstream.get(c.from);
+                if (!list) {
+                    list = [];
+                    plan.midiDownstream.set(c.from, list);
+                }
+                list.push(c.to);
+            }
+        }
+
+        // Param modulations: any edge landing on a handle that names a parameter.
+        this._paramConnections.length = 0;
+        for (const c of this._connections) {
+            if (!c.toInput || NON_PARAM_HANDLES.has(c.toInput)) continue;
+            const targetParam = c.toInput.startsWith('param-') ? c.toInput.substring(6) : c.toInput;
+            const mod: ParamConnection = {
+                from: c.from,
+                to: c.to,
+                fromOutput: c.fromOutput,
+                targetParam,
+            };
+            this._paramConnections.push(mod);
+
+            let list = plan.paramModsByTarget.get(c.to);
+            if (!list) {
+                list = [];
+                plan.paramModsByTarget.set(c.to, list);
+            }
+            list.push(mod);
+
+            const target = this._nodes.get(c.to);
+            if (target && typeof target.type === 'string' &&
+                (target.type.startsWith('value-') || target.type.startsWith('logic-'))) {
+                plan.valueEdges.push(mod);
+            }
+        }
+
+        this._buildValueNodeOrder(plan);
+        this._mergeRetiringTopology(plan, liveAudioInputs, liveSpeakers);
+        this._computeReachableAudioNodes(plan);
+        this._syncNodeFadeTargets(plan, liveAudioInputs, liveSpeakers);
+        this._planDirty = false;
+    }
+
+    /**
+     * Fold the previous topology's still-audible parts into the plan.
+     *
+     * Cutting a cable or deleting a node removes the route its signal was travelling along,
+     * so simply dropping it from the plan makes the signal stop between one sample and the
+     * next — the pop. Instead the removed edge (and, for a deleted sink, the speaker itself)
+     * stays in the plan until the source's fade gain reaches zero. `_collectFadedOutNodes`
+     * then marks the plan dirty so the stale entries are dropped on the next block.
+     */
+    _mergeRetiringTopology(
+        plan: RenderPlan,
+        liveAudioInputs: Map<string, string[]>,
+        liveSpeakers: string[],
+    ): void {
+        for (const [to, froms] of liveAudioInputs) plan.audioInputs.set(to, froms.slice());
+        plan.speakers.push(...liveSpeakers);
+
+        for (const [to, froms] of this._lastAudioInputs) {
+            for (const from of froms) {
+                if (liveAudioInputs.get(to)?.includes(from)) continue; // still connected
+                const gain = this._nodeGains.get(from);
+                if (!gain || gain.isSilent) continue; // already faded; let it go
+                let list = plan.audioInputs.get(to);
+                if (!list) {
+                    list = [];
+                    plan.audioInputs.set(to, list);
+                }
+                if (!list.includes(from)) list.push(from);
+            }
+        }
+
+        for (const speakerId of this._lastSpeakers) {
+            if (plan.speakers.includes(speakerId)) continue;
+            const gain = this._speakerGains.get(speakerId);
+            if (!gain || gain.isSilent) continue;
+            plan.speakers.push(speakerId);
+        }
+
+        // Carry the merged topology forward, so a retiring edge survives further edits until
+        // it has actually gone quiet.
+        this._lastAudioInputs = new Map(plan.audioInputs);
+        this._lastSpeakers = plan.speakers.slice();
+    }
+
+    /**
+     * Order the value/logic nodes so a single evaluation pass resolves a whole chain
+     * (Bool → Add → Multiply → destination). The old code brute-forced this with a
+     * four-pass fixpoint every block; a topological order gets it right in one pass, and
+     * cycles fall back to source order rather than spinning.
+     */
+    _buildValueNodeOrder(plan: RenderPlan): void {
+        const dependencies = new Map<string, string[]>();
+        for (const [nodeId, data] of this._nodes.entries()) {
+            if (!data || typeof data.type !== 'string') continue;
+            if (!data.type.startsWith('value-') && !data.type.startsWith('logic-')) continue;
+            dependencies.set(nodeId, []);
+        }
+        for (const edge of plan.valueEdges) {
+            const deps = dependencies.get(edge.to);
+            if (deps && dependencies.has(edge.from)) deps.push(edge.from);
+        }
+
+        const visiting = new Set<string>();
+        const done = new Set<string>();
+        const visit = (nodeId: string): void => {
+            if (done.has(nodeId) || visiting.has(nodeId)) return; // cycle: leave as-is
+            visiting.add(nodeId);
+            for (const dep of dependencies.get(nodeId) ?? EMPTY_STRINGS) visit(dep);
+            visiting.delete(nodeId);
+            done.add(nodeId);
+            plan.valueNodeOrder.push(nodeId);
+        };
+        for (const nodeId of dependencies.keys()) visit(nodeId);
+    }
+
+    /**
+     * Nodes that get rendered this block: everything reachable from a speaker across the
+     * merged (live + retiring) topology.
+     */
+    _computeReachableAudioNodes(plan: RenderPlan): void {
+        const walk = (nodeId: string): void => {
+            if (plan.reachable.has(nodeId)) return;
+            if (!this._dataForRender(nodeId)) return;
+            plan.reachable.add(nodeId);
+            for (const src of plan.audioInputs.get(nodeId) ?? EMPTY_STRINGS) walk(src);
+        };
+        for (const speakerId of plan.speakers) {
+            for (const src of plan.audioInputs.get(speakerId) ?? EMPTY_STRINGS) walk(src);
+        }
+    }
+
+    /**
+     * Node data for rendering, falling back to the snapshot taken when the node was deleted.
+     * A node mid-fade still has to render — that is what makes the fade (and a reverb tail)
+     * audible rather than theoretical.
+     */
+    _dataForRender(nodeId: string): NodeData | undefined {
+        return this._nodes.get(nodeId) ?? this._retiredNodeData.get(nodeId);
+    }
+
+    /**
+     * Point every node's fade gain at where it should be heading.
+     *
+     * A node that just became reachable fades up from silence; one that stopped being
+     * reachable fades down and enters `_fadingOut`, which keeps its WASM instance alive
+     * until the fade completes and any tail has decayed. Without this, connecting or
+     * disconnecting anything dropped a full-amplitude waveform edge into the mix.
+     */
+    _syncNodeFadeTargets(
+        plan: RenderPlan,
+        liveAudioInputs: Map<string, string[]>,
+        liveSpeakers: string[],
+    ): void {
+        // "Held" means reachable through edges that still exist. Anything only reachable via
+        // a retiring edge is on its way out and gets a target of zero.
+        const held = new Set<string>();
+        const walk = (nodeId: string): void => {
+            if (held.has(nodeId)) return;
+            if (!this._nodes.has(nodeId)) return;
+            held.add(nodeId);
+            for (const src of liveAudioInputs.get(nodeId) ?? EMPTY_STRINGS) walk(src);
+        };
+        for (const speakerId of liveSpeakers) {
+            for (const src of liveAudioInputs.get(speakerId) ?? EMPTY_STRINGS) walk(src);
+        }
+
+        for (const nodeId of held) {
+            let gain = this._nodeGains.get(nodeId);
+            if (!gain) {
+                gain = new SmoothedGain(0, NODE_FADE_SEC);
+                this._nodeGains.set(nodeId, gain);
+            }
+            gain.setTarget(1);
+            this._fadingOut.delete(nodeId);
+        }
+
+        for (const [nodeId, gain] of this._nodeGains.entries()) {
+            if (held.has(nodeId)) continue;
+            gain.setTarget(0);
+            if (!this._fadingOut.has(nodeId)) this._fadingOut.set(nodeId, 0);
+        }
+    }
+
+    /**
+     * Free the WASM instances of nodes that have finished fading out.
+     *
+     * Teardown is deferred rather than done in the `removeNode` handler so a reverb tail or
+     * a synth release can ring out. A node re-added before its grace period expires keeps
+     * its state, which is what you want when you accidentally cut a cable and reconnect it.
+     */
+    _collectFadedOutNodes(): void {
+        if (!this._fadingOut.size) return;
+        for (const [nodeId, blocks] of this._fadingOut.entries()) {
+            const gain = this._nodeGains.get(nodeId);
+            if (gain && !gain.isSilent) continue;
+
+            const elapsed = blocks + 1;
+            this._fadingOut.set(nodeId, elapsed);
+
+            const stillRinging = elapsed < TEARDOWN_GRACE_BLOCKS && this._hasAudibleTail(nodeId);
+            if (stillRinging) continue;
+
+            // The node is gone from the graph entirely: drop its instances. If it is still
+            // present but merely disconnected, keep them so reconnecting is seamless.
+            if (!this._nodes.has(nodeId)) {
+                this._freeNodeInstances(nodeId);
+                this._nodeGains.delete(nodeId);
+                this._retiredNodeData.delete(nodeId);
+            }
+            this._fadingOut.delete(nodeId);
+            // The retiring edges that kept this node rendering can now be dropped.
+            this._planDirty = true;
+        }
+    }
+
+    /** True while a node's internal state (reverb delay line, synth voices) still sounds. */
+    _hasAudibleTail(nodeId: string): boolean {
+        const reverb = this._reverbInstances.get(nodeId);
+        if (reverb && typeof reverb.tail_peak === 'function') {
+            try {
+                if (reverb.tail_peak() > TAIL_SILENCE_THRESHOLD) return true;
+            } catch { }
+        }
+        const synth = this._synthInstances.get(nodeId);
+        if (synth && typeof synth.is_active === 'function') {
+            try {
+                if (synth.is_active()) return true;
+            } catch { }
+        }
+        return false;
+    }
+
+    _freeNodeInstances(nodeId: string): void {
+        for (const map of [
+            this._oscInstances,
+            this._reverbInstances,
+            this._synthInstances,
+            this._transposeInstances,
+            this._lfoInstances,
+        ] as Array<Map<string, WasmFreeable>>) {
+            const inst = map.get(nodeId);
+            if (inst) {
+                try { inst.free?.(); } catch { }
+                map.delete(nodeId);
+            }
+        }
+        this._transposeNoteState.delete(nodeId);
+        this._moddedData.delete(nodeId);
+    }
+
+    // -----------------------------------------------------------------------
+    // Buffer pool
+    // -----------------------------------------------------------------------
+
+    _ensureBufferSize(blockSize: number): void {
+        if (this._bufferSize === blockSize) return;
+        this._bufferSize = blockSize;
+        this._bufferPool.length = 0;
+        this._blockBuffers.length = 0;
+    }
+
+    _acquireBuffer(): Float32Array {
+        const buf = this._bufferPool.pop();
+        if (buf) {
+            buf.fill(0);
+            return buf;
+        }
+        return new Float32Array(this._bufferSize);
+    }
+
+    _releaseBuffer(buf: Float32Array): void {
+        this._bufferPool.push(buf);
+    }
+
+    /**
+     * A buffer that lives for the rest of the block. Used by the render cache, and returned
+     * to the pool wholesale in `_endBlock`.
+     */
+    _acquireBlockBuffer(): Float32Array {
+        const buf = this._acquireBuffer();
+        this._blockBuffers.push(buf);
+        return buf;
+    }
+
+    _endBlock(): void {
+        for (const buf of this._blockBuffers) this._releaseBuffer(buf);
+        this._blockBuffers.length = 0;
+        this._renderedL.clear();
+        this._renderedR.clear();
     }
 
     // Convert atTimeMs to frame index within current block if provided
@@ -747,22 +1239,19 @@ if (typeof globalThis.TextDecoder === 'undefined') {
 
         try {
             const blockSize = outL.length;
-            // Allocate scratch buffers once per block size change
-            if (this._scratch.size !== blockSize) {
-                this._scratch.temp = new Float32Array(blockSize);
-                this._scratch.inL = new Float32Array(blockSize);
-                this._scratch.inR = new Float32Array(blockSize);
-                this._scratch.sumL = new Float32Array(blockSize);
-                this._scratch.sumR = new Float32Array(blockSize);
-                this._scratch.size = blockSize;
-            }
+            this._ensureBufferSize(blockSize);
+            // Recompute the graph derivation only when it actually changed, rather than
+            // re-filtering `_connections` for every node on every quantum.
+            if (this._planDirty) this._rebuildRenderPlan();
+
             // Approximate current audio time for this block
             const blockStartTimeSec = this._timebase.audioCurrentTimeSec; // updated when host sends timebase; coarse but fine for scheduling
 
             // Pre-evaluate all LFO nodes once per block
             this._lfoValues.clear();
-            const lfoNodes = Array.from(this._nodes.entries()).filter(([_, d]) => d?.type === 'lfo');
-            for (const [nid, lfoNode] of lfoNodes) {
+            for (const nid of this._plan.lfoNodes) {
+                const lfoNode = this._nodes.get(nid);
+                if (!lfoNode) continue;
                 const inst = this._getLfoInstance(nid);
                 if (!inst) continue;
                 const beats = Number(lfoNode.beatsPerCycle) || 1;
@@ -1031,10 +1520,17 @@ if (typeof globalThis.TextDecoder === 'undefined') {
             // Advance coarse timebase by one block
             this._timebase.audioCurrentTimeSec += blockSize / sampleRate;
             t.frameCounter += blockSize;
+
+            this._collectFadedOutNodes();
+            this._flushModPreview();
         } catch (err) {
             try {
                 this.port.postMessage({ type: "error", message: String(err) });
             } catch { }
+        } finally {
+            // Always return this block's buffers to the pool, even after an error, or the
+            // pool drains and every subsequent block allocates.
+            this._endBlock();
         }
 
         return true;
@@ -1053,13 +1549,8 @@ if (typeof globalThis.TextDecoder === 'undefined') {
     }
 
     _broadcastArpMIDI(nodeId: string, events: MidiEvent[]): void {
-        if (!Array.isArray(events) || !events.length) return;
-        const downstream = this._connections.filter(c => c.from === nodeId && (c.fromOutput === 'midi-out' || c.fromOutput === 'midi' || c.fromOutput == null));
-        for (const edge of downstream) {
-            const q = this._midiQueues.get(edge.to) || [];
-            for (const ev of events) q.push(ev);
-            this._midiQueues.set(edge.to, q);
-        }
+        if (!Array.isArray(events)) return;
+        this._fanOutMIDI(nodeId, events);
     }
 
     _handlePanic() {
@@ -1142,45 +1633,6 @@ if (typeof globalThis.TextDecoder === 'undefined') {
             this._transposeInstances.set(nodeId, inst);
         }
         return inst;
-    }
-
-    // Render Synth node audio into the provided output buffers
-    _processSynth(nodeId: string, data: NodeData, outL: Float32Array, outR: Float32Array): void {
-        const modded = this._applyParamModulations(nodeId, data);
-        const N = outL.length;
-        const synth = this._getSynthInstance(nodeId);
-        if (!synth) return;
-        try {
-            const wf = this._getWaveformIndex((modded.waveform as string) || "sawtooth");
-            synth.set_waveform?.(wf);
-            if (typeof modded.maxVoices === "number")
-                synth.set_max_voices?.(
-                    Math.max(1, Math.min(32, (modded.maxVoices as number) | 0))
-                );
-            if (
-                typeof modded.attack === "number" ||
-                typeof modded.decay === "number" ||
-                typeof modded.sustain === "number" ||
-                typeof modded.release === "number"
-            ) {
-                const a = typeof modded.attack === "number" ? modded.attack as number : 0.005;
-                const d = typeof modded.decay === "number" ? modded.decay as number : 0.12;
-                const s = typeof modded.sustain === "number" ? modded.sustain as number : 0.7;
-                const r =
-                    typeof modded.release === "number" ? modded.release as number : 0.12;
-                synth.set_adsr?.(a, d, s, r);
-            }
-            if (typeof modded.glide === "number") synth.set_glide?.(modded.glide as number);
-            if (typeof modded.gain === "number") synth.set_gain?.(modded.gain as number);
-
-            const temp = this._scratch.temp!;
-            synth.process(temp);
-            for (let i = 0; i < N; i++) {
-                const s = temp[i];
-                outL[i] += s;
-                outR[i] += s;
-            }
-        } catch { }
     }
 
     // Deliver MIDI events to a Synth instance (Note On/Off handling)
@@ -1357,19 +1809,7 @@ if (typeof globalThis.TextDecoder === 'undefined') {
                 }
             }
         }
-        if (!outEvents.length) return;
-        const downstream = this._connections.filter(
-            (c) =>
-                c.from === nodeId &&
-                (c.fromOutput === "midi-out" ||
-                    c.fromOutput === "midi" ||
-                    c.fromOutput == null)
-        );
-        for (const edge of downstream) {
-            const q = this._midiQueues.get(edge.to) || [];
-            for (const ev of outEvents) q.push(ev);
-            this._midiQueues.set(edge.to, q);
-        }
+        this._fanOutMIDI(nodeId, outEvents);
     }
 
     /**
@@ -1381,66 +1821,43 @@ if (typeof globalThis.TextDecoder === 'undefined') {
      * real-time value changes (e.g. showing a checkbox toggle when its input changes).
      */
     _propagateValueNodes() {
-        if (!this._paramConnections || !this._paramConnections.length) return;
+        const plan = this._plan;
+        if (!plan.valueEdges.length) return;
 
-        // Collect connections that target value or logic nodes.
-        const valueTargets = this._paramConnections.filter(m => {
-            const n = this._nodes.get(m.to);
-            return n && typeof n.type === 'string' && (n.type.startsWith('value-') || n.type.startsWith('logic-'));
-        });
+        // Nodes are visited in dependency order (see _buildValueNodeOrder), so a chain like
+        // Bool → Add → Multiply → destination resolves in one pass. This used to be a
+        // four-pass fixpoint that spread and re-inserted every node object on every pass,
+        // every block — by far the largest allocator in the render callback.
+        for (const nodeId of plan.valueNodeOrder) {
+            const node = this._nodes.get(nodeId);
+            if (!node) continue;
 
-        if (!valueTargets.length) return;
-
-        if (!this._propagatedValues) this._propagatedValues = new Map();
-
-        // Propagate up to 4 levels deep to handle chains (Value -> Add -> Mul -> Target).
-        for (let pass = 0; pass < 4; pass++) {
-            let anyChanged = false;
-
-            // 1. Compute logic nodes based on current param values
-            for (const [id, node] of this._nodes) {
-                if (typeof node.type === 'string' && node.type.startsWith('logic-')) {
-                    const newValue = this._computeLogicNodeValue(node);
-                    if (newValue !== node.value) {
-                        this._nodes.set(id, { ...node, value: newValue });
-                        anyChanged = true;
-                    }
-                }
-            }
-
-            // 2. Propagate values through connections
-            for (const m of valueTargets) {
-                const srcNode = this._nodes.get(m.from);
+            // Pull each incoming value into the destination field, in place.
+            for (const edge of plan.paramModsByTarget.get(nodeId) ?? EMPTY_PARAM_CONNECTIONS) {
+                const srcNode = this._nodes.get(edge.from);
                 if (!srcNode) continue;
-                const targetNode = this._nodes.get(m.to);
-                if (!targetNode) continue;
-
-                const outKey = m.fromOutput && m.fromOutput !== 'param-out' && m.fromOutput !== 'output'
-                    ? m.fromOutput : 'value';
-
-                const raw = srcNode[outKey];
+                const raw = srcNode[this._sourceOutputKey(edge)];
                 if (raw === undefined || raw === null) continue;
-
-                const prevNodeVal = targetNode[m.targetParam];
-                if (prevNodeVal !== raw) {
-                    this._nodes.set(m.to, { ...targetNode, [m.targetParam]: raw });
-                    anyChanged = true;
+                if (node[edge.targetParam] !== raw) {
+                    node[edge.targetParam] = raw;
                 }
-
-                const cacheKey = `${m.from}:${m.to}:${m.targetParam}`;
-                if (this._propagatedValues.get(cacheKey) !== raw) {
-                    this._propagatedValues.set(cacheKey, raw);
-                    try {
-                        this.port.postMessage({
-                            type: 'modPreview',
-                            nodeId: m.to,
-                            data: { [m.targetParam]: raw }
-                        });
-                    } catch { }
-                }
+                this._queueModPreview(nodeId, edge.targetParam, raw);
             }
-            if (!anyChanged) break;
+
+            if (typeof node.type === 'string' && node.type.startsWith('logic-')) {
+                const computed = this._computeLogicNodeValue(node);
+                if (node.value !== computed) node.value = computed;
+            }
         }
+    }
+
+    /**
+     * Which field of the source node carries the value for this connection. Generic output
+     * handles (`param-out`, `output`) mean "the node's value"; anything else names a field.
+     */
+    _sourceOutputKey(edge: ParamConnection): string {
+        const out = edge.fromOutput;
+        return out && out !== 'param-out' && out !== 'output' ? out : 'value';
     }
 
     _computeLogicNodeValue(node: NodeData): NodeData[string] {
@@ -1491,209 +1908,354 @@ if (typeof globalThis.TextDecoder === 'undefined') {
         }
     }
 
+    /**
+     * Resolve a node's parameters with its incoming modulations applied.
+     *
+     * Returns `data` unchanged when nothing modulates the node. Otherwise it returns a
+     * per-node object that is reused across blocks — the previous implementation built a
+     * fresh accumulator plus a `{ ...data, ...mods }` spread for every modulated node on
+     * every quantum.
+     */
     _applyParamModulations(nodeId: string, data: NodeData): NodeData {
-        if (!this._paramConnections || !this._paramConnections.length) return data;
-        const relevant = this._paramConnections.filter(m => m.to === nodeId);
-        if (!relevant.length) return data;
+        const mods = this._plan.paramModsByTarget.get(nodeId);
+        if (!mods || !mods.length) return data;
 
-        const modAccum: Record<string, unknown> = {};
-        const hasDirect = new Set<string>();
-        const lfos: ParamConnection[] = [];
+        // Reuse this node's patched object. Copying `data` in first keeps unmodulated
+        // fields current and clears anything a removed connection used to write.
+        let patched = this._moddedData.get(nodeId);
+        if (!patched) {
+            patched = { type: data.type };
+            this._moddedData.set(nodeId, patched);
+        }
+        for (const key of Object.keys(patched)) {
+            if (!(key in data)) delete patched[key];
+        }
+        Object.assign(patched, data);
 
-        for (const m of relevant) {
+        // Direct value sources override the stored parameter; LFOs are offsets added on top
+        // of whatever the direct sources (or the base value) resolved to.
+        const directParams = new Set<string>();
+        for (const m of mods) {
             const srcNode = this._nodes.get(m.from);
-            if (!srcNode) continue;
+            if (!srcNode || srcNode.type === 'lfo') continue;
 
-            if (srcNode.type === 'lfo') {
-                lfos.push(m);
+            const raw = srcNode[this._sourceOutputKey(m)];
+            if (typeof raw === 'boolean') {
+                patched[m.targetParam] = raw;
+                directParams.add(m.targetParam);
+                continue;
+            }
+            const v = Number(raw);
+            const value = isFinite(v) ? v : 0;
+            if (directParams.has(m.targetParam)) {
+                // Several direct sources on one handle sum together.
+                patched[m.targetParam] = (Number(patched[m.targetParam]) || 0) + value;
             } else {
-                // Direct value node — use its raw value (preserving boolean)
-                const outKey = m.fromOutput && m.fromOutput !== 'param-out' && m.fromOutput !== 'output' ? m.fromOutput : 'value';
-                const raw = srcNode[outKey];
-                if (typeof raw === 'boolean') {
-                    modAccum[m.targetParam] = raw;
-                    hasDirect.add(m.targetParam);
-                } else {
-                    const v = Number(raw);
-                    // Direct nodes OVERRIDE the baseline parameter value
-                    if (!hasDirect.has(m.targetParam)) {
-                        modAccum[m.targetParam] = isFinite(v) ? v : 0;
-                        hasDirect.add(m.targetParam);
-                    } else {
-                        // If multiple direct nodes target the same param, they sum together
-                        (modAccum[m.targetParam] as number) += isFinite(v) ? v : 0;
-                    }
-                }
+                patched[m.targetParam] = value;
+                directParams.add(m.targetParam);
             }
         }
 
-        // Apply LFOs
-        for (const m of lfos) {
-            const v = this._lfoValues.get(m.from) || 0;
-            if (modAccum[m.targetParam] === undefined) {
-                // Not overridden by direct nodes? Use base value.
-                modAccum[m.targetParam] = Number(data[m.targetParam]) || 0;
-            }
-            if (typeof modAccum[m.targetParam] === 'number') {
-                (modAccum[m.targetParam] as number) += v;
-            }
+        for (const m of mods) {
+            const srcNode = this._nodes.get(m.from);
+            if (!srcNode || srcNode.type !== 'lfo') continue;
+            const base = Number(patched[m.targetParam]);
+            patched[m.targetParam] = (isFinite(base) ? base : 0) + (this._lfoValues.get(m.from) || 0);
         }
 
-        if (Object.keys(modAccum).length) {
-            const patched = { ...data, ...modAccum };
-            // Since modAccum now represents the TRUE absolute value computed by the engine, emit it for UI previews
-            try { this.port.postMessage({ type: 'modPreview', nodeId, data: modAccum }); } catch { }
-            return patched as NodeData;
+        for (const m of mods) {
+            this._queueModPreview(nodeId, m.targetParam, patched[m.targetParam]);
         }
-        return data;
+        return patched;
     }
 
-    _processOscillator(nodeId: string, data: NodeData, outL: Float32Array, outR: Float32Array): void {
-        const modded = this._applyParamModulations(nodeId, data);
-        const N = outL.length;
-        const osc = this._getOscInstance(nodeId);
+    // -----------------------------------------------------------------------
+    // Modulation preview (UI readouts)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Stage a value for the next batched preview message.
+     *
+     * These drive the live number readouts on disabled controls. They used to be posted
+     * individually from inside the render loop — roughly 344 messages/sec per modulated
+     * node, each of which the main thread turned into a CustomEvent and a React re-render.
+     * Now they are coalesced into one message at MOD_PREVIEW_INTERVAL_SEC.
+     */
+    _queueModPreview(nodeId: string, param: string, value: unknown): void {
+        if (typeof value !== 'number' && typeof value !== 'boolean') return;
+        if (typeof value === 'number' && !isFinite(value)) return;
+
+        let entry = this._previewPending.get(nodeId);
+        if (!entry) {
+            entry = {};
+            this._previewPending.set(nodeId, entry);
+        }
+        if (entry[param] !== value) {
+            entry[param] = value;
+            this._previewDirty = true;
+        }
+    }
+
+    _flushModPreview(): void {
+        if (!this._previewDirty) return;
+        const now = this._timebase.audioCurrentTimeSec;
+        if (now - this._previewLastSentSec < MOD_PREVIEW_INTERVAL_SEC) return;
+        this._previewLastSentSec = now;
+        this._previewDirty = false;
+
+        // One message for the whole graph. The payload is rebuilt here rather than reusing
+        // the staging map because postMessage structured-clones it anyway.
+        const payload: Record<string, Record<string, number | boolean>> = {};
+        for (const [nodeId, values] of this._previewPending.entries()) {
+            payload[nodeId] = { ...values };
+        }
         try {
-            if (typeof modded.frequency === "number")
-                osc.frequency = modded.frequency as number;
-            if (typeof modded.amplitude === "number")
-                osc.amplitude = modded.amplitude as number;
-            osc.set_waveform(this._getWaveformIndex((modded.waveform as string) || "sine"));
-
-            const temp = this._scratch.temp!;
-            osc.process(temp);
-            for (let i = 0; i < N; i++) {
-                const s = temp[i];
-                outL[i] += s;
-                outR[i] += s;
-            }
-        } catch {
-            /* ignore per-block errors */
-        }
+            this.port.postMessage({ type: 'modPreviewBatch', nodes: payload });
+        } catch { }
     }
 
-    _processReverb(nodeId: string, data: NodeData, outL: Float32Array, outR: Float32Array, visited: Set<string>): void {
+    // -----------------------------------------------------------------------
+    // Audio rendering
+    // -----------------------------------------------------------------------
+
+    /**
+     * Render a node's audio for this block, exactly once.
+     *
+     * Returns the cached stereo pair, or null if the node produces no audio. Caching is not
+     * just an optimisation: oscillator and synth phase is stateful, so rendering a node
+     * twice in one quantum advanced its phase twice and its pitch came out an octave high.
+     * That is what used to happen to any node feeding two destinations.
+     */
+    _renderNode(nodeId: string, depth: number): boolean {
+        const cached = this._renderedL.get(nodeId);
+        if (cached) return true;
+
+        const data = this._dataForRender(nodeId);
+        if (!data || typeof data.type !== 'string') return false;
+
+        // Depth guard: a feedback loop in the patch would otherwise recurse forever. The
+        // render cache breaks most cycles on its own (the second visit hits the cache), but
+        // a cycle whose first visit is still in flight needs this.
+        if (depth > 64) return false;
+
+        const type = data.type;
+        if (type !== 'oscillator' && type !== 'synth' && type !== 'reverb') return false;
+
+        const outL = this._acquireBlockBuffer();
+        const outR = this._acquireBlockBuffer();
+        // Publish before rendering so a cycle reaching this node again sees silence rather
+        // than recursing.
+        this._renderedL.set(nodeId, outL);
+        this._renderedR.set(nodeId, outR);
+
         const modded = this._applyParamModulations(nodeId, data);
-        // Only treat audio edges into main audio input
-        const inputs = this._connections.filter(
-            (c) =>
-                c.to === nodeId &&
-                c.toInput === "input" &&
-                (c.fromOutput === "output" || !c.fromOutput)
-        );
-        if (inputs.length === 0) return;
-
-        const N = outL.length;
-        const inL = this._scratch.inL!;
-        const inR = this._scratch.inR!;
-        inL.fill(0);
-        inR.fill(0);
-
-        for (const c of inputs) {
-            const src = this._nodes.get(c.from);
-            if (!src) continue;
-            this._processInputNode(c.from, src, inL, inR, visited);
+        switch (type) {
+            case 'oscillator':
+                this._renderOscillator(nodeId, modded, outL, outR);
+                break;
+            case 'synth':
+                this._renderSynth(nodeId, modded, outL, outR);
+                break;
+            case 'reverb':
+                this._renderReverb(nodeId, modded, outL, outR, depth);
+                break;
         }
 
-        const rev = this._getReverbInstance(nodeId);
-        try {
-            if (typeof modded.feedback === "number") rev.feedback = modded.feedback as number;
-            if (typeof modded.wetMix === "number") rev.wet_mix = modded.wetMix as number;
-
-            const temp = this._scratch.temp!;
-            // Use left as mono input for now
-            rev.process(inL, temp);
-
-            for (let i = 0; i < N; i++) {
-                const s = temp[i];
-                outL[i] += s;
-                outR[i] += s;
-            }
-        } catch {
-            /* ignore per-block errors */
-        }
+        // Apply the node's fade envelope. This is the single place where a node enters or
+        // leaves the mix, so a patch change ramps over NODE_FADE_SEC instead of stepping.
+        this._applyNodeFade(nodeId, outL, outR);
+        return true;
     }
 
-    // Recursively process an input node and mix into outL/outR
-    _processInputNode(nodeId: string, data: NodeData, outL: Float32Array, outR: Float32Array, visited: Set<string> = new Set()): void {
-        if (!data || !data.type) return;
-        if (visited.has(nodeId)) return; // break cycles
-        visited.add(nodeId);
-
-        switch (data.type) {
-            case "oscillator":
-                this._processOscillator(nodeId, data, outL, outR);
-                break;
-            case "synth":
-                this._processSynth(nodeId, data, outL, outR);
-                break;
-            case "reverb":
-                this._processReverb(nodeId, data, outL, outR, visited);
-                break;
-            // midi transpose has no audio output
-            default:
-                break;
-        }
-    }
-
-    // Entry point: render graph by starting at speaker sinks and mixing upstream
-    _processGraph(outL: Float32Array, outR: Float32Array): void {
-        const speakers = [];
-        for (const [nodeId, data] of this._nodes.entries()) {
-            if (data && data.type === "speaker") {
-                speakers.push({ nodeId, data });
+    /**
+     * Ramp a node's output by its fade gain. Settled at unity is the common case and skips
+     * the loop entirely.
+     */
+    _applyNodeFade(nodeId: string, outL: Float32Array, outR: Float32Array): void {
+        const gain = this._nodeGains.get(nodeId);
+        if (!gain) return;
+        if (gain.isSettled) {
+            const g = gain.current;
+            if (g === 1) return;
+            if (g === 0) {
+                outL.fill(0);
+                outR.fill(0);
+                return;
             }
-        }
-
-        if (speakers.length === 0) {
-            // No explicit sinks; keep silent output (outL/outR already cleared)
+            for (let i = 0; i < outL.length; i++) {
+                outL[i] *= g;
+                outR[i] *= g;
+            }
             return;
         }
+        for (let i = 0; i < outL.length; i++) {
+            const g = gain.tick();
+            outL[i] *= g;
+            outR[i] *= g;
+        }
+    }
+
+    /** Sum every audio source feeding `nodeId` into the given buffers. */
+    _sumAudioInputs(nodeId: string, destL: Float32Array, destR: Float32Array, depth: number): boolean {
+        const sources = this._plan.audioInputs.get(nodeId);
+        if (!sources || !sources.length) return false;
+        let any = false;
+        for (const sourceId of sources) {
+            if (!this._renderNode(sourceId, depth + 1)) continue;
+            const srcL = this._renderedL.get(sourceId);
+            const srcR = this._renderedR.get(sourceId);
+            if (!srcL || !srcR) continue;
+            for (let i = 0; i < destL.length; i++) {
+                destL[i] += srcL[i];
+                destR[i] += srcR[i];
+            }
+            any = true;
+        }
+        return any;
+    }
+
+    _renderOscillator(nodeId: string, modded: NodeData, outL: Float32Array, outR: Float32Array): void {
+        const osc = this._getOscInstance(nodeId);
+        if (!osc) return;
+        try {
+            // The Rust node smooths frequency and amplitude internally, so these are
+            // targets rather than immediate values.
+            if (typeof modded.frequency === 'number') osc.frequency = modded.frequency;
+            if (typeof modded.amplitude === 'number') osc.amplitude = modded.amplitude;
+            osc.set_waveform(this._getWaveformIndex((modded.waveform as string) || 'sine'));
+
+            osc.process(outL);
+            outR.set(outL);
+        } catch {
+            /* ignore per-block errors */
+        }
+    }
+
+    _renderSynth(nodeId: string, modded: NodeData, outL: Float32Array, outR: Float32Array): void {
+        const synth = this._getSynthInstance(nodeId);
+        if (!synth) return;
+        try {
+            synth.set_waveform?.(this._getWaveformIndex((modded.waveform as string) || 'sawtooth'));
+            if (typeof modded.maxVoices === 'number') {
+                synth.set_max_voices?.(Math.max(1, Math.min(32, modded.maxVoices | 0)));
+            }
+            if (
+                typeof modded.attack === 'number' ||
+                typeof modded.decay === 'number' ||
+                typeof modded.sustain === 'number' ||
+                typeof modded.release === 'number'
+            ) {
+                synth.set_adsr?.(
+                    typeof modded.attack === 'number' ? modded.attack : 0.005,
+                    typeof modded.decay === 'number' ? modded.decay : 0.12,
+                    typeof modded.sustain === 'number' ? modded.sustain : 0.7,
+                    typeof modded.release === 'number' ? modded.release : 0.12,
+                );
+            }
+            if (typeof modded.glide === 'number') synth.set_glide?.(modded.glide);
+            if (typeof modded.gain === 'number') synth.set_gain?.(modded.gain);
+
+            synth.process(outL);
+            outR.set(outL);
+        } catch {
+            /* ignore per-block errors */
+        }
+    }
+
+    _renderReverb(
+        nodeId: string,
+        modded: NodeData,
+        outL: Float32Array,
+        outR: Float32Array,
+        depth: number,
+    ): void {
+        // Each recursion level takes its own input buffers from the pool. Sharing one
+        // scratch buffer meant a reverb feeding another reverb had the inner call zero the
+        // buffer the outer call was still accumulating into.
+        const inL = this._acquireBuffer();
+        const inR = this._acquireBuffer();
+        try {
+            const hasInput = this._sumAudioInputs(nodeId, inL, inR, depth);
+            const rev = this._getReverbInstance(nodeId);
+            if (!rev) return;
+
+            // Keep processing with a silent input when disconnected, so an existing tail
+            // decays through the delay line instead of freezing in place.
+            if (typeof modded.feedback === 'number') rev.feedback = modded.feedback;
+            if (typeof modded.wetMix === 'number') rev.wet_mix = modded.wetMix;
+            if (!hasInput && !this._hasAudibleTail(nodeId)) return;
+
+            rev.process(inL, outL);
+            outR.set(outL);
+        } catch {
+            /* ignore per-block errors */
+        } finally {
+            this._releaseBuffer(inL);
+            this._releaseBuffer(inR);
+        }
+    }
+
+    /** Entry point: render each speaker's input tree and mix it into the output. */
+    _processGraph(outL: Float32Array, outR: Float32Array): void {
+        const speakers = this._plan.speakers;
+        if (!speakers.length) return; // no sinks; output stays silent
 
         const N = outL.length;
-        for (const { nodeId, data } of speakers) {
-            const sumL = this._scratch.sumL!;
-            const sumR = this._scratch.sumR!;
-            sumL.fill(0);
-            sumR.fill(0);
+        for (const speakerId of speakers) {
+            const data = this._dataForRender(speakerId);
+            if (!data) continue;
+            // A deleted speaker keeps rendering at a falling gain so its whole subtree fades
+            // rather than cutting off.
+            const isRetiring = !this._nodes.has(speakerId);
 
-            // Find audio inputs wired into the speaker
-            const inputs = this._connections.filter(
-                (c) =>
-                    c.to === nodeId &&
-                    c.toInput === "input" &&
-                    (c.fromOutput === "output" || !c.fromOutput)
-            );
+            const sumL = this._acquireBuffer();
+            const sumR = this._acquireBuffer();
+            try {
+                this._sumAudioInputs(speakerId, sumL, sumR, 0);
 
-            for (const c of inputs) {
-                const src = this._nodes.get(c.from);
-                if (!src) continue;
-                this._processInputNode(c.from, src, sumL, sumR, new Set());
-            }
+                const modded = this._applyParamModulations(speakerId, data);
+                const volume = typeof modded.volume === 'number' ? modded.volume : 1;
+                const target = isRetiring || modded.muted
+                    ? 0
+                    : Math.max(0, Math.min(1, volume));
 
-            let gain = 1.0;
-            if (typeof data.volume === "number") gain = data.volume;
-            if (data.muted) gain = 0;
+                let gain = this._speakerGains.get(speakerId);
+                if (!gain) {
+                    // First sight of this speaker: start at its target rather than ramping
+                    // up from silence, so loading a project does not fade in.
+                    gain = new SmoothedGain(target, SPEAKER_GAIN_SMOOTHING_SEC);
+                    this._speakerGains.set(speakerId, gain);
+                }
+                gain.setTarget(target);
 
-            for (let i = 0; i < N; i++) {
-                outL[i] += sumL[i] * gain;
-                outR[i] += sumR[i] * gain;
+                // Ramping per sample is what turns mute from a full-scale step into a
+                // short fade, and a volume drag from a staircase into a slide.
+                if (gain.isSettled) {
+                    const g = gain.current;
+                    if (g !== 0) {
+                        for (let i = 0; i < N; i++) {
+                            outL[i] += sumL[i] * g;
+                            outR[i] += sumR[i] * g;
+                        }
+                    }
+                } else {
+                    for (let i = 0; i < N; i++) {
+                        const g = gain.tick();
+                        outL[i] += sumL[i] * g;
+                        outR[i] += sumR[i] * g;
+                    }
+                }
+            } finally {
+                this._releaseBuffer(sumL);
+                this._releaseBuffer(sumR);
             }
         }
     }
 
     // Broadcast MIDI events from a sequencer node to its downstream MIDI connections
     _broadcastSequencerMIDI(nodeId: string, events: MidiEvent[]): void {
-        if (!Array.isArray(events) || !events.length) return;
-        const downstream = this._connections.filter(
-            (c) =>
-                c.from === nodeId &&
-                (c.fromOutput === "midi-out" || c.fromOutput === "midi" || c.fromOutput == null)
-        );
-        for (const edge of downstream) {
-            const q = this._midiQueues.get(edge.to) || [];
-            for (const ev of events) q.push(ev);
-            this._midiQueues.set(edge.to, q);
-        }
+        if (!Array.isArray(events)) return;
+        this._fanOutMIDI(nodeId, events);
     }
 }
 

@@ -10,6 +10,10 @@ export class GraphSync {
     }> = [];
     private worklet: AudioWorkletNode | null = null;
 
+    /** Last payload posted per node / for the connection list, to suppress no-op posts. */
+    private nodeSignatures: Map<string, string> = new Map();
+    private connectionsSignature: string | null = null;
+
     setWorklet(worklet: AudioWorkletNode | null) {
         this.worklet = worklet;
     }
@@ -49,6 +53,10 @@ export class GraphSync {
 
     flushGraphToWorklet() {
         if (!this.worklet) return;
+        // The worklet is about to be reset, so its view of every node is gone. Drop the
+        // dedupe signatures too, otherwise the re-send below would be suppressed.
+        this.nodeSignatures.clear();
+        this.connectionsSignature = null;
         this.worklet.port.postMessage({ type: "clear" });
         for (const [nodeId, data] of this.audioNodes.entries()) {
             this.worklet.port.postMessage({
@@ -65,6 +73,14 @@ export class GraphSync {
 
     updateNode(nodeId: string, nodeData: AudioNodeData) {
         const clean = this.sanitizeForPostMessage(nodeData) as AudioNodeData;
+
+        // Second line of defence behind useNodeSync's own diffing: a redundant post costs a
+        // structured clone on the way out and a render-plan rebuild on the way in, so drop
+        // it when nothing the engine reads has actually changed.
+        const signature = JSON.stringify(clean);
+        if (this.nodeSignatures.get(nodeId) === signature) return;
+        this.nodeSignatures.set(nodeId, signature);
+
         this.audioNodes.set(nodeId, clean);
         if (this.worklet) {
             this.worklet.port.postMessage({
@@ -77,6 +93,7 @@ export class GraphSync {
 
     removeNode(nodeId: string) {
         this.audioNodes.delete(nodeId);
+        this.nodeSignatures.delete(nodeId);
         if (this.worklet) {
             this.worklet.port.postMessage({ type: "removeNode", nodeId });
         }
@@ -90,6 +107,10 @@ export class GraphSync {
             toInput: string;
         }>,
     ) {
+        const signature = JSON.stringify(connections);
+        if (this.connectionsSignature === signature) return;
+        this.connectionsSignature = signature;
+
         this.nodeConnections = connections;
         if (this.worklet) {
             this.worklet.port.postMessage({
@@ -102,6 +123,8 @@ export class GraphSync {
     clear() {
         this.audioNodes.clear();
         this.nodeConnections = [];
+        this.nodeSignatures.clear();
+        this.connectionsSignature = null;
         if (this.worklet) {
             try { this.worklet.port.postMessage({ type: "clear" }); } catch { }
         }

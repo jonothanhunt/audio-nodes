@@ -12,8 +12,10 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "npm run build:worklet && vitest run",
+    "test:watch": "npm run build:worklet && vitest",
+    "test:rust": "cd core-audio/wasm && cargo test",
+    "test:all": "npm run test && npm run test:rust"
   },
   "dependencies": {
     "@xyflow/react": "^12.11.3",

@@ -3,6 +3,9 @@ import { encodeWav } from './audio/WavEncoder';
 import { GraphSync } from './audio/GraphSync';
 import { Transport } from './audio/Transport';
 
+/** Master mute/unmute ramp. Short enough to feel instant, long enough not to click. */
+const MASTER_GAIN_TIME_CONSTANT_SEC = 0.015;
+
 export class AudioManager {
     private audioContext: AudioContext | null = null;
     private audioWorklet: AudioWorkletNode | null = null;
@@ -73,23 +76,21 @@ export class AudioManager {
                     case "error":
                         console.error("[AudioWorklet]", msg.message);
                         break;
-                    case 'modPreview': {
-                        const nid = String(msg.nodeId || '');
-                        if (nid && msg.data && typeof msg.data === 'object') {
-                            const clean: Record<string, number | boolean> = {};
-                            for (const [k, v] of Object.entries(msg.data)) {
-                                if (typeof v === 'number' && isFinite(v)) clean[k] = v;
-                                else if (typeof v === 'boolean') clean[k] = v;
+                    case 'modPreviewBatch': {
+                        // One coalesced message for the whole graph, at ~30 Hz. Previously
+                        // the worklet posted one message per modulated node per 128-sample
+                        // block (~344/sec each) and each became a CustomEvent plus a React
+                        // re-render on the thread that also has to service the audio port.
+                        if (msg.nodes && typeof msg.nodes === 'object') {
+                            for (const [nid, values] of Object.entries(msg.nodes)) {
+                                if (!nid || !values || typeof values !== 'object') continue;
+                                const clean: Record<string, number | boolean> = {};
+                                for (const [k, v] of Object.entries(values)) {
+                                    if (typeof v === 'number' && isFinite(v)) clean[k] = v;
+                                    else if (typeof v === 'boolean') clean[k] = v;
+                                }
+                                this.publishModPreview(nid, clean);
                             }
-
-                            // Keep a global synchronized cache of the latest mod value so newly mounted
-                            // components (like NumberParam) can establish their initial state.
-                            const win = window as unknown as { __MOD_PREVIEW_CACHE__?: Record<string, Record<string, number | boolean>> };
-                            win.__MOD_PREVIEW_CACHE__ = win.__MOD_PREVIEW_CACHE__ || {};
-                            win.__MOD_PREVIEW_CACHE__[nid] = { ...(win.__MOD_PREVIEW_CACHE__[nid] || {}), ...clean };
-
-                            this.modPreviewListeners.forEach(cb => { try { cb(nid, clean); } catch { } });
-                            try { window.dispatchEvent(new CustomEvent('audioNodesNodeRendered', { detail: { nodeId: nid, data: clean } })); } catch { }
                         }
                         break;
                     }
@@ -134,6 +135,27 @@ export class AudioManager {
             console.error("Failed to initialize audio:", error);
             return false;
         }
+    }
+
+    /**
+     * Fan a batch of modulated values out to the UI.
+     *
+     * Still routed through a window event so existing subscribers keep working; the
+     * expensive part (one message per node per audio block) is now solved upstream by
+     * batching in the worklet. Replacing this with a per-node subscriber map is tracked as
+     * D2 in docs/PLAN.md.
+     */
+    private publishModPreview(nodeId: string, values: Record<string, number | boolean>) {
+        if (!Object.keys(values).length) return;
+
+        // Keep a global synchronized cache of the latest mod value so newly mounted
+        // components (like NumberParam) can establish their initial state.
+        const win = window as unknown as { __MOD_PREVIEW_CACHE__?: Record<string, Record<string, number | boolean>> };
+        win.__MOD_PREVIEW_CACHE__ = win.__MOD_PREVIEW_CACHE__ || {};
+        win.__MOD_PREVIEW_CACHE__[nodeId] = { ...(win.__MOD_PREVIEW_CACHE__[nodeId] || {}), ...values };
+
+        this.modPreviewListeners.forEach(cb => { try { cb(nodeId, values); } catch { } });
+        try { window.dispatchEvent(new CustomEvent('audioNodesNodeRendered', { detail: { nodeId, data: values } })); } catch { }
     }
 
     stopAudio() {
@@ -208,7 +230,10 @@ export class AudioManager {
     startRecording(onStop?: (blob: Blob, dur: number) => void): boolean {
         if (!this.audioContext || !this.audioWorklet) return false;
         if (this.recording && this.isRecording()) return false;
-        try { if (this.audioWorklet.numberOfOutputs && this.audioContext.destination) this.audioWorklet.connect(this.audioContext.destination); } catch { }
+        // Note: no extra routing here. The worklet is already connected through masterGain,
+        // and connecting it to the destination a second time (as this used to) summed the
+        // output with itself for +6 dB *and* gave it a path that bypassed mute entirely.
+        // Capture is taken from the worklet's `captureBlock` messages, not from the graph.
         this.recording = { startTime: performance.now(), onStop, wav: { enabled: true, pcmL: [], pcmR: [] } };
         try { this.audioWorklet.port.postMessage({ type: 'startCapture' }); } catch { }
         return true;
@@ -243,9 +268,28 @@ export class AudioManager {
     isRecording(): boolean { return !!(this.recording && this.recording.wav && this.recording.wav.enabled); }
 
     // --- Preview mute API ---
+    /**
+     * Ramp the master gain rather than assigning `.value`.
+     *
+     * An AudioParam assignment takes effect immediately with no ramp, so muting was a
+     * full-scale step to zero — an audible click every time the mute button or the
+     * recording preview was used. `setTargetAtTime` is exponential, so it never quite
+     * reaches the target; the follow-up `setValueAtTime` pins it exactly once the ramp is
+     * perceptually done, which matters for mute (a residual -60 dB is still not silence).
+     */
     private updateMasterGainVolume() {
-        if (!this.masterGain) return;
-        this.masterGain.gain.value = (this.userMuted || this.previewMuteDepth > 0) ? 0 : 1;
+        if (!this.masterGain || !this.audioContext) return;
+        const target = (this.userMuted || this.previewMuteDepth > 0) ? 0 : 1;
+        const gain = this.masterGain.gain;
+        const now = this.audioContext.currentTime;
+        try {
+            gain.cancelScheduledValues(now);
+            gain.setValueAtTime(gain.value, now);
+            gain.setTargetAtTime(target, now, MASTER_GAIN_TIME_CONSTANT_SEC);
+            gain.setValueAtTime(target, now + MASTER_GAIN_TIME_CONSTANT_SEC * 5);
+        } catch {
+            gain.value = target;
+        }
     }
     async muteForPreview() { this.previewMuteDepth++; this.updateMasterGainVolume(); }
     async resumeFromPreview() { if (this.previewMuteDepth > 0) this.previewMuteDepth--; this.updateMasterGainVolume(); }

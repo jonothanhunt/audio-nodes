@@ -40,31 +40,32 @@ Deliberately **not** taken to latest, with reasons:
 
 Ordered by audible impact. IDs match `docs/AUDIO-AUDIT.md`.
 
-### 2a. Click and pop sources
-- [ ] A1 — per-sample smoothed speaker volume/mute (biggest single click)
-- [ ] A3 — fade nodes in/out on connect/disconnect; defer WASM teardown past the fade
-- [ ] A4 — stop hard-resetting synth envelope on retrigger; fast-release voice stealing
-- [ ] A5 — drop `1/voice_count` normalisation for fixed headroom + soft clip
-- [ ] A2 — master gain via `setTargetAtTime`
-- [ ] A7 — smooth oscillator amplitude and frequency in Rust
-- [ ] A8 — smooth reverb wet/feedback in Rust
-- [ ] A6 — 1.5 ms floor on envelope stage times
-- [ ] A9 — remove the `startRecording` double-connect (+6 dB and bypasses mute)
+### 2a. Click and pop sources ✅ done
+- [x] A1 — per-sample smoothed speaker volume/mute (biggest single click)
+- [x] A3 — fade nodes in/out on connect/disconnect; defer WASM teardown past the fade
+- [x] A4 — stop hard-resetting synth envelope on retrigger; fast-release voice stealing
+- [x] A5 — drop `1/voice_count` normalisation for fixed headroom + soft clip
+- [x] A2 — master gain via `setTargetAtTime`
+- [x] A7 — smooth oscillator amplitude and frequency in Rust
+- [x] A8 — smooth reverb wet/feedback in Rust
+- [x] A6 — 1.5 ms floor on envelope stage times
+- [x] A9 — remove the `startRecording` double-connect (+6 dB and bypasses mute)
 
 ### 2b. Render-path correctness
-- [ ] B1 — per-block render cache; fan-out currently renders a node twice and doubles
-      its pitch
-- [ ] B2 — pooled scratch buffers; nested reverbs currently corrupt each other
-- [ ] B3 — sample-accurate MIDI (`atFrame` is computed and then ignored)
+- [x] B1 — per-block render cache; fan-out was rendering a node twice and doubling its
+      pitch
+- [x] B2 — pooled scratch buffers; nested reverbs were corrupting each other
+- [ ] B3 — sample-accurate MIDI (`atFrame` is computed and then ignored). **Next up.**
 - [ ] B4 — stereo path and a real reverb topology (defer to the effects roadmap)
 
-### 2c. Audio-thread and message-port cost
-- [ ] C1 — precomputed render plan instead of re-deriving the graph every block
-- [ ] C2 — reuse param-modulation scratch objects
-- [ ] C3 — mutate value/logic nodes in place instead of spreading 4× per block
-- [ ] C4 — batch and throttle `modPreview` to ~30 Hz
-- [ ] C5 — stop re-pushing every node to the worklet on every drag frame
-- [ ] C6 — delete the unused `ack*` messages
+### 2c. Audio-thread and message-port cost ✅ done
+- [x] C1 — precomputed render plan instead of re-deriving the graph every block
+- [x] C2 — reuse param-modulation scratch objects
+- [x] C3 — mutate value/logic nodes in place instead of spreading 4× per block
+- [x] C4 — batch and throttle `modPreview` to ~30 Hz
+- [x] C5 — stop re-pushing every node to the worklet on every drag frame
+- [x] C6 — delete the unused `ack*` messages
+- [ ] C7 — batch capture blocks while recording (partial; low priority)
 
 ### 2d. UI render layer (no visual/UX change)
 - [ ] D1 — clear the 16 `react-hooks` 7 warnings, then flip the rules back to `error`
@@ -74,8 +75,21 @@ Ordered by audible impact. IDs match `docs/AUDIO-AUDIT.md`.
       node's `data`
 
 ### 2e. Verification
-- [ ] Regression tests for the render plan, fade envelopes, and fan-out pitch
+- [x] Regression tests for the render plan, fade envelopes, and fan-out pitch — 76 vitest
+      specs (up from 14, one suite of which was erroring) plus 35 native Rust DSP tests.
+      `npm run test:all` runs both.
+- [ ] Listening check in a browser: the changes are verified by tests and by construction,
+      but nobody has actually *heard* them yet. Worth doing before the roadmap work.
 - [ ] CI workflow: lint + typecheck + test + wasm build (roadmap "Quality/Maintenance")
+
+#### How phase 2 is tested
+
+`core-audio/worklet/__tests__/harness.ts` loads the **compiled** worklet with stand-ins for
+the worklet globals and fake WASM nodes, so the specs drive the code that actually ships
+rather than a copy of it. The fake oscillator's sample counter doubles as its phase, which
+is what makes the fan-out regression (B1) directly assertable. The Rust side is unit-tested
+natively via `crate-type = ["cdylib", "rlib"]`; most of those tests assert a bound on the
+maximum sample-to-sample step, which is the measurable form of "does not click".
 
 ---
 

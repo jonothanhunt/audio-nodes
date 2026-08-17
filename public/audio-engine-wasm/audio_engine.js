@@ -199,6 +199,16 @@ export class ReverbNode {
         wasm.reverbnode_set_wet_mix(this.__wbg_ptr, wet_mix);
     }
     /**
+     * Peak absolute value still circulating in the delay line. The worklet uses this to
+     * decide when a disconnected reverb has finished ringing and can be dropped, so a
+     * tail decays naturally instead of being cut off mid-air.
+     * @returns {number}
+     */
+    tail_peak() {
+        const ret = wasm.reverbnode_tail_peak(this.__wbg_ptr);
+        return ret;
+    }
+    /**
      * @returns {number}
      */
     get wet_mix() {
@@ -207,63 +217,6 @@ export class ReverbNode {
     }
 }
 if (Symbol.dispose) ReverbNode.prototype[Symbol.dispose] = ReverbNode.prototype.free;
-
-export class SpeakerNode {
-    __destroy_into_raw() {
-        const ptr = this.__wbg_ptr;
-        this.__wbg_ptr = 0;
-        SpeakerNodeFinalization.unregister(this);
-        return ptr;
-    }
-    free() {
-        const ptr = this.__destroy_into_raw();
-        wasm.__wbg_speakernode_free(ptr, 0);
-    }
-    /**
-     * @returns {boolean}
-     */
-    get muted() {
-        const ret = wasm.speakernode_muted(this.__wbg_ptr);
-        return ret !== 0;
-    }
-    constructor() {
-        const ret = wasm.speakernode_new();
-        this.__wbg_ptr = ret;
-        SpeakerNodeFinalization.register(this, this.__wbg_ptr, this);
-        return this;
-    }
-    /**
-     * @param {Float32Array} input
-     * @param {Float32Array} output
-     */
-    process(input, output) {
-        const ptr0 = passArrayF32ToWasm0(input, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        var ptr1 = passArrayF32ToWasm0(output, wasm.__wbindgen_malloc);
-        var len1 = WASM_VECTOR_LEN;
-        wasm.speakernode_process(this.__wbg_ptr, ptr0, len0, ptr1, len1, output);
-    }
-    /**
-     * @param {boolean} muted
-     */
-    set muted(muted) {
-        wasm.speakernode_set_muted(this.__wbg_ptr, muted);
-    }
-    /**
-     * @param {number} volume
-     */
-    set volume(volume) {
-        wasm.speakernode_set_volume(this.__wbg_ptr, volume);
-    }
-    /**
-     * @returns {number}
-     */
-    get volume() {
-        const ret = wasm.speakernode_volume(this.__wbg_ptr);
-        return ret;
-    }
-}
-if (Symbol.dispose) SpeakerNode.prototype[Symbol.dispose] = SpeakerNode.prototype.free;
 
 export class SynthNode {
     __destroy_into_raw() {
@@ -275,6 +228,16 @@ export class SynthNode {
     free() {
         const ptr = this.__destroy_into_raw();
         wasm.__wbg_synthnode_free(ptr, 0);
+    }
+    /**
+     * True while any voice is still producing signal. The worklet uses this to know when
+     * a synth has gone quiet, so a removed node's release tail can ring out before the
+     * instance is dropped.
+     * @returns {boolean}
+     */
+    is_active() {
+        const ret = wasm.synthnode_is_active(this.__wbg_ptr);
+        return ret !== 0;
     }
     /**
      * @param {number} sample_rate
@@ -394,9 +357,6 @@ const OscillatorNodeFinalization = (typeof FinalizationRegistry === 'undefined')
 const ReverbNodeFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_reverbnode_free(ptr, 1));
-const SpeakerNodeFinalization = (typeof FinalizationRegistry === 'undefined')
-    ? { register: () => {}, unregister: () => {} }
-    : new FinalizationRegistry(ptr => wasm.__wbg_speakernode_free(ptr, 1));
 const SynthNodeFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_synthnode_free(ptr, 1));

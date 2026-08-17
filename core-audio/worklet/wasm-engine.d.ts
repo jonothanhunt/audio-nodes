@@ -1,7 +1,7 @@
 /**
  * Type declarations for the Rust/wasm-bindgen audio engine nodes.
  *
- * These mirror the `#[wasm_bindgen]` exports in audio-engine/src/nodes/*.rs.
+ * These mirror the `#[wasm_bindgen]` exports in core-audio/wasm/src/nodes/*.rs.
  * If you add/change a wasm_bindgen method in Rust, update this file to match.
  */
 
@@ -30,6 +30,8 @@ interface WasmOscillatorNodeConstructor {
 interface WasmReverbNode extends WasmFreeable {
     feedback: number;
     wet_mix: number;
+    /** Peak still circulating in the delay line — lets the worklet wait out a tail. */
+    tail_peak?(): number;
     process(input: Float32Array, output: Float32Array): void;
 }
 
@@ -50,6 +52,8 @@ interface WasmSynthNode extends WasmFreeable {
     set_glide(timeMs: number): void;
     set_gain(gain: number): void;
     set_max_voices(max: number): void;
+    /** True while any voice is still sounding — lets the worklet wait out a release. */
+    is_active?(): boolean;
     process(output: Float32Array): void;
 }
 
@@ -82,26 +86,11 @@ interface WasmMidiTransposeNodeConstructor {
 }
 
 // ---------------------------------------------------------------------------
-// SpeakerNode (not instantiated in the worklet, but typed for completeness)
-// ---------------------------------------------------------------------------
-interface WasmSpeakerNode extends WasmFreeable {
-    volume: number;
-    muted: boolean;
-    process(input: Float32Array, output: Float32Array): void;
-}
-
-interface WasmSpeakerNodeConstructor {
-    new(): WasmSpeakerNode;
-}
-
-// ---------------------------------------------------------------------------
 // Aggregated WASM module namespace
 // ---------------------------------------------------------------------------
 interface WasmEngineModule {
-    AudioEngine: unknown;
     OscillatorNode: WasmOscillatorNodeConstructor;
     ReverbNode: WasmReverbNodeConstructor;
-    SpeakerNode: WasmSpeakerNodeConstructor;
     SynthNode: WasmSynthNodeConstructor;
     MidiTransposeNode: WasmMidiTransposeNodeConstructor;
     LfoNode: WasmLfoNodeConstructor;
