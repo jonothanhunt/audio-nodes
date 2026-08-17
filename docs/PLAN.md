@@ -55,7 +55,11 @@ Ordered by audible impact. IDs match `docs/AUDIO-AUDIT.md`.
 - [x] B1 — per-block render cache; fan-out was rendering a node twice and doubling its
       pitch
 - [x] B2 — pooled scratch buffers; nested reverbs were corrupting each other
-- [ ] B3 — sample-accurate MIDI (`atFrame` is computed and then ignored). **Next up.**
+- [ ] B3 — sample-accurate MIDI (`atFrame` is computed and then ignored)
+- [ ] B5 — the Synth's **Cutoff**, **Resonance** and **Preset** controls are wired to
+      nothing: no filter exists in the Rust crate and no preset handling exists anywhere.
+      Fixing this is the same work as the roadmap's Filter node, so it is folded into
+      phase 3 below. **Highest-value item remaining.**
 - [ ] B4 — stereo path and a real reverb topology (defer to the effects roadmap)
 
 ### 2c. Audio-thread and message-port cost ✅ done
@@ -78,9 +82,17 @@ Ordered by audible impact. IDs match `docs/AUDIO-AUDIT.md`.
 - [x] Regression tests for the render plan, fade envelopes, and fan-out pitch — 76 vitest
       specs (up from 14, one suite of which was erroring) plus 35 native Rust DSP tests.
       `npm run test:all` runs both.
-- [ ] Listening check in a browser: the changes are verified by tests and by construction,
-      but nobody has actually *heard* them yet. Worth doing before the roadmap work.
-- [ ] CI workflow: lint + typecheck + test + wasm build (roadmap "Quality/Maintenance")
+- [x] Measured in a real browser against the compiled WASM: fan-out now renders at 440 Hz
+      instead of an octave up, mute and disconnect both fade to exactly zero with no step
+      beyond the waveform's own slope, a four-note chord no longer ducks the notes already
+      sounding, and retriggering a held note does not click. Full table in
+      docs/AUDIO-AUDIT.md → "Verification". UI verified after the @xyflow migration too.
+- [ ] Still worth a human listen — the measurements say the steps are gone, but ears catch
+      things meters do not.
+- [ ] CI workflow: lint + typecheck + test + wasm build (roadmap "Quality/Maintenance").
+      Blocked on a decision: `.gitignore` currently ignores the whole `.github/` directory
+      ("remove if you actually want workflows"), so a workflow file cannot be committed
+      without un-ignoring it. Your call.
 
 #### How phase 2 is tested
 
@@ -95,18 +107,26 @@ maximum sample-to-sample step, which is the measurable form of "does not click".
 
 ## Phase 3 — roadmap features
 
-Not started. Suggested order once phase 2 is done, cheapest-to-highest-value first —
-**to be confirmed before building.** Each one needs a Rust node, a worklet case, a spec
-entry, and a UI component (`README.md` → "Authoring a Node").
+Not started. Each item needs a Rust node, a worklet case, a spec entry and a UI component
+(`README.md` → "Authoring a Node"). Suggested order — **to be confirmed before building:**
 
-1. **Gain** — trivial, and the smoothing helper from A1 makes it near-free.
-2. **ADSR envelope generator with mod outputs** — unlocks modulating anything with an
-   envelope; the synth's envelope code is most of the way there already.
-3. **Standalone multi-mode filter** — the most-missed synth building block.
-4. **Delay (mono / ping-pong)** — needs the stereo path from B4 to be worth it.
-5. **Mixer** (summing + mute/solo) and **Meter / Scope** — both lean on the render cache
-   from B1.
-6. **Distortion / saturation** — the soft clipper from A5 is reusable here.
+1. **Filter (state-variable, multi-mode)** — put first because it is not really a new
+   feature: the Synth already ships Cutoff and Resonance controls that do nothing (B5), and
+   the help text already promises them. One filter implementation fixes those *and* becomes
+   the standalone Filter node the roadmap asks for. Also the most-missed synth building
+   block generally.
+2. **Gain** — near-free now that the smoothing helper from A1 exists.
+3. **ADSR envelope generator with modulation outputs** — lets an envelope drive any param.
+   The synth's envelope is most of the way there and could be factored out to share.
+4. **Mixer** (summing + per-channel mute/solo) and **Meter / Scope** — both lean on the
+   render cache from B1, which already renders each node exactly once per quantum.
+5. **Distortion / saturation** — the soft clipper from A5 is directly reusable.
+6. **Delay (mono / ping-pong)** — worth doing after B4, since ping-pong needs a real stereo
+   path and the graph is currently mono duplicated to both channels.
+
+Also worth folding in while touching the synth: **presets** should be a main-thread concern
+(a preset selection writes the individual param values), which makes the existing dead
+Preset select work.
 
 Deferred until the above lands: sampler, chorus/flanger/phaser, EQ/compressor, offline
 render, mod matrix, scale quantiser, clock node, SIMD exploration.

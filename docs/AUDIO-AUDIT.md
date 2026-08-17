@@ -147,6 +147,26 @@ than as a click.
 **Planned fix:** split synth rendering at event frames, and give sequencer/arp steps
 sub-block frame offsets.
 
+### ☐ B5. Three Synth controls are wired to nothing
+The Synth node's `NodeSpec` declares **Cutoff** (20–20000 Hz), **Resonance** (0–1) and a
+**Preset** select (Init/Pluck/Pad/Bass), and `NodeHelpPopover` documents Cutoff/Resonance as
+"filter frequency and resonance". Nothing forwards any of them: there are zero references to
+`cutoff`, `resonance` or `preset` in the worklet or in the Rust crate, and `SynthNode` has no
+filter and no preset handling at all. Dragging those sliders is silent, which reads as a bug
+in the audio engine even though the engine never sees them.
+
+Found by sweeping every node spec's declared param keys against what the worklet and the
+Rust crate actually consume. The other flagged keys turned out to be legitimately
+main-thread-only: `midi-input`'s `deviceId`/`channel` are applied by `useMidiAccess`,
+`sequencer`'s `fromNote`/`toNote` build the grid's note range in the component, and
+`logic-condition.dataType` / `value-select.options` are presentation only.
+
+**Planned fix:** implement a state-variable filter in the DSP layer and wire it into
+`SynthNode` per voice (or post-mix). This is the cheapest way to make two existing controls
+real, and the same filter is the roadmap's standalone multi-mode Filter node — so it is
+worth doing before the other roadmap items. Presets then become a main-thread concern: a
+preset selection should write the individual param values.
+
 ### ☐ B4. Reverb is mono-only and a single comb filter
 `rev.process(inL, temp)` uses the left channel as a mono input and writes the same signal
 to both outputs; the whole graph is mono-duplicated despite the worklet declaring
@@ -262,6 +282,40 @@ Two structural notes beyond the lint output:
   exists and looks like the right home.
 
 Both are UI-internal — they do not change how anything looks or behaves.
+
+---
+
+## Verification
+
+Two layers, both automated (`npm run test:all`):
+
+- **76 vitest specs** drive the *compiled* worklet through its real message port, with
+  stand-ins for the worklet globals and fake WASM nodes. The fake oscillator's sample
+  counter doubles as its phase, which makes the B1 fan-out regression directly assertable.
+- **35 native Rust tests** (`cargo test`, enabled by adding `rlib` to `crate-type`). Most
+  assert a bound on the maximum sample-to-sample step of the output, which is the measurable
+  form of "does not click".
+
+On top of that, the engine was driven in a real Chromium instance against the compiled WASM,
+capturing PCM out of the worklet and measuring it. That is the only way to confirm the
+wasm-bindgen glue still bootstraps inside the worklet isolate, and it verifies the fixes
+empirically rather than structurally:
+
+| Measurement | Result | Reads as |
+|---|---|---|
+| Worklet + WASM bootstrap | ready, no errors | glue transform survives wasm-bindgen 0.2.127 |
+| 440 Hz tone | 440.02 Hz measured | oscillator correct |
+| Same tone with fan-out (direct + through a reverb) | 440.01 Hz | **B1 fixed** — was an octave up |
+| Mute, max sample step | 0.046 vs 0.050 natural slope | **A1** — no step, fade only |
+| Mute, tail | exactly 0.0 | reaches true silence |
+| Disconnect, max sample step | 0.050 vs 0.050 natural slope | **A3** — no cut, fade only |
+| Disconnect, tail | exactly 0.0 | fades out fully |
+| One note / four-note chord peak | 0.24 → 0.67 | **A5** — chord no longer ducks the notes already sounding |
+| Retrigger a held note, max step | 0.051 | **A4** — no click |
+| Console + engine errors | none | — |
+
+The editor UI was also checked after the `@xyflow/react` v12 migration: 8 nodes, 14 edges,
+53 handles and the minimap all render, node dragging works, and there are no console errors.
 
 ---
 
